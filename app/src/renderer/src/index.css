@@ -1,0 +1,161 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Custom Scrollbar ─────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(220, 10%, 80%);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(220, 10%, 70%);
+}
+
+/* ── Base ──────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: hsl(220, 20%, 98%);
+  color: hsl(226, 24%, 7%);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none; /* Prevent accidental selection outside editor */
+}
+
+/* Allow text selection inside editor */
+.editor-content, .editor-content * {
+  user-select: text;
+}
+
+/* ── App Draggable Titlebar ────────────────────────────────────────── */
+.titlebar-drag {
+  -webkit-app-region: drag;
+}
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* ── TipTap Editor Styles ─────────────────────────────────────────── */
+.ProseMirror {
+  outline: none;
+  padding: 0;
+}
+
+.ProseMirror p {
+  margin: 0 0 1em;
+  line-height: inherit;
+}
+
+.ProseMirror h1 { font-size: 2em; font-weight: 700; margin: 0 0 0.5em; }
+.ProseMirror h2 { font-size: 1.5em; font-weight: 600; margin: 0 0 0.5em; }
+.ProseMirror h3 { font-size: 1.25em; font-weight: 600; margin: 0 0 0.5em; }
+
+.ProseMirror ul, .ProseMirror ol {
+  padding-left: 1.5em;
+  margin: 0 0 1em;
+}
+
+.ProseMirror li { margin-bottom: 0.25em; }
+
+.ProseMirror blockquote {
+  border-left: 3px solid hsl(214, 84%, 55%);
+  padding-left: 1em;
+  margin: 0 0 1em 0;
+  color: hsl(220, 8%, 48%);
+  font-style: italic;
+}
+
+.ProseMirror hr {
+  border: none;
+  border-top: 1px solid hsl(220, 10%, 82%);
+  margin: 2em 0;
+}
+
+.ProseMirror code {
+  background: hsl(220, 15%, 95%);
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9em;
+}
+
+/* Placeholder */
+.ProseMirror p.is-editor-empty:first-child::before {
+  color: hsl(220, 8%, 65%);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* ── Focus Mode ───────────────────────────────────────────────────── */
+.focus-mode-overlay {
+  transition: opacity 0.3s ease;
+}
+
+/* ── Transitions ──────────────────────────────────────────────────── */
+.panel-transition {
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.2s ease;
+}
+
+/* ── Glass morphism card ──────────────────────────────────────────── */
+.glass-card {
+  background: rgba(0,0,0,0.03);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(0,0,0,0.06);
+}
+
+/* ── Diff highlight ───────────────────────────────────────────────── */
+.diff-added {
+  background: rgba(34, 197, 94, 0.15);
+  text-decoration: none;
+}
+.diff-removed {
+  background: rgba(239, 68, 68, 0.15);
+  text-decoration: line-through;
+  color: hsl(0, 60%, 60%);
+}
+
+/* ── Toast ────────────────────────────────────────────────────────── */
+.toast-enter {
+  animation: slideUp 0.25s ease-out forwards;
+}
+.toast-exit {
+  animation: fadeOut 0.2s ease-in forwards;
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(10px); }
+}
+
+/* ── Comment Marks ────────────────────────────────────────────────── */
+.comment-mark {
+  background-color: rgba(234, 179, 8, 0.3); /* yellow-500/30 */
+  border-bottom: 2px solid rgba(234, 179, 8, 0.6);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.comment-mark:hover {
+  background-color: rgba(234, 179, 8, 0.5);
+}
