@@ -3,6 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { initDatabase } from './database/init'
 import { registerIpcHandlers } from './ipc/handlers'
+import { autoUpdater } from 'electron-updater'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -96,6 +97,20 @@ app.whenReady().then(async () => {
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+
+  // Configure Auto Updater
+  autoUpdater.on('checking-for-update', () => console.log('[AutoUpdater] Checking for update...'))
+  autoUpdater.on('update-available', () => console.log('[AutoUpdater] Update available.'))
+  autoUpdater.on('update-not-available', () => console.log('[AutoUpdater] Update not available.'))
+  autoUpdater.on('error', (err) => console.error('[AutoUpdater] Error:', err))
+  autoUpdater.on('update-downloaded', () => {
+    console.log('[AutoUpdater] Update downloaded. Prompting install...')
+  })
+
+  // Start the update check if not in development mode
+  if (!is.dev) {
+    autoUpdater.checkForUpdatesAndNotify()
+  }
 })
 
 app.on('window-all-closed', () => {

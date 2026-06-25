@@ -1,5 +1,7 @@
 # Write Your Thoughts
 
+![Write Your Thoughts Screenshot](./assets/Screenshot.png)
+
 A desktop-first writing software designed for authors, combining offline reliability with cloud synchronization and intelligent AI assistance. Built with Electron, React, and TypeScript.
 
 ## Features
