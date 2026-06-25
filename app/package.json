@@ -1,6 +1,6 @@
 {
   "name": "write-your-thoughts",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "description": "A desktop-first writing software with cloud synchronization and AI-assisted editing",
   "main": "out/main/index.js",
@@ -13,6 +13,13 @@
   "build": {
     "appId": "com.writeyourthoughts.app",
     "productName": "Write Your Thoughts",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Arziii",
+        "repo": "Write-your-Thoughts"
+      }
+    ],
     "directories": {
       "buildResources": "build"
     },
@@ -57,6 +64,7 @@
     "@tiptap/starter-kit": "^2.1.13",
     "clsx": "^2.1.0",
     "date-fns": "^3.3.1",
+    "electron-updater": "^6.8.9",
     "epub-gen-memory": "^1.1.2",
     "html-to-docx": "^1.8.0",
     "lucide-react": "^0.344.0",
