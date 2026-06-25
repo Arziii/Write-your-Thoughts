@@ -1,7 +1,5 @@
 # Write Your Thoughts
 
-![Write Your Thoughts Screenshot](./assets/Screenshot.png)
-
 A desktop-first writing software designed for authors, combining offline reliability with cloud synchronization and intelligent AI assistance. Built with Electron, React, and TypeScript.
 
 ## Features
@@ -34,10 +32,13 @@ A desktop-first writing software designed for authors, combining offline reliabi
 
 1. Clone the repository or download the source code.
 2. Navigate to the `app` directory where the source code lives:
+
    ```bash
    cd app
    ```
+
 3. Install dependencies:
+
    ```bash
    npm install
    ```
