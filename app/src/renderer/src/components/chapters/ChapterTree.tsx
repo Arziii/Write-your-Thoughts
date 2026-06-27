@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Plus, FileText, MoreHorizontal, Pencil, Trash2, ChevronDown, Lock, Unlock
+  Plus, FileText, MoreHorizontal, Pencil, Trash2, ChevronDown, Lock, Unlock, GripVertical
 } from 'lucide-react'
+import { Droppable, Draggable } from '@hello-pangea/dnd'
 import { syncService } from '../../services/syncService'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useToastStore } from '../../stores/toastStore'
@@ -95,43 +96,73 @@ export default function ChapterTree({ book }: ChapterTreeProps) {
 
       {isExpanded && (
         <div className="space-y-0.5">
-          {chapters.map((chapter, idx) => (
-            <div key={chapter.id} className="group relative">
-              <button
-                id={`chapter-${chapter.id}`}
-                onClick={() => openChapter(chapter)}
-                className={cn(
-                  'flex items-center gap-2.5 w-full px-2 py-1.5 text-sm rounded-md transition-colors',
-                  activeChapter?.id === chapter.id
-                    ? 'bg-accent-600/20 text-accent-300 border-l-2 border-accent-500'
-                    : 'text-surface-400 hover:text-surface-200 hover:bg-surface-800/60'
-                )}
+          <Droppable droppableId="chapters" isDropDisabled={chapters.length === 0}>
+            {(provided) => (
+              <div 
+                className="space-y-0.5"
+                {...provided.droppableProps}
+                ref={provided.innerRef}
               >
-                <FileText className="w-3.5 h-3.5 flex-shrink-0" />
-                <span className="truncate flex-1 text-left text-xs">{chapter.title}</span>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  {chapter.cloud_id && (
-                    <Lock className="w-3 h-3 text-surface-500 mr-1" />
+              {chapters.map((chapter, idx) => (
+                <Draggable key={chapter.id} draggableId={chapter.id} index={idx}>
+                  {(provided, snapshot) => (
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.draggableProps}
+                      className={cn(
+                        "group relative",
+                        snapshot.isDragging && "opacity-90 z-50 rounded-md ring-1 ring-accent-500/50 shadow-lg"
+                      )}
+                      style={provided.draggableProps.style}
+                    >
+                      <button
+                        id={`chapter-${chapter.id}`}
+                        onClick={() => openChapter(chapter)}
+                        className={cn(
+                          'flex items-center gap-1.5 w-full px-1.5 py-1.5 text-sm rounded-md transition-colors',
+                          activeChapter?.id === chapter.id
+                            ? 'bg-accent-600/20 text-accent-300 border-l-2 border-accent-500'
+                            : 'text-surface-400 hover:text-surface-200 hover:bg-surface-800/60'
+                        )}
+                      >
+                        <div
+                          {...provided.dragHandleProps}
+                          className="opacity-0 group-hover:opacity-100 text-surface-600 hover:text-surface-300 cursor-grab active:cursor-grabbing p-0.5 -ml-1 transition-opacity"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <GripVertical className="w-3.5 h-3.5" />
+                        </div>
+                        <FileText className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span className="truncate flex-1 text-left text-xs">{chapter.title}</span>
+                        <div className="flex items-center gap-1 flex-shrink-0 pr-1">
+                          {chapter.cloud_id && (
+                            <Lock className="w-3 h-3 text-surface-500 mr-1" />
+                          )}
+                          {chapter.word_count > 0 && (
+                            <span className="text-[10px] text-surface-600 hidden group-hover:hidden">
+                              {chapter.word_count}w
+                            </span>
+                          )}
+                          <button
+                            id={`chapter-menu-${chapter.id}`}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setContextMenu({ id: chapter.id, x: e.clientX, y: e.clientY })
+                            }}
+                            className="opacity-0 group-hover:opacity-100 text-surface-600 hover:text-surface-300 transition-all"
+                          >
+                            <MoreHorizontal className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </button>
+                    </div>
                   )}
-                  {chapter.word_count > 0 && (
-                    <span className="text-[10px] text-surface-600 hidden group-hover:hidden">
-                      {chapter.word_count}w
-                    </span>
-                  )}
-                  <button
-                    id={`chapter-menu-${chapter.id}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setContextMenu({ id: chapter.id, x: e.clientX, y: e.clientY })
-                    }}
-                    className="opacity-0 group-hover:opacity-100 text-surface-600 hover:text-surface-300 transition-all"
-                  >
-                    <MoreHorizontal className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </button>
+                </Draggable>
+              ))}
+              {provided.placeholder}
             </div>
-          ))}
+          )}
+        </Droppable>
 
           {chapters.length === 0 && (
             <p className="text-xs text-surface-600 px-2 py-1">No chapters yet.</p>

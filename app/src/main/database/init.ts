@@ -208,6 +208,7 @@ function createTables(): void {
       relationships TEXT DEFAULT '',
       notes TEXT DEFAULT '',
       image_url TEXT,
+      sort_order INTEGER DEFAULT 0,
       synced INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
@@ -225,6 +226,7 @@ function createTables(): void {
       history TEXT DEFAULT '',
       notes TEXT DEFAULT '',
       image_url TEXT,
+      sort_order INTEGER DEFAULT 0,
       synced INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
@@ -238,6 +240,7 @@ function createTables(): void {
       book_id TEXT NOT NULL,
       title TEXT NOT NULL,
       content TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
       synced INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
@@ -251,6 +254,7 @@ function createTables(): void {
       book_id TEXT NOT NULL,
       title TEXT NOT NULL,
       content TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
       synced INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
@@ -264,6 +268,7 @@ function createTables(): void {
       book_id TEXT NOT NULL,
       title TEXT NOT NULL,
       content TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
       synced INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
@@ -307,6 +312,7 @@ function createTables(): void {
       book_id TEXT NOT NULL,
       title TEXT NOT NULL,
       content TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
       synced INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
@@ -320,6 +326,7 @@ function createTables(): void {
       book_id TEXT NOT NULL,
       title TEXT NOT NULL,
       content TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
       synced INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
@@ -711,6 +718,18 @@ function createTables(): void {
   } catch (e: any) {
     if (!e.message.includes('duplicate column name')) {
       console.error('Migration error adding duration_days:', e)
+    }
+  }
+
+  // Phase 15 Migrations for sort_order
+  const tablesWithSortOrder = ['codex', 'characters', 'locations', 'notes', 'organizations', 'world_rules', 'wiki']
+  for (const table of tablesWithSortOrder) {
+    try {
+      database.run(`ALTER TABLE ${table} ADD COLUMN sort_order INTEGER DEFAULT 0`)
+    } catch (e: any) {
+      if (!e.message.includes('duplicate column name')) {
+        console.error(`Migration error adding sort_order to ${table}:`, e)
+      }
     }
   }
 }

@@ -13,6 +13,8 @@ import { countWords, debounce } from '../../utils'
 import { scheduleSyncBackup } from '../../services/syncService'
 import EditorToolbar from './EditorToolbar'
 import { CommentMark } from './extensions/CommentMark'
+import SearchAndReplace from '@sereneinserenade/tiptap-search-and-replace'
+import EditorFindToolbar from './EditorFindToolbar'
 
 interface RichEditorProps {
   chapterId: string
@@ -75,6 +77,7 @@ export default function RichEditor({ chapterId, initialContent, onContentChange 
       Placeholder.configure({ placeholder: 'Start writing your story...' }),
       CharacterCount,
       CommentMark,
+      SearchAndReplace,
     ],
     content: initialContent || '',
     editorProps: {
@@ -142,7 +145,8 @@ export default function RichEditor({ chapterId, initialContent, onContentChange 
   }, [editor])
 
   return (
-    <div className="flex flex-col h-full bg-surface-950">
+    <div className="flex flex-col h-full bg-surface-950 relative">
+      <EditorFindToolbar editor={editor} />
       {/* Toolbar */}
       <div className="border-b border-surface-800 bg-surface-900">
         <EditorToolbar editor={editor} saveIndicatorRef={saveIndicatorRef} />

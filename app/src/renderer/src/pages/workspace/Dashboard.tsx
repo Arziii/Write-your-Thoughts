@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BookOpen, Plus, Clock, Pencil, ChevronRight, Camera, User as UserIcon } from 'lucide-react'
+import { BookOpen, Plus, Clock, ChevronRight, Camera, User as UserIcon, Target, Flame, ImagePlus } from 'lucide-react'
 import { useUserStore } from '../../stores/userStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useToastStore } from '../../stores/toastStore'
@@ -21,12 +21,21 @@ export default function Dashboard() {
   const { addToast } = useToastStore()
   const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const coverPhotoRef = useRef<HTMLInputElement>(null)
 
   const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [coverPhoto, setCoverPhoto] = useState<string>(() => localStorage.getItem('dashboardCover') || '')
+  const [pendingCover, setPendingCover] = useState<string>('')
+  const [showCoverMenu, setShowCoverMenu] = useState(false)
   const [title, setTitle] = useState('')
   const [genre, setGenre] = useState('')
   const [description, setDescription] = useState('')
   const [isCreating, setIsCreating] = useState(false)
+
+  // Daily Goal Stats
+  const [dailyGoal, setDailyGoal] = useState(() => parseInt(localStorage.getItem('dailyGoal') || '1000'))
+  const [dailyProgress, setDailyProgress] = useState(() => parseInt(localStorage.getItem('dailyProgress') || '450'))
+  const [streak, setStreak] = useState(() => parseInt(localStorage.getItem('streak') || '3'))
 
   const recentBooks = [...books].sort((a, b) =>
     new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
@@ -116,12 +125,143 @@ export default function Dashboard() {
 
   const totalWords = books.reduce((sum, _b) => sum, 0) // Would need chapters for real count
 
+  const handleCoverPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      addToast('Cover image must be under 5MB', 'error')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const base64 = ev.target?.result as string
+      setPendingCover(base64)  // Show preview + confirm button, don't commit yet
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
+  const confirmCover = () => {
+    setCoverPhoto(pendingCover)
+    localStorage.setItem('dashboardCover', pendingCover)
+    setPendingCover('')
+    addToast('Dashboard cover updated!', 'success')
+  }
+
+  const cancelPending = () => {
+    setPendingCover('')
+  }
+
+  const removeCover = () => {
+    setCoverPhoto('')
+    setPendingCover('')
+    localStorage.removeItem('dashboardCover')
+    setShowCoverMenu(false)
+    addToast('Cover removed', 'info')
+  }
+
   return (
-    <div className="flex-1 overflow-y-auto bg-surface-950">
-      <div className="max-w-4xl mx-auto px-8 py-10 space-y-10">
+    <div
+      className="flex-1 overflow-y-auto relative"
+      style={{
+        backgroundColor: 'hsl(220, 20%, 98%)',
+        backgroundImage: (pendingCover || coverPhoto) ? `url(${pendingCover || coverPhoto})` : 'none',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'local',
+      }}
+    >
+      {/* No overlay — cover photo shows fully */}
+
+      {/* Cover Photo Button — top right */}
+      <div className="absolute top-3 right-4 z-20 flex items-center gap-2">
+
+        {/* Pending confirmation bar */}
+        {pendingCover && (
+          <div
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-md"
+            style={{ background: 'rgba(255,255,255,0.95)', border: '1px solid #e2e8f0', backdropFilter: 'blur(8px)' }}
+          >
+            <img src={pendingCover} alt="preview" style={{ width: 28, height: 20, objectFit: 'cover', borderRadius: 4 }} />
+            <span style={{ color: '#334155' }}>Use this photo?</span>
+            <button
+              onClick={confirmCover}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-md text-white text-xs font-bold transition-colors"
+              style={{ background: '#22c55e' }}
+              title="Confirm cover"
+            >
+              ✓ Confirm
+            </button>
+            <button
+              onClick={cancelPending}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold transition-colors"
+              style={{ background: '#fee2e2', color: '#ef4444' }}
+              title="Cancel"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* Main cover button */}
+        <div className="relative">
+          <button
+            onClick={() => setShowCoverMenu(prev => !prev)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm"
+            style={{
+              background: (coverPhoto || pendingCover) ? 'rgba(255,255,255,0.92)' : 'rgba(30,41,59,0.88)',
+              color: (coverPhoto || pendingCover) ? '#334155' : '#94a3b8',
+              border: '1px solid rgba(148,163,184,0.3)',
+              backdropFilter: 'blur(8px)',
+            }}
+          >
+            <ImagePlus className="w-3.5 h-3.5" />
+            {coverPhoto ? 'Cover Photo' : 'Add Cover'}
+          </button>
+
+          {/* Dropdown menu */}
+          {showCoverMenu && (
+            <div
+              className="absolute right-0 top-full mt-1.5 rounded-xl shadow-xl overflow-hidden z-30"
+              style={{ minWidth: 160, background: 'rgba(255,255,255,0.97)', border: '1px solid #e2e8f0', backdropFilter: 'blur(12px)' }}
+            >
+              <button
+                onClick={() => { setShowCoverMenu(false); coverPhotoRef.current?.click() }}
+                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-left transition-colors hover:bg-blue-50"
+                style={{ color: '#334155' }}
+              >
+                <ImagePlus className="w-3.5 h-3.5 text-blue-500" />
+                Change Cover
+              </button>
+              {coverPhoto && (
+                <button
+                  onClick={removeCover}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-left transition-colors hover:bg-red-50 border-t border-gray-100"
+                  style={{ color: '#ef4444' }}
+                >
+                  <span className="text-sm">✕</span>
+                  Remove Cover
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        <input
+          ref={coverPhotoRef}
+          type="file"
+          className="hidden"
+          accept="image/jpeg,image/png,image/webp"
+          onChange={handleCoverPhotoChange}
+        />
+      </div>
+
+      <div className="relative z-10 max-w-4xl mx-auto px-8 py-10 space-y-10">
 
         {/* Welcome header */}
-        <div className="animate-fade-in flex items-center gap-6">
+        <div className="animate-fade-in flex items-center gap-6"
+          style={{ background: 'rgba(255,255,255,0.85)', borderRadius: 16, padding: '16px 20px', backdropFilter: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }}
+        >
           <div 
             className="relative w-20 h-20 rounded-full bg-surface-800 flex items-center justify-center flex-shrink-0 cursor-pointer group border-2 border-surface-700 overflow-hidden shadow-lg"
             onClick={() => fileInputRef.current?.click()}
@@ -173,13 +313,47 @@ export default function Dashboard() {
             <ChevronRight className="w-4 h-4 text-accent-300 ml-auto group-hover:translate-x-1 transition-transform" />
           </button>
 
-          <div className="flex items-center gap-4 p-5 glass-card rounded-xl">
-            <div className="w-10 h-10 rounded-lg bg-surface-700 flex items-center justify-center flex-shrink-0">
-              <BookOpen className="w-5 h-5 text-surface-300" />
+          <div className="flex items-center gap-4 p-5 bg-white rounded-xl border border-gray-100 shadow-sm">
+            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+              <BookOpen className="w-5 h-5 text-gray-500" />
             </div>
             <div>
-              <p className="font-semibold text-surface-200">{books.length} Books</p>
-              <p className="text-surface-500 text-sm">In your library</p>
+              <p className="font-semibold text-gray-800">{books.length} Books</p>
+              <p className="text-gray-500 text-sm">In your library</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Daily Goal & Streak */}
+        <div className="animate-slide-up" style={{ animationDelay: '75ms' }}>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
+              <Target className="w-4 h-4 text-accent-500" />
+              Daily Progress
+            </h2>
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-full border border-orange-200 shadow-sm">
+              <Flame className="w-4 h-4 text-orange-400" />
+              <span className="text-sm font-medium text-gray-700">{streak} Day Streak</span>
+            </div>
+          </div>
+          <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
+            <div className="flex justify-between items-end mb-3">
+              <div>
+                <p className="text-3xl font-bold text-gray-800">
+                  {dailyProgress} <span className="text-base font-medium text-gray-400">/ {dailyGoal} words</span>
+                </p>
+              </div>
+              <p className="text-sm font-semibold text-accent-600 bg-accent-50 px-2 py-1 rounded-md">
+                {Math.round((dailyProgress / dailyGoal) * 100)}%
+              </p>
+            </div>
+            <div className="h-3 bg-gray-100 rounded-full overflow-hidden shadow-inner">
+              <div 
+                className="h-full bg-gradient-to-r from-accent-600 to-accent-400 rounded-full transition-all duration-1000 ease-out relative"
+                style={{ width: `${Math.min((dailyProgress / dailyGoal) * 100, 100)}%` }}
+              >
+                <div className="absolute inset-0 bg-white/20 w-full h-full animate-pulse-soft" />
+              </div>
             </div>
           </div>
         </div>
@@ -187,8 +361,8 @@ export default function Dashboard() {
         {/* Recent books */}
         <div className="animate-slide-up" style={{ animationDelay: '100ms' }}>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-surface-200 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-surface-500" />
+            <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-gray-400" />
               Recent Books
             </h2>
           </div>
@@ -200,7 +374,7 @@ export default function Dashboard() {
                   key={book.id}
                   id={`dashboard-book-${book.id}`}
                   onClick={() => openBook(book)}
-                  className="group p-5 glass-card rounded-xl text-left hover:border-surface-600 hover:bg-surface-800/30 transition-all"
+                  className="group p-5 bg-white rounded-xl text-left border border-gray-100 shadow-sm hover:border-gray-300 hover:shadow-md transition-all"
                 >
                   {/* Book cover area */}
                   <div className="relative w-full h-24 rounded-lg bg-gradient-to-br from-accent-900/40 to-surface-800 mb-4 flex items-center justify-center overflow-hidden border border-surface-700/50 group/cover">
@@ -243,7 +417,7 @@ export default function Dashboard() {
 
                   <div className="space-y-1.5">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="font-semibold text-surface-100 text-sm truncate group-hover:text-accent-300 transition-colors">
+                      <p className="font-semibold text-gray-800 text-sm truncate group-hover:text-accent-600 transition-colors">
                         {book.title}
                       </p>
                       <span className={cn(
@@ -254,9 +428,9 @@ export default function Dashboard() {
                       </span>
                     </div>
                     {book.genre && (
-                      <p className="text-xs text-surface-500">{book.genre}</p>
+                      <p className="text-xs text-gray-500">{book.genre}</p>
                     )}
-                    <p className="text-[11px] text-surface-600">
+                    <p className="text-[11px] text-gray-400">
                       Updated {formatDate(book.updated_at)}
                     </p>
                   </div>
@@ -264,7 +438,7 @@ export default function Dashboard() {
               ))}
             </div>
           ) : (
-            <div className="text-center py-16 glass-card rounded-xl">
+            <div className="text-center py-16 bg-white rounded-xl border border-gray-100 shadow-sm">
               <BookOpen className="w-12 h-12 text-surface-700 mx-auto mb-4" />
               <p className="text-surface-400 font-medium mb-1">No books yet</p>
               <p className="text-surface-600 text-sm mb-5">Create your first book to get started.</p>

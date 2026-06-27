@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 export function registerWikiHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('wiki:getByBook', async (_event, bookId: string) => {
-    return dbAll('SELECT * FROM wiki WHERE book_id = ? ORDER BY updated_at DESC', [bookId])
+    return dbAll('SELECT * FROM wiki WHERE book_id = ? ORDER BY sort_order ASC, updated_at DESC', [bookId])
   })
 
   ipcMain.handle('wiki:getById', async (_event, id: string) => {

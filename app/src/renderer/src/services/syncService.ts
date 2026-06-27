@@ -148,14 +148,29 @@ export const syncService = {
     const { data: userData } = await supabase.auth.getUser()
     if (!userData.user) return []
 
-    // Get books where user is a collaborator
+    // Step 1: Get book IDs where the user is a collaborator
+    const { data: collabs, error: collabError } = await supabase
+      .from('project_collaborators')
+      .select('book_id')
+      .eq('user_id', userData.user.id)
+
+    if (collabError) {
+      console.error('Failed to get shared books (collaborators step):', collabError.message || collabError)
+      return []
+    }
+
+    if (!collabs || collabs.length === 0) return []
+
+    const bookIds = collabs.map((c) => c.book_id)
+
+    // Step 2: Fetch the actual books
     const { data, error } = await supabase
       .from('cloud_books')
-      .select('*, project_collaborators!inner(user_id)')
-      .eq('project_collaborators.user_id', userData.user.id)
+      .select('*')
+      .in('id', bookIds)
 
     if (error) {
-      console.error('Failed to get shared books:', error.message || error)
+      console.error('Failed to get shared books (books step):', error.message || error)
       return []
     }
     return data || []

@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 export function registerWorldRulesHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('worldRules:getByBook', async (_event, bookId: string) => {
-    return dbAll('SELECT * FROM world_rules WHERE book_id = ? ORDER BY updated_at DESC', [bookId])
+    return dbAll('SELECT * FROM world_rules WHERE book_id = ? ORDER BY sort_order ASC, updated_at DESC', [bookId])
   })
 
   ipcMain.handle('worldRules:getById', async (_event, id: string) => {

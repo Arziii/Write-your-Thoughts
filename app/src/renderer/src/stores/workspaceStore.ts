@@ -21,6 +21,7 @@ interface WorkspaceStore {
   addChapter: (chapter: Chapter) => void
   updateChapter: (chapter: Chapter) => void
   removeChapter: (chapterId: string) => void
+  reorderChapters: (startIndex: number, endIndex: number) => Promise<void>
 
   // Characters
   characters: Character[]
@@ -108,6 +109,14 @@ interface WorkspaceStore {
   drafts: Record<string, Record<string, any>>
   setDraft: (entityId: string, data: Record<string, any>) => void
   clearDraft: (entityId: string) => void
+
+  // Drag and Drop
+  reorderEntity: (
+    stateKey: 'characters' | 'locations' | 'notes' | 'codex' | 'wiki' | 'organizations' | 'worldRules',
+    table: string,
+    startIndex: number,
+    endIndex: number
+  ) => Promise<void>
 }
 
 export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
@@ -148,6 +157,19 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       activeChapter: s.activeChapter?.id === chapterId ? null : s.activeChapter
     }
   }),
+  reorderChapters: async (startIndex, endIndex) => {
+    const { chapters } = get()
+    const result = Array.from(chapters)
+    const [removed] = result.splice(startIndex, 1)
+    result.splice(endIndex, 0, removed)
+    
+    // Update local state optimisticly
+    set({ chapters: result })
+
+    // Call IPC to save order
+    const updates = result.map((ch, idx) => ({ id: ch.id, order: idx }))
+    await window.api.chapters.reorder(updates)
+  },
 
   // Characters
   characters: [],
@@ -345,4 +367,18 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       const { [entityId]: _, ...rest } = s.drafts
       return { drafts: rest }
     }),
+
+  reorderEntity: async (stateKey, table, startIndex, endIndex) => {
+    const state = get()
+    const items = Array.from(state[stateKey] as any[])
+    const [removed] = items.splice(startIndex, 1)
+    items.splice(endIndex, 0, removed)
+
+    // Optimistic update
+    set({ [stateKey]: items } as any)
+
+    // Sync to backend
+    const updates = items.map((item: any, idx: number) => ({ id: item.id, sort_order: idx }))
+    await window.api.entities.reorder({ table, items: updates })
+  },
 }))

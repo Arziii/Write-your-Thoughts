@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Plus, MoreHorizontal, Pencil, Trash2, ChevronDown } from 'lucide-react'
+import { Plus, MoreHorizontal, Pencil, Trash2, ChevronDown, GripVertical } from 'lucide-react'
+import { Droppable, Draggable } from '@hello-pangea/dnd'
 import { cn } from '../../utils'
 import Modal from '../ui/Modal'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
@@ -86,33 +87,63 @@ export default function EntityTree({ title, items, staticItems, icon, type, onCr
             </div>
           ))}
 
-          {items.map((item) => (
-            <div key={item.id} className="group relative">
-              <button
-                onClick={() => openItem(item)}
-                className={cn(
-                  'flex items-center gap-2.5 w-full px-2 py-1.5 text-sm rounded-md transition-colors',
-                  activeTabId === item.id
-                    ? 'bg-accent-600/20 text-accent-300 border-l-2 border-accent-500'
-                    : 'text-surface-400 hover:text-surface-200 hover:bg-surface-800/60'
-                )}
+          <Droppable droppableId={type} isDropDisabled={items.length === 0}>
+            {(provided) => (
+              <div 
+                className="space-y-0.5"
+                {...provided.droppableProps}
+                ref={provided.innerRef}
               >
-                <div className="flex-shrink-0 flex items-center justify-center opacity-70">{icon}</div>
-                <span className="truncate flex-1 text-left text-xs">{item.title}</span>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setContextMenu({ id: item.id, x: e.clientX, y: e.clientY })
-                    }}
-                    className="opacity-0 group-hover:opacity-100 text-surface-600 hover:text-surface-300 transition-all"
-                  >
-                    <MoreHorizontal className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </button>
-            </div>
-          ))}
+                {items.map((item, idx) => (
+                  <Draggable key={item.id} draggableId={item.id} index={idx}>
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        className={cn(
+                          "group relative",
+                          snapshot.isDragging && "opacity-90 z-50 rounded-md ring-1 ring-accent-500/50 shadow-lg"
+                        )}
+                        style={provided.draggableProps.style}
+                      >
+                        <button
+                          onClick={() => openItem(item)}
+                          className={cn(
+                            'flex items-center gap-1.5 w-full px-1.5 py-1.5 text-sm rounded-md transition-colors',
+                            activeTabId === item.id
+                              ? 'bg-accent-600/20 text-accent-300 border-l-2 border-accent-500'
+                              : 'text-surface-400 hover:text-surface-200 hover:bg-surface-800/60'
+                          )}
+                        >
+                          <div
+                            {...provided.dragHandleProps}
+                            className="opacity-0 group-hover:opacity-100 text-surface-600 hover:text-surface-300 cursor-grab active:cursor-grabbing p-0.5 -ml-1 transition-opacity"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <GripVertical className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="flex-shrink-0 flex items-center justify-center opacity-70">{icon}</div>
+                          <span className="truncate flex-1 text-left text-xs">{item.title}</span>
+                          <div className="flex items-center gap-1 flex-shrink-0 pr-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setContextMenu({ id: item.id, x: e.clientX, y: e.clientY })
+                              }}
+                              className="opacity-0 group-hover:opacity-100 text-surface-600 hover:text-surface-300 transition-all"
+                            >
+                              <MoreHorizontal className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </button>
+                      </div>
+                    )}
+                  </Draggable>
+                ))}
+                {provided.placeholder}
+              </div>
+            )}
+          </Droppable>
 
           {items.length === 0 && (
             <p className="text-xs text-surface-600 px-2 py-1">{emptyMessage}</p>

@@ -10,12 +10,15 @@ import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useToastStore } from '../../stores/toastStore'
 import { debounce } from '../../utils'
 import EditorToolbar from '../editor/EditorToolbar'
+import SearchAndReplace from '@sereneinserenade/tiptap-search-and-replace'
+import EditorFindToolbar from '../editor/EditorFindToolbar'
 
 interface NoteEditorProps {
   entityId: string
+  onWordCountChange?: (wc: number) => void
 }
 
-export default function NoteEditor({ entityId }: NoteEditorProps) {
+export default function NoteEditor({ entityId, onWordCountChange }: NoteEditorProps) {
   const { notes, markTabDirty, updateNote, drafts, setDraft, clearDraft } = useWorkspaceStore()
   const { addToast } = useToastStore()
   const saveStatusRef = useRef<'saved' | 'saving' | 'unsaved'>('saved')
@@ -77,8 +80,9 @@ export default function NoteEditor({ entityId }: NoteEditorProps) {
       Underline,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Highlight.configure({ multicolor: false }),
-      Placeholder.configure({ placeholder: 'Write your notes here...' }),
+      Placeholder.configure({ placeholder: 'Write your note here...' }),
       CharacterCount,
+      SearchAndReplace,
     ],
     content: initialContent,
     editorProps: {
@@ -92,6 +96,9 @@ export default function NoteEditor({ entityId }: NoteEditorProps) {
       markTabDirty(entityId, true)
       setSaveStatus('unsaved')
       autosave(html, title)
+      if (onWordCountChange) {
+        onWordCountChange(editor.storage.characterCount.words())
+      }
     },
   })
 
@@ -101,6 +108,12 @@ export default function NoteEditor({ entityId }: NoteEditorProps) {
       setSaveStatus('saved')
     }
   }, [entityId, initialContent])
+
+  useEffect(() => {
+    if (editor && onWordCountChange) {
+      onWordCountChange(editor.storage.characterCount.words())
+    }
+  }, [editor, entityId, onWordCountChange])
 
   // On unmount: persist unsaved state to the store draft (not SQLite).
   // This way switching tabs preserves the draft without an unwanted write.
@@ -115,7 +128,8 @@ export default function NoteEditor({ entityId }: NoteEditorProps) {
   if (!note) return <div>Note not found</div>
 
   return (
-    <div className="flex flex-col h-full bg-surface-950">
+    <div className="flex flex-col h-full bg-surface-950 relative">
+      <EditorFindToolbar editor={editor} />
       <div className="px-12 pt-6 pb-2">
         <input 
           type="text" 

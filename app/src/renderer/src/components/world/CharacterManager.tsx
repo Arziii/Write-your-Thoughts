@@ -121,15 +121,6 @@ export default function CharacterManager({ entityId }: { entityId: string }) {
         >
           Voice Intelligence
         </button>
-        <button
-          onClick={() => setActiveTab('relationships')}
-          className={cn(
-            "pb-3 text-sm font-medium transition-colors border-b-2",
-            activeTab === 'relationships' ? "border-accent-500 text-accent-400" : "border-transparent text-surface-400 hover:text-surface-200"
-          )}
-        >
-          Relationships
-        </button>
       </div>
 
       {activeTab === 'general' ? (
@@ -196,10 +187,8 @@ export default function CharacterManager({ entityId }: { entityId: string }) {
           </div>
         </div>
       </div>
-      ) : activeTab === 'voice' ? (
-        <VoiceIntelligenceTab characterId={entityId} />
       ) : (
-        <RelationshipIntelligenceTab characterId={entityId} />
+        <VoiceIntelligenceTab characterId={entityId} />
       )}
     </div>
   )

@@ -13,7 +13,8 @@ import SharedBookList from '../books/SharedBookList'
 import ChapterTree from '../chapters/ChapterTree'
 import EntityTree from '../world/EntityTree'
 import SidebarTimeline from '../world/SidebarTimeline'
-import { Users, MapPin, StickyNote, Clock, BookMarked, Globe, Building2, Gavel, Brain } from 'lucide-react'
+import { Users, MapPin, StickyNote, Clock, BookMarked, Globe, Building2, Gavel, Brain, Network } from 'lucide-react'
+import { DragDropContext, DropResult } from '@hello-pangea/dnd'
 
 export default function Sidebar() {
   const { user, localUser } = useUserStore()
@@ -27,7 +28,7 @@ export default function Sidebar() {
     wiki, addWiki, updateWiki, removeWiki,
     organizations, addOrganization, updateOrganization, removeOrganization,
     worldRules, addWorldRule, updateWorldRule, removeWorldRule,
-    openTab
+    openTab, reorderChapters, reorderEntity
   } = useWorkspaceStore()
   const { addToast } = useToastStore()
   const navigate = useNavigate()
@@ -52,6 +53,33 @@ export default function Sidebar() {
   const handleBackToBooks = () => {
     setCurrentBook(null)
     navigate('/')
+  }
+
+  const handleDragEnd = (result: DropResult) => {
+    if (!result.destination) return
+    if (result.source.droppableId !== result.destination.droppableId) return
+
+    const { source, destination } = result
+    if (source.index === destination.index) return
+
+    const type = source.droppableId
+    if (type === 'chapters') {
+      reorderChapters(source.index, destination.index)
+    } else {
+      const typeMap: Record<string, { stateKey: any, table: string }> = {
+        character: { stateKey: 'characters', table: 'characters' },
+        location: { stateKey: 'locations', table: 'locations' },
+        organization: { stateKey: 'organizations', table: 'organizations' },
+        world_rule: { stateKey: 'worldRules', table: 'world_rules' },
+        codex: { stateKey: 'codex', table: 'codex' },
+        wiki: { stateKey: 'wiki', table: 'wiki' },
+        note: { stateKey: 'notes', table: 'notes' }
+      }
+      const mapping = typeMap[type]
+      if (mapping) {
+        reorderEntity(mapping.stateKey, mapping.table, source.index, destination.index)
+      }
+    }
   }
 
   return (
@@ -114,8 +142,9 @@ export default function Sidebar() {
             <div className="flex-1 overflow-y-auto relative">
               {sidebarTab === 'explorer' ? (
                 /* Book view: chapter tree + worldbuilding */
-                <div className="space-y-4 py-2 pb-4">
-                  <div className="px-3 pb-2 pt-1">
+                <DragDropContext onDragEnd={handleDragEnd}>
+                  <div className="space-y-4 py-2 pb-4">
+                    <div className="px-3 pb-2 pt-1">
                     <button
                       onClick={() => openTab(currentBook.id, 'story_intelligence', 'Story Intelligence')}
                       className="w-full py-2 flex items-center gap-2 justify-center bg-accent-600/10 hover:bg-accent-600/20 text-accent-400 border border-accent-600/30 rounded-lg text-xs font-semibold transition-colors tracking-wider"
@@ -125,11 +154,21 @@ export default function Sidebar() {
                     </button>
                   </div>
                   <ChapterTree book={currentBook} />
+                  
+                  <div className="px-3 pb-2 border-b border-surface-800/50">
+                    <button
+                      onClick={() => openTab('relationships', 'relationship_manager', 'Relationships')}
+                      className="w-full py-1.5 flex items-center gap-2 text-surface-400 hover:text-accent-400 hover:bg-surface-800/60 rounded-md text-xs font-semibold uppercase tracking-wider transition-colors"
+                    >
+                      <Network className="w-3.5 h-3.5" />
+                      Relationships
+                    </button>
+                  </div>
             
             <EntityTree
               title="Characters"
               type="character"
-              icon={<Users className="w-3.5 h-3.5" />}
+              icon={<Users className="w-3.5 h-3.5 text-blue-400" />}
               items={characters.map(c => ({ id: c.id, title: c.name }))}
               emptyMessage="No characters yet."
               onCreate={async (title) => {
@@ -152,7 +191,7 @@ export default function Sidebar() {
             <EntityTree
               title="Locations"
               type="location"
-              icon={<MapPin className="w-3.5 h-3.5" />}
+              icon={<MapPin className="w-3.5 h-3.5 text-emerald-400" />}
               items={locations.map(l => ({ id: l.id, title: l.name }))}
               emptyMessage="No locations yet."
               onCreate={async (title) => {
@@ -175,7 +214,7 @@ export default function Sidebar() {
             <EntityTree
               title="Organizations"
               type="organization"
-              icon={<Building2 className="w-3.5 h-3.5" />}
+              icon={<Building2 className="w-3.5 h-3.5 text-amber-400" />}
               items={organizations.map(o => ({ id: o.id, title: o.title }))}
               emptyMessage="No organizations yet."
               singularTitle="Organization"
@@ -199,7 +238,7 @@ export default function Sidebar() {
             <EntityTree
               title="World Rules"
               type="world_rule"
-              icon={<Gavel className="w-3.5 h-3.5" />}
+              icon={<Gavel className="w-3.5 h-3.5 text-rose-400" />}
               items={worldRules.map(w => ({ id: w.id, title: w.title }))}
               emptyMessage="No rules yet."
               singularTitle="World Rule"
@@ -223,7 +262,7 @@ export default function Sidebar() {
             <EntityTree
               title="Codex"
               type="codex"
-              icon={<BookMarked className="w-3.5 h-3.5" />}
+              icon={<BookMarked className="w-3.5 h-3.5 text-purple-400" />}
               items={codex.map(c => ({ id: c.id, title: c.title }))}
               emptyMessage="No codex entries yet."
               singularTitle="Codex Entry"
@@ -247,7 +286,7 @@ export default function Sidebar() {
             <EntityTree
               title="Wiki"
               type="wiki"
-              icon={<Globe className="w-3.5 h-3.5" />}
+              icon={<Globe className="w-3.5 h-3.5 text-cyan-400" />}
               items={wiki.map(w => ({ id: w.id, title: w.title }))}
               emptyMessage="No wiki articles yet."
               singularTitle="Wiki Article"
@@ -271,7 +310,7 @@ export default function Sidebar() {
             <EntityTree
               title="Notes"
               type="note"
-              icon={<StickyNote className="w-3.5 h-3.5" />}
+              icon={<StickyNote className="w-3.5 h-3.5 text-yellow-400" />}
               items={notes.map(n => ({ id: n.id, title: n.title }))}
               emptyMessage="No notes yet."
               onCreate={async (title) => {
@@ -291,6 +330,7 @@ export default function Sidebar() {
               }}
             />
           </div>
+        </DragDropContext>
               ) : (
                 <SidebarTimeline />
               )}

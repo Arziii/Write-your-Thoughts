@@ -100,6 +100,10 @@ const api = {
     book: (bookId: string, format: string, authorName?: string) => ipcRenderer.invoke('export:book', { bookId, format, authorName }),
   },
 
+  entities: {
+    reorder: (data: { table: string, items: Array<{ id: string, sort_order: number }> }) => ipcRenderer.invoke('entities:reorder', data)
+  },
+
   // Plugins
   plugins: {
     getAll: () => ipcRenderer.invoke('plugins:getAll'),

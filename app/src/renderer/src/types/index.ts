@@ -427,7 +427,7 @@ export interface ChapterStatistics {
 
 // ── Tab type ───────────────────────────────────────────────────────
 
-export type TabType = 'chapter' | 'character' | 'location' | 'note' | 'timeline' | 'codex' | 'wiki' | 'organization' | 'world_rule' | 'story_intelligence'
+export type TabType = 'chapter' | 'character' | 'location' | 'note' | 'timeline' | 'codex' | 'wiki' | 'organization' | 'world_rule' | 'story_intelligence' | 'relationship_manager'
 
 export interface EditorTab {
   id: string          // Unique ID for the tab (usually the entity ID)

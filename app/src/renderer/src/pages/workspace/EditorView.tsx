@@ -17,6 +17,7 @@ import EmotionPanel from '../../components/editor/EmotionPanel'
 import ContinuityPanel from '../../components/editor/ContinuityPanel'
 import StyleIntelligencePanel from '../../components/editor/StyleIntelligencePanel'
 import StoryIntelligenceView from '../../components/world/StoryIntelligenceView'
+import GlobalRelationshipManager from '../../components/world/GlobalRelationshipManager'
 import type { Chapter } from '../../types'
 import { BookOpen, PanelLeft, Sparkles, Heart, Shield, MessageSquare, Feather } from 'lucide-react'
 
@@ -30,8 +31,12 @@ export default function EditorView() {
 
   // Sync wordcount
   useEffect(() => {
-    setWordCount(activeChapter?.word_count ?? 0)
-  }, [activeChapter?.id])
+    if (activeTabId && tabs.find(t => t.id === activeTabId)?.type === 'chapter') {
+      setWordCount(activeChapter?.word_count ?? 0)
+    } else {
+      setWordCount(0)
+    }
+  }, [activeTabId, activeChapter?.id])
 
   const [isCommentSidebarOpen, setIsCommentSidebarOpen] = useState(false)
   const [isEmotionPanelOpen, setIsEmotionPanelOpen] = useState(false)
@@ -139,13 +144,14 @@ export default function EditorView() {
           )}
           {activeTab.type === 'character' && <CharacterManager key={`char-${activeTab.entityId}`} entityId={activeTab.entityId} />}
           {activeTab.type === 'location' && <LocationManager key={`loc-${activeTab.entityId}`} entityId={activeTab.entityId} />}
-          {activeTab.type === 'note' && <NoteEditor key={`note-${activeTab.entityId}`} entityId={activeTab.entityId} />}
-          {activeTab.type === 'codex' && <CodexEditor key={`codex-${activeTab.entityId}`} entityId={activeTab.entityId} />}
-          {activeTab.type === 'wiki' && <WikiEditor key={`wiki-${activeTab.entityId}`} entityId={activeTab.entityId} />}
-          {activeTab.type === 'organization' && <OrganizationEditor key={`org-${activeTab.entityId}`} entityId={activeTab.entityId} />}
-          {activeTab.type === 'world_rule' && <WorldRuleEditor key={`rule-${activeTab.entityId}`} entityId={activeTab.entityId} />}
+          {activeTab.type === 'note' && <NoteEditor key={`note-${activeTab.entityId}`} entityId={activeTab.entityId} onWordCountChange={setWordCount} />}
+          {activeTab.type === 'codex' && <CodexEditor key={`codex-${activeTab.entityId}`} entityId={activeTab.entityId} onWordCountChange={setWordCount} />}
+          {activeTab.type === 'wiki' && <WikiEditor key={`wiki-${activeTab.entityId}`} entityId={activeTab.entityId} onWordCountChange={setWordCount} />}
+          {activeTab.type === 'organization' && <OrganizationEditor key={`org-${activeTab.entityId}`} entityId={activeTab.entityId} onWordCountChange={setWordCount} />}
+          {activeTab.type === 'world_rule' && <WorldRuleEditor key={`rule-${activeTab.entityId}`} entityId={activeTab.entityId} onWordCountChange={setWordCount} />}
           {activeTab.type === 'timeline' && <CalendarView key={`calendar-${activeTab.entityId}`} />}
           {activeTab.type === 'story_intelligence' && <StoryIntelligenceView key={`story_intel-${activeTab.entityId}`} />}
+          {activeTab.type === 'relationship_manager' && <GlobalRelationshipManager key={`rel_mgr-${activeTab.id}`} />}
         </div>
         
         {/* Comments Sidebar for Chapters */}

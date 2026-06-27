@@ -10,12 +10,15 @@ import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useToastStore } from '../../stores/toastStore'
 import { debounce } from '../../utils'
 import EditorToolbar from '../editor/EditorToolbar'
+import SearchAndReplace from '@sereneinserenade/tiptap-search-and-replace'
+import EditorFindToolbar from '../editor/EditorFindToolbar'
 
 interface OrganizationEditorProps {
   entityId: string
+  onWordCountChange?: (wc: number) => void
 }
 
-export default function OrganizationEditor({ entityId }: OrganizationEditorProps) {
+export default function OrganizationEditor({ entityId, onWordCountChange }: OrganizationEditorProps) {
   const { organizations, markTabDirty, updateOrganization, drafts, setDraft, clearDraft } = useWorkspaceStore()
   const { addToast } = useToastStore()
   const saveStatusRef = useRef<'saved' | 'saving' | 'unsaved'>('saved')
@@ -78,6 +81,7 @@ export default function OrganizationEditor({ entityId }: OrganizationEditorProps
       Highlight.configure({ multicolor: false }),
       Placeholder.configure({ placeholder: 'Write organization details here...' }),
       CharacterCount,
+      SearchAndReplace,
     ],
     content: initialContent,
     editorProps: {
@@ -91,6 +95,9 @@ export default function OrganizationEditor({ entityId }: OrganizationEditorProps
       markTabDirty(entityId, true)
       setSaveStatus('unsaved')
       autosave(html, title)
+      if (onWordCountChange) {
+        onWordCountChange(editor.storage.characterCount.words())
+      }
     },
   })
 
@@ -100,6 +107,12 @@ export default function OrganizationEditor({ entityId }: OrganizationEditorProps
       setSaveStatus('saved')
     }
   }, [entityId, initialContent])
+
+  useEffect(() => {
+    if (editor && onWordCountChange) {
+      onWordCountChange(editor.storage.characterCount.words())
+    }
+  }, [editor, entityId, onWordCountChange])
 
   useEffect(() => {
     return () => {
@@ -112,7 +125,8 @@ export default function OrganizationEditor({ entityId }: OrganizationEditorProps
   if (!item) return <div>Organization not found</div>
 
   return (
-    <div className="flex flex-col h-full bg-surface-950">
+    <div className="flex flex-col h-full bg-surface-950 relative">
+      <EditorFindToolbar editor={editor} />
       <div className="px-12 pt-6 pb-2">
         <input 
           type="text" 

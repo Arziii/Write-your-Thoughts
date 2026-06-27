@@ -31,7 +31,9 @@ html, body, #root {
 }
 
 body {
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: 'Charm', cursive;
+  font-size: 1.15rem;
+  font-weight: 700;
   background: hsl(220, 20%, 98%);
   color: hsl(226, 24%, 7%);
   -webkit-font-smoothing: antialiased;
@@ -116,11 +118,11 @@ body {
               opacity 0.2s ease;
 }
 
-/* ── Glass morphism card ──────────────────────────────────────────── */
+/* ── Solid card (replaces glass morphism) ─────────────────────────── */
 .glass-card {
-  background: rgba(0,0,0,0.03);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(0,0,0,0.06);
+  background: #ffffff;
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
 }
 
 /* ── Diff highlight ───────────────────────────────────────────────── */
@@ -158,4 +160,16 @@ body {
 
 .comment-mark:hover {
   background-color: rgba(234, 179, 8, 0.5);
+}
+
+/* ── Editor Search & Replace ──────────────────────────────────────── */
+.search-result {
+  background-color: rgba(250, 204, 21, 0.4); /* yellow-400 with opacity */
+  border-bottom: 2px solid rgba(250, 204, 21, 0.8);
+  border-radius: 2px;
+}
+
+.search-result-current {
+  background-color: rgba(249, 115, 22, 0.6); /* orange-500 */
+  border-bottom: 2px solid rgba(249, 115, 22, 1);
 }
