@@ -6,16 +6,16 @@ import { useWorkspaceStore } from '../../stores/workspaceStore'
 
 // ── Forest Literary Palette ──────────────────────────────────────────
 const F = {
-  bg: '#f0ece4',          // parchment sidebar bg
-  bgHover: '#e8e2d8',     // hovered item
-  active: '#e0dbd0',      // active item bg
-  border: '#d0c9bc',      // divider
-  green: '#2d5a27',       // forest green accent
-  greenLight: '#e8f0e5',  // light green tint
-  text: '#1a2e18',        // dark forest text
-  textMid: '#3d5c3a',     // medium text
-  textSoft: '#7a8c77',    // muted text
-  textFaint: '#a0b09e',   // faintest text
+  bg: 'hsl(var(--surface-900))',
+  bgHover: 'hsl(var(--surface-850))',
+  active: 'hsl(var(--surface-800))',
+  border: 'hsl(var(--surface-800))',
+  green: 'hsl(var(--brand-green))',
+  greenLight: 'hsl(var(--brand-green-bg))',
+  text: 'hsl(var(--surface-50))',
+  textMid: 'hsl(var(--surface-300))',
+  textSoft: 'hsl(var(--surface-500))',
+  textFaint: 'hsl(var(--surface-600))',
 }
 
 interface EntityTreeProps {
@@ -77,12 +77,12 @@ export default function EntityTree({ title, items, staticItems, icon, type, onCr
         onClick={() => setIsExpanded(!isExpanded)}
         style={{
           display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 8px',
-          color: F.textSoft, background: 'none', border: 'none', borderRadius: 8,
+          color: F.green, background: 'none', border: 'none', borderRadius: 8,
           fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em',
           cursor: 'pointer', transition: 'all 0.15s', textAlign: 'left',
         }}
-        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = F.textMid }}
-        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = F.textSoft }}
+        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = F.greenLight; (e.currentTarget as HTMLElement).style.background = F.bgHover }}
+        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = F.green; (e.currentTarget as HTMLElement).style.background = 'transparent' }}
       >
         <ChevronDown style={{ width: 12, height: 12, transition: 'transform 0.15s', transform: isExpanded ? 'rotate(0)' : 'rotate(-90deg)' }} />
         {title}

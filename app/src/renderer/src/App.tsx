@@ -13,6 +13,7 @@ import { scheduleSyncBackup } from './services/syncService'
 
 function App() {
   const { user, isLoading, setUser, setLocalUser, setLoading, setSettings } = useUserStore()
+  const theme = useUserStore(state => state.settings?.theme)
   const navigate = useNavigate()
 
   // Track previous books/chapters counts to detect real data writes
@@ -69,7 +70,6 @@ function App() {
       if (!u) navigate('/login')
     })
 
-    // ── Backup interval: 90 seconds (safety net) ──────────────────────────
     const backupInterval = setInterval(() => {
       authService.getSession().then((session) => {
         if (session?.user) {
@@ -119,6 +119,15 @@ function App() {
       unsubscribeStore()
     }
   }, [])
+
+  // Apply theme class to document
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [theme])
 
   if (isLoading) {
     return (

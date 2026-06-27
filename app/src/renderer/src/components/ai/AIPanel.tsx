@@ -188,7 +188,7 @@ export default function AIPanel() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-surface-900 w-80">
+    <div className="flex flex-col h-full bg-surface-900 w-80" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       {/* Panel header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-surface-800 h-9">
         <div className="flex items-center gap-1">

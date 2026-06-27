@@ -38,8 +38,8 @@ export default function EditorTabs() {
     <div 
       className="flex items-end overflow-x-auto flex-shrink-0"
       style={{
-        background: '#f0ece4', // parchment background
-        borderBottom: '1px solid #d0c9bc',
+        background: 'hsl(var(--surface-900))', // parchment background
+        borderBottom: '1px solid hsl(var(--surface-800))',
         fontFamily: "'DM Sans', sans-serif"
       }}
     >
@@ -50,24 +50,24 @@ export default function EditorTabs() {
           onClick={() => handleTabClick(tab)}
           className="flex items-center gap-2 px-3 py-2 min-w-28 max-w-44 cursor-pointer flex-shrink-0 group transition-all"
           style={{
-            background: activeTabId === tab.id ? '#fffefb' : 'transparent',
-            borderRight: '1px solid #d0c9bc',
-            borderTop: activeTabId === tab.id ? '2px solid #2d5a27' : '2px solid transparent',
-            color: activeTabId === tab.id ? '#1a2e18' : '#7a8c77',
+            background: activeTabId === tab.id ? 'hsl(var(--surface-950))' : 'transparent',
+            borderRight: '1px solid hsl(var(--surface-800))',
+            borderTop: activeTabId === tab.id ? '2px solid hsl(var(--accent-600))' : '2px solid transparent',
+            color: activeTabId === tab.id ? 'hsl(var(--surface-50))' : 'hsl(var(--surface-500))',
             borderTopLeftRadius: activeTabId === tab.id ? 6 : 0,
             borderTopRightRadius: activeTabId === tab.id ? 6 : 0,
             fontWeight: activeTabId === tab.id ? 600 : 500,
           }}
           onMouseEnter={e => {
             if (activeTabId !== tab.id) {
-              (e.currentTarget as HTMLElement).style.background = '#e8e2d8';
-              (e.currentTarget as HTMLElement).style.color = '#3d5c3a';
+              (e.currentTarget as HTMLElement).style.background = 'hsl(var(--surface-850))';
+              (e.currentTarget as HTMLElement).style.color = 'hsl(var(--surface-300))';
             }
           }}
           onMouseLeave={e => {
             if (activeTabId !== tab.id) {
               (e.currentTarget as HTMLElement).style.background = 'transparent';
-              (e.currentTarget as HTMLElement).style.color = '#7a8c77';
+              (e.currentTarget as HTMLElement).style.color = 'hsl(var(--surface-500))';
             }
           }}
         >
@@ -80,9 +80,9 @@ export default function EditorTabs() {
           <button
             onClick={(e) => handleClose(e, tab.id)}
             className="opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-            style={{ color: '#a0b09e' }}
+            style={{ color: 'hsl(var(--surface-600))' }}
             onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = '#ef4444'}
-            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = '#a0b09e'}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'hsl(var(--surface-600))'}
           >
             <X className="w-3 h-3" />
           </button>

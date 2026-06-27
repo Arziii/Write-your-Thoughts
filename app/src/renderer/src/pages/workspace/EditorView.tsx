@@ -100,8 +100,8 @@ export default function EditorView() {
       <div 
         className="flex items-center gap-4 px-4 py-2 flex-shrink-0"
         style={{
-          background: '#fffefb',
-          borderBottom: '1px solid #d0c9bc',
+          background: 'hsl(var(--surface-950))',
+          borderBottom: '1px solid hsl(var(--surface-800))',
         }}
       >
         {/* Sidebar toggle (when sidebar hidden) */}
@@ -109,9 +109,9 @@ export default function EditorView() {
           <button
             id="editor-toggle-sidebar"
             onClick={toggleSidebar}
-            style={{ color: '#7a8c77', background: 'none', border: 'none', cursor: 'pointer', transition: 'color 0.15s' }}
-            onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = '#3d5c3a'}
-            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = '#7a8c77'}
+            style={{ color: 'hsl(var(--surface-500))', background: 'none', border: 'none', cursor: 'pointer', transition: 'color 0.15s' }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'hsl(var(--surface-300))'}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'hsl(var(--surface-500))'}
             title="Show sidebar"
           >
             <PanelLeft className="w-4 h-4" />
@@ -119,13 +119,13 @@ export default function EditorView() {
         )}
 
         <div className="flex-1">
-          <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 16, fontWeight: 700, color: '#1a2e18', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 16, fontWeight: 700, color: 'hsl(var(--surface-50))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {activeTab.title}
           </h2>
-          <p style={{ fontSize: 11, color: '#7a8c77' }}>{currentBook?.title}</p>
+          <p style={{ fontSize: 11, color: 'hsl(var(--surface-500))' }}>{currentBook?.title}</p>
         </div>
 
-        <div className="flex items-center gap-3 text-xs" style={{ color: '#7a8c77', fontWeight: 500 }}>
+        <div className="flex items-center gap-3 text-xs" style={{ color: 'hsl(var(--surface-500))', fontWeight: 500 }}>
           <span>{formatWordCount(wordCount)} words</span>
         </div>
 
@@ -134,9 +134,9 @@ export default function EditorView() {
           <button
             id="editor-toggle-ai"
             onClick={toggleAIPanel}
-            style={{ color: '#7a8c77', background: 'none', border: 'none', cursor: 'pointer', transition: 'color 0.15s' }}
-            onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = '#2d5a27'}
-            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = '#7a8c77'}
+            style={{ color: 'hsl(var(--surface-500))', background: 'none', border: 'none', cursor: 'pointer', transition: 'color 0.15s' }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'hsl(var(--accent-600))'}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'hsl(var(--surface-500))'}
             title="Show AI panel"
           >
             <Sparkles className="w-4 h-4" />
@@ -145,7 +145,7 @@ export default function EditorView() {
       </div>
 
       {/* Dynamic Content Area */}
-      <div className="flex-1 overflow-hidden relative flex" style={{ background: '#fffefb' }}>
+      <div className="flex-1 overflow-hidden relative flex" style={{ background: 'hsl(var(--surface-950))' }}>
         <div className="flex-1 overflow-hidden relative">
           {activeTab.type === 'chapter' && activeChapter && (
             <RichEditor
@@ -168,10 +168,10 @@ export default function EditorView() {
           {activeTab.type === 'verse_timeline' && <VerseTimelineView key={`verse_timeline-${activeTab.id}`} />}
         </div>
         
-        {/* Comments Sidebar for Chapters */}
-        {activeTab.type === 'chapter' && activeChapter && (
+        {/* Comments Sidebar */}
+        {activeTab && (
           <CommentSidebar
-            chapterId={activeChapter.id}
+            chapterId={activeTab.type === 'chapter' && activeChapter ? activeChapter.id : activeTab.entityId || activeTab.id}
             isOpen={isCommentSidebarOpen}
             onClose={() => setIsCommentSidebarOpen(false)}
             onResolve={async (id) => {
@@ -203,39 +203,42 @@ export default function EditorView() {
         )}
         
         {/* Right Vertical Tool Sidebar */}
-        {activeTab.type === 'chapter' && (
+        {activeTab && (
           <div 
             className="w-12 flex flex-col items-center py-4 gap-4 flex-shrink-0"
             style={{
-              background: '#f0ece4',
-              borderLeft: '1px solid #d0c9bc'
+              background: 'hsl(var(--surface-900))',
+              borderLeft: '1px solid hsl(var(--surface-800))'
             }}
           >
             <button
               onClick={() => togglePanel('comments')}
-              className={`p-2 rounded-lg transition-colors ${isCommentSidebarOpen ? 'bg-[#fffefb] text-[#2d5a27] shadow-sm' : 'text-[#7a8c77] hover:text-[#3d5c3a] hover:bg-[#e8e2d8]'}`}
+              className={`p-2 rounded-lg transition-colors ${isCommentSidebarOpen ? 'bg-surface-950 text-accent-600 shadow-sm' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-850'}`}
               title="Comments"
             >
               <MessageSquare className="w-4 h-4" />
             </button>
             <button
-              onClick={() => togglePanel('emotion')}
-              className={`p-2 rounded-lg transition-colors ${isEmotionPanelOpen ? 'bg-[#fffefb] text-[#2d5a27] shadow-sm' : 'text-[#7a8c77] hover:text-[#3d5c3a] hover:bg-[#e8e2d8]'}`}
-              title="Emotional Intelligence"
+              onClick={() => activeTab.type === 'chapter' && togglePanel('emotion')}
+              className={`p-2 rounded-lg transition-colors ${activeTab.type !== 'chapter' ? 'opacity-30 cursor-not-allowed text-surface-500' : isEmotionPanelOpen ? 'bg-surface-950 text-accent-600 shadow-sm' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-850'}`}
+              title={activeTab.type === 'chapter' ? "Emotional Intelligence" : "Emotional Intelligence (Chapters only)"}
+              disabled={activeTab.type !== 'chapter'}
             >
               <Heart className="w-4 h-4" />
             </button>
             <button
-              onClick={() => togglePanel('continuity')}
-              className={`p-2 rounded-lg transition-colors ${isContinuityPanelOpen ? 'bg-[#fffefb] text-[#2d5a27] shadow-sm' : 'text-[#7a8c77] hover:text-[#3d5c3a] hover:bg-[#e8e2d8]'}`}
-              title="Continuity Engine"
+              onClick={() => activeTab.type === 'chapter' && togglePanel('continuity')}
+              className={`p-2 rounded-lg transition-colors ${activeTab.type !== 'chapter' ? 'opacity-30 cursor-not-allowed text-surface-500' : isContinuityPanelOpen ? 'bg-surface-950 text-accent-600 shadow-sm' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-850'}`}
+              title={activeTab.type === 'chapter' ? "Continuity Engine" : "Continuity Engine (Chapters only)"}
+              disabled={activeTab.type !== 'chapter'}
             >
               <Shield className="w-4 h-4" />
             </button>
             <button
-              onClick={() => togglePanel('style')}
-              className={`p-2 rounded-lg transition-colors ${isStylePanelOpen ? 'bg-[#fffefb] text-[#2d5a27] shadow-sm' : 'text-[#7a8c77] hover:text-[#3d5c3a] hover:bg-[#e8e2d8]'}`}
-              title="Style Intelligence"
+              onClick={() => activeTab.type === 'chapter' && togglePanel('style')}
+              className={`p-2 rounded-lg transition-colors ${activeTab.type !== 'chapter' ? 'opacity-30 cursor-not-allowed text-surface-500' : isStylePanelOpen ? 'bg-surface-950 text-accent-600 shadow-sm' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-850'}`}
+              title={activeTab.type === 'chapter' ? "Style Intelligence" : "Style Intelligence (Chapters only)"}
+              disabled={activeTab.type !== 'chapter'}
             >
               <Feather className="w-4 h-4" />
             </button>

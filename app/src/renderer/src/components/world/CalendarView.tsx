@@ -83,18 +83,18 @@ export default function CalendarView() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#fffefb] text-[#1a2e18]">
+    <div className="flex flex-col h-full bg-surface-950 text-surface-50">
       {/* Header toolbar matching reference */}
-      <div className="flex items-center px-4 py-2 border-b border-[#d0c9bc] bg-[#fffefb] gap-4">
+      <div className="flex items-center px-4 py-2 border-b border-surface-800 bg-surface-950 gap-4">
         <div className="flex items-center gap-2">
           <button onClick={goToToday} className="px-3 py-1 text-xs font-medium bg-[#e8f0e5] hover:bg-[#d4e9d0] rounded text-[#2d5a27] transition-colors">
             First Day
           </button>
           <div className="flex items-center">
-            <button onClick={prevMonth} className="p-1 hover:bg-[#f0ece4] text-[#7a8c77] hover:text-[#3d5c3a] rounded transition-colors">
+            <button onClick={prevMonth} className="p-1 hover:bg-surface-850 text-surface-500 hover:text-surface-300 rounded transition-colors">
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <button onClick={nextMonth} className="p-1 hover:bg-[#f0ece4] text-[#7a8c77] hover:text-[#3d5c3a] rounded transition-colors">
+            <button onClick={nextMonth} className="p-1 hover:bg-surface-850 text-surface-500 hover:text-surface-300 rounded transition-colors">
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
@@ -106,7 +106,7 @@ export default function CalendarView() {
       </div>
 
       {/* Days of week header */}
-      <div className="grid grid-cols-7 border-b border-[#d0c9bc] flex-shrink-0 bg-[#f0ece4]">
+      <div className="grid grid-cols-7 border-b border-surface-800 flex-shrink-0 bg-surface-900">
         {DAYS_OF_WEEK.map(day => (
           <div key={day} className="px-2 py-2 text-xs font-bold text-center text-[#7a8c77] border-r border-[#d0c9bc] last:border-r-0 uppercase tracking-widest">
             {day}
@@ -130,12 +130,12 @@ export default function CalendarView() {
             return (
               <div 
                 key={idx} 
-                className={`border-r border-b border-[#d0c9bc] flex flex-col p-1 transition-colors hover:bg-[#e8f0e5]/30 ${
-                  !isCurrentMonth ? 'bg-[#f9f8f6] opacity-60' : 'bg-[#fffefb]'
+                className={`border-r border-b border-surface-800 flex flex-col p-1 transition-colors hover:bg-surface-900 ${
+                  !isCurrentMonth ? 'bg-surface-950 opacity-60' : 'bg-surface-950'
                 }`}
               >
                 <div className="flex justify-between items-center px-1 mb-1">
-                  <span className={`text-xs font-semibold ${isCurrentMonth ? 'text-[#1a2e18]' : 'text-[#a0b09e]'}`}>
+                  <span className={`text-xs font-semibold ${isCurrentMonth ? 'text-surface-200' : 'text-surface-600'}`}>
                     {date.getDate()}
                   </span>
                 </div>

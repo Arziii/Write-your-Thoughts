@@ -123,7 +123,7 @@ export default function BookList() {
               id={`book-menu-${book.id}`}
               onClick={(e) => { e.stopPropagation(); setContextMenu({ bookId: book.id, x: e.clientX, y: e.clientY }) }}
               className="opacity-0 group-hover:opacity-100 transition-all cursor-default"
-              style={{ color: '#a0b09e', background: 'none', border: 'none' }}
+              style={{ color: 'hsl(var(--surface-600))', background: 'none', border: 'none' }}
               onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = '#2d5a27'}
               onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = '#a0b09e'}
             >
@@ -159,7 +159,7 @@ export default function BookList() {
           <div className="fixed inset-0 z-40" onClick={() => setContextMenu(null)} />
           <div
             className="fixed z-50 animate-fade-in"
-            style={{ left: contextMenu.x, top: contextMenu.y, background: '#fffefb', border: `1px solid #d0c9bc`, borderRadius: 12, boxShadow: '0 4px 18px rgba(45,90,39,0.13)', padding: '4px 0', minWidth: 150 }}
+            style={{ left: contextMenu.x, top: contextMenu.y, background: 'hsl(var(--surface-950))', border: `1px solid hsl(var(--surface-800))`, borderRadius: 12, boxShadow: '0 4px 18px rgba(0,0,0,0.13)', padding: '4px 0', minWidth: 150 }}
           >
             {(() => {
               const b = books.find((bk) => bk.id === contextMenu.bookId)!

@@ -17,19 +17,19 @@ const statusColors: Record<string, string> = {
 
 // Forest literary palette
 const F = {
-  bg: '#f6f1e9',
-  card: '#fffefb',
-  border: '#d6cfc4',
-  green: '#2d5a27',
-  greenLight: '#e8f0e5',
-  greenMid: '#5a9e52',
-  text: '#1a2e18',
-  textMid: '#3d5c3a',
-  textSoft: '#7a9478',
-  textMuted: '#9aaa98',
-  amber: '#d97706',
-  amberBg: '#fffbf0',
-  amberBorder: '#e8c97a',
+  bg: 'hsl(var(--surface-900))',
+  card: 'hsl(var(--surface-950))',
+  border: 'hsl(var(--surface-800))',
+  green: 'hsl(214, 82%, 48%)',
+  greenLight: 'hsl(214, 96%, 88%)',
+  greenMid: 'hsl(214, 84%, 55%)',
+  text: 'hsl(var(--surface-50))',
+  textMid: 'hsl(var(--surface-300))',
+  textSoft: 'hsl(var(--surface-500))',
+  textMuted: 'hsl(var(--surface-600))',
+  amber: 'hsl(38, 95%, 58%)',
+  amberBg: 'hsl(38, 92%, 50%, 0.1)',
+  amberBorder: 'hsl(38, 95%, 58%, 0.5)',
 }
 
 export default function Dashboard() {

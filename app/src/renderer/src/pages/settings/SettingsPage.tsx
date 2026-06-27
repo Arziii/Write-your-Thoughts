@@ -22,6 +22,7 @@ export default function SettingsPage() {
   const { books } = useWorkspaceStore()
   const { addToast } = useToastStore()
 
+  const [theme, setTheme] = useState<'light' | 'dark'>(settings?.theme || 'light')
   const [aiProvider, setAiProvider] = useState(settings?.ai_provider || 'openai')
   const [aiApiKey, setAiApiKey] = useState(settings?.ai_api_key || '')
   const [aiStylePrompt, setAiStylePrompt] = useState(settings?.ai_style_prompt || '')
@@ -29,12 +30,17 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (settings) {
+      setTheme(settings.theme || 'light')
       setAiProvider(settings.ai_provider || 'openai')
       setAiApiKey(settings.ai_api_key || '')
       setAiStylePrompt(settings.ai_style_prompt || '')
       setPreserveFormatting(settings.preserve_formatting ?? true)
     }
   }, [settings])
+
+  // Note: App.tsx handles the actual document.documentElement.classList based on useUserStore.
+  // We will instantly update the store when the toggle is clicked.
+
   const [isSaving, setIsSaving] = useState(false)
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [isBackingUp, setIsBackingUp] = useState(false)
@@ -52,6 +58,7 @@ export default function SettingsPage() {
     try {
       const updated = await window.api.settings.update({
         userId: user.id,
+        theme,
         aiProvider,
         aiApiKey,
         aiStylePrompt,
@@ -94,6 +101,43 @@ export default function SettingsPage() {
             Back
           </button>
         </div>
+
+        {/* Appearance Section */}
+        <section className="space-y-4">
+          <h2 className="text-sm font-semibold text-surface-300 uppercase tracking-wider flex items-center gap-2">
+            <Palette className="w-4 h-4 text-accent-400" />
+            Appearance
+          </h2>
+          <div className="space-y-3 glass-card rounded-xl p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="block text-sm font-medium text-surface-300">Theme</label>
+                <p className="text-[11px] text-surface-600 mt-0.5">Toggle between Light and Dark mode.</p>
+              </div>
+              <button
+                onClick={async () => {
+                  const newTheme = theme === 'light' ? 'dark' : 'light'
+                  setTheme(newTheme)
+                  if (settings && user) {
+                    // Instantly apply globally
+                    setSettings({ ...settings, theme: newTheme })
+                    try {
+                      const updated = await window.api.settings.update({ userId: user.id, theme: newTheme })
+                      setSettings(updated as never)
+                    } catch (e) {
+                      console.error('Failed to save theme instantly', e)
+                    }
+                  }
+                }}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${theme === 'dark' ? 'bg-accent-600' : 'bg-surface-700'}`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${theme === 'dark' ? 'translate-x-6' : 'translate-x-1'}`}
+                />
+              </button>
+            </div>
+          </div>
+        </section>
 
         {/* AI Section */}
         <section className="space-y-4">

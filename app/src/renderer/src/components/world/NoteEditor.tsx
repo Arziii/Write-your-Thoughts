@@ -8,6 +8,7 @@ import CharacterCount from '@tiptap/extension-character-count'
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useToastStore } from '../../stores/toastStore'
+import { useUserStore } from '../../stores/userStore'
 import { debounce } from '../../utils'
 import EditorToolbar from '../editor/EditorToolbar'
 import SearchAndReplace from '@sereneinserenade/tiptap-search-and-replace'
@@ -21,6 +22,7 @@ interface NoteEditorProps {
 export default function NoteEditor({ entityId, onWordCountChange }: NoteEditorProps) {
   const { notes, markTabDirty, updateNote, drafts, setDraft, clearDraft } = useWorkspaceStore()
   const { addToast } = useToastStore()
+  const { settings } = useUserStore()
   const saveStatusRef = useRef<'saved' | 'saving' | 'unsaved'>('saved')
   const saveIndicatorRef = useRef<HTMLSpanElement>(null)
   
@@ -130,29 +132,30 @@ export default function NoteEditor({ entityId, onWordCountChange }: NoteEditorPr
   return (
     <div className="flex flex-col h-full bg-surface-950 relative">
       <EditorFindToolbar editor={editor} />
-      <div className="px-12 pt-6 pb-2">
-        <input 
-          type="text" 
-          value={title} 
-          onChange={handleTitleChange}
-          placeholder="Note Title"
-          className="text-2xl font-bold bg-transparent text-surface-100 border-none focus:outline-none focus:ring-0 w-full"
-        />
-      </div>
       
-      <div className="border-b border-surface-800 bg-surface-900 mt-2">
+      <div className="border-b border-surface-800 bg-surface-900">
         <EditorToolbar editor={editor} saveIndicatorRef={saveIndicatorRef} />
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto px-12 py-8">
+        <div className="max-w-3xl mx-auto px-12 py-10">
+          <input 
+            type="text" 
+            value={title} 
+            onChange={handleTitleChange}
+            placeholder="Note Title"
+            className="text-3xl font-bold bg-transparent text-surface-100 border-none focus:outline-none focus:ring-0 w-full mb-6 px-0"
+            style={{
+              fontFamily: settings?.editor_font || 'Georgia, serif',
+            }}
+          />
           <EditorContent
             editor={editor}
-            className="min-h-full text-surface-200"
+            className="min-h-full text-surface-100"
             style={{
-              fontFamily: 'Inter, sans-serif',
-              fontSize: '16px',
-              lineHeight: '1.7',
+              fontFamily: settings?.editor_font || 'Georgia, serif',
+              fontSize: `${settings?.font_size || 16}px`,
+              lineHeight: `${settings?.line_spacing || 1.8}`,
             }}
           />
         </div>

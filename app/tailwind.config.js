@@ -15,18 +15,18 @@ export default {
       colors: {
         // Editor neutral palette (Inverted for Light Theme)
         surface: {
-          50: 'hsl(226, 24%, 7%)',     // Previously 950 (Darkest)
-          100: 'hsl(224, 20%, 10%)',   // Previously 900
-          200: 'hsl(222, 16%, 14%)',   // Previously 850
-          300: 'hsl(220, 14%, 18%)',   // Previously 800
-          400: 'hsl(220, 12%, 26%)',   // Previously 700
-          500: 'hsl(220, 10%, 36%)',   // Previously 600
-          600: 'hsl(220, 8%, 48%)',    // Previously 500
-          700: 'hsl(220, 8%, 65%)',    // Previously 400
-          800: 'hsl(220, 10%, 82%)',   // Previously 300
-          850: 'hsl(220, 12%, 90%)',   // Previously 200
-          900: 'hsl(220, 15%, 95%)',   // Previously 100
-          950: 'hsl(220, 20%, 98%)',   // Previously 50 (Lightest - Backgrounds)
+          50: 'hsl(var(--surface-50))',
+          100: 'hsl(var(--surface-100))',
+          200: 'hsl(var(--surface-200))',
+          300: 'hsl(var(--surface-300))',
+          400: 'hsl(var(--surface-400))',
+          500: 'hsl(var(--surface-500))',
+          600: 'hsl(var(--surface-600))',
+          700: 'hsl(var(--surface-700))',
+          800: 'hsl(var(--surface-800))',
+          850: 'hsl(var(--surface-850))',
+          900: 'hsl(var(--surface-900))',
+          950: 'hsl(var(--surface-950))',
         },
         // Accent (Light blue matching screenshot)
         accent: {
