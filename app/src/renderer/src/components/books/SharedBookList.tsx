@@ -33,10 +33,10 @@ export default function SharedBookList() {
   }
 
   return (
-    <div className="px-1 mt-4">
-      <div className="px-2 pb-1">
-        <span className="text-[10px] uppercase tracking-widest text-surface-600 font-semibold flex items-center gap-1.5">
-          <Cloud className="w-3 h-3" />
+    <div style={{ padding: '0 10px', marginTop: 16 }}>
+      <div style={{ padding: '0 8px', paddingBottom: 4 }}>
+        <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#7a8c77', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Cloud style={{ width: 12, height: 12 }} />
           Shared with me
         </span>
       </div>
@@ -45,10 +45,16 @@ export default function SharedBookList() {
           <div
             onClick={() => addToast('Cloud syncing is being developed...', 'info')}
             role="button"
-            className="flex items-center gap-2.5 w-full px-2 py-1.5 text-sm text-surface-400 hover:text-surface-200 hover:bg-surface-800/60 rounded-md transition-colors cursor-pointer"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+              padding: '6px 8px', borderRadius: 8, fontSize: 13, fontWeight: 500,
+              color: '#3d5c3a', cursor: 'pointer', transition: 'all 0.15s'
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#e8e2d8'; (e.currentTarget as HTMLElement).style.color = '#1a2e18' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = '#3d5c3a' }}
           >
-            <Download className="w-3.5 h-3.5 flex-shrink-0 text-accent-500" />
-            <span className="truncate flex-1 text-left">{book.title}</span>
+            <Download style={{ width: 14, height: 14, flexShrink: 0, color: '#2d5a27' }} />
+            <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{book.title}</span>
           </div>
         </div>
       ))}

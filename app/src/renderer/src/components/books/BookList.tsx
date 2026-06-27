@@ -103,41 +103,53 @@ export default function BookList() {
   }
 
   return (
-    <div className="px-1">
+    <div style={{ padding: '0 10px' }}>
       {books.map((book) => (
         <div key={book.id} className="group relative">
           <div
             onClick={() => openBook(book)}
             role="button"
-            className="flex items-center gap-2.5 w-full px-2 py-1.5 text-sm text-surface-400 hover:text-surface-200 hover:bg-surface-800/60 rounded-md transition-colors cursor-pointer"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+              padding: '6px 8px', borderRadius: 8, fontSize: 13, fontWeight: 500,
+              color: '#3d5c3a', cursor: 'pointer', transition: 'all 0.15s'
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#e8e2d8'; (e.currentTarget as HTMLElement).style.color = '#1a2e18' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = '#3d5c3a' }}
           >
-            <BookOpen className="w-3.5 h-3.5 flex-shrink-0 text-accent-500" />
-            <span className="truncate flex-1 text-left">{book.title}</span>
+            <BookOpen style={{ width: 14, height: 14, flexShrink: 0, color: '#2d5a27' }} />
+            <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{book.title}</span>
             <button
               id={`book-menu-${book.id}`}
-              onClick={(e) => {
-                e.stopPropagation()
-                setContextMenu({ bookId: book.id, x: e.clientX, y: e.clientY })
-              }}
-              className="opacity-0 group-hover:opacity-100 text-surface-600 hover:text-surface-300 transition-all cursor-default"
+              onClick={(e) => { e.stopPropagation(); setContextMenu({ bookId: book.id, x: e.clientX, y: e.clientY }) }}
+              className="opacity-0 group-hover:opacity-100 transition-all cursor-default"
+              style={{ color: '#a0b09e', background: 'none', border: 'none' }}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = '#2d5a27'}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = '#a0b09e'}
             >
-              <MoreHorizontal className="w-3.5 h-3.5" />
+              <MoreHorizontal style={{ width: 14, height: 14 }} />
             </button>
           </div>
         </div>
       ))}
 
       {books.length === 0 && (
-        <p className="text-xs text-surface-600 px-3 py-2">No books yet.</p>
+        <p style={{ fontSize: 12, color: '#a0b09e', padding: '8px 10px' }}>No books yet.</p>
       )}
 
       {/* Add book button */}
       <button
         id="create-book-btn"
         onClick={() => { resetForm(); setIsCreateOpen(true) }}
-        className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-surface-600 hover:text-accent-400 hover:bg-surface-800/40 rounded-md transition-colors mt-1"
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 8px', marginTop: 4,
+          color: '#7a8c77', background: 'none', border: 'none', borderRadius: 6,
+          fontSize: 12, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s',
+        }}
+        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#e8e2d8'; (e.currentTarget as HTMLElement).style.color = '#2d5a27' }}
+        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'none'; (e.currentTarget as HTMLElement).style.color = '#7a8c77' }}
       >
-        <Plus className="w-3.5 h-3.5" />
+        <Plus style={{ width: 14, height: 14 }} />
         New Book
       </button>
 
@@ -146,8 +158,8 @@ export default function BookList() {
         <>
           <div className="fixed inset-0 z-40" onClick={() => setContextMenu(null)} />
           <div
-            className="fixed z-50 bg-surface-800 border border-surface-700 rounded-lg shadow-xl py-1 min-w-36 animate-fade-in"
-            style={{ left: contextMenu.x, top: contextMenu.y }}
+            className="fixed z-50 animate-fade-in"
+            style={{ left: contextMenu.x, top: contextMenu.y, background: '#fffefb', border: `1px solid #d0c9bc`, borderRadius: 12, boxShadow: '0 4px 18px rgba(45,90,39,0.13)', padding: '4px 0', minWidth: 150 }}
           >
             {(() => {
               const b = books.find((bk) => bk.id === contextMenu.bookId)!
@@ -155,10 +167,11 @@ export default function BookList() {
                 <>
                   <button
                     onClick={() => openEditModal(b)}
-                    className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-surface-300 hover:bg-surface-700 hover:text-surface-100 transition-colors"
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 16px', fontSize: 13, fontWeight: 500, color: '#3d5c3a', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#e8f0e5'}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
                   >
-                    <Pencil className="w-3.5 h-3.5" />
-                    Edit
+                    <Pencil style={{ width: 14, height: 14 }} /> Edit
                   </button>
                   <button
                     onClick={async () => {
@@ -172,17 +185,19 @@ export default function BookList() {
                         addToast(result.error || 'Failed to publish', 'error')
                       }
                     }}
-                    className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-surface-300 hover:bg-surface-700 hover:text-accent-400 transition-colors"
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 16px', fontSize: 13, fontWeight: 500, color: '#3d5c3a', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#e8f0e5'}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
                   >
-                    <Cloud className="w-3.5 h-3.5" />
-                    Publish to Cloud
+                    <Cloud style={{ width: 14, height: 14 }} /> Publish to Cloud
                   </button>
                   <button
                     onClick={() => { setDeleteBook(b); setContextMenu(null) }}
-                    className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-danger-400 hover:bg-surface-700 transition-colors"
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 16px', fontSize: 13, fontWeight: 500, color: '#ef4444', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#fff0f0'}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Delete
+                    <Trash2 style={{ width: 14, height: 14 }} /> Delete
                   </button>
                 </>
               )
@@ -191,54 +206,35 @@ export default function BookList() {
         </>
       )}
 
-      {/* Create Book Modal */}
+      {/* Modals */}
       <Modal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} title="New Book">
         <BookForm
           title={title} setTitle={setTitle}
           authorName={authorName} setAuthorName={setAuthorName}
           genre={genre} setGenre={setGenre}
           description={description} setDescription={setDescription}
-          onSubmit={handleCreate}
-          onCancel={() => setIsCreateOpen(false)}
-          submitLabel="Create Book"
-          isLoading={isLoading}
+          onSubmit={handleCreate} onCancel={() => setIsCreateOpen(false)} submitLabel="Create Book" isLoading={isLoading}
         />
       </Modal>
 
-      {/* Edit Book Modal */}
       <Modal isOpen={!!editBook} onClose={() => setEditBook(null)} title="Edit Book">
         <BookForm
           title={title} setTitle={setTitle}
           authorName={authorName} setAuthorName={setAuthorName}
           genre={genre} setGenre={setGenre}
           description={description} setDescription={setDescription}
-          onSubmit={handleEdit}
-          onCancel={() => setEditBook(null)}
-          submitLabel="Save Changes"
-          isLoading={isLoading}
+          onSubmit={handleEdit} onCancel={() => setEditBook(null)} submitLabel="Save Changes" isLoading={isLoading}
         />
       </Modal>
 
-      {/* Delete Confirm Modal */}
       <Modal isOpen={!!deleteBook} onClose={() => setDeleteBook(null)} title="Delete Book" size="sm">
-        <p className="text-sm text-surface-300 mb-5">
-          Are you sure you want to delete <strong className="text-surface-100">"{deleteBook?.title}"</strong>?
+        <p style={{ fontSize: 14, color: '#7a8c77', marginBottom: 20 }}>
+          Are you sure you want to delete <strong style={{ color: '#1a2e18' }}>"{deleteBook?.title}"</strong>?
           All chapters and versions will be permanently removed.
         </p>
         <div className="flex gap-3">
-          <button
-            onClick={() => setDeleteBook(null)}
-            className="flex-1 py-2 bg-surface-700 hover:bg-surface-600 text-surface-200 rounded-lg text-sm font-medium transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            id="confirm-delete-book"
-            onClick={handleDelete}
-            className="flex-1 py-2 bg-danger-500 hover:bg-danger-400 text-white rounded-lg text-sm font-medium transition-colors"
-          >
-            Delete
-          </button>
+          <button onClick={() => setDeleteBook(null)} className="flex-1 py-2 rounded-lg text-sm font-medium transition-colors" style={{ background: '#e8e2d8', color: '#3d5c3a' }}>Cancel</button>
+          <button id="confirm-delete-book" onClick={handleDelete} className="flex-1 py-2 text-white rounded-lg text-sm font-medium transition-colors" style={{ background: '#ef4444' }}>Delete</button>
         </div>
       </Modal>
     </div>

@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react'
 import { Brain, RefreshCw, Activity, Heart, Zap, Layers, FileText } from 'lucide-react'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useUserStore } from '../../stores/userStore'
+import { useStoryBibleStore } from '../../stores/storyBibleStore'
 import { aiService } from '../../services/aiService'
 import { useToastStore } from '../../stores/toastStore'
 
 export default function StoryIntelligenceView() {
   const { currentBook, chapters, characters } = useWorkspaceStore()
   const { user, settings } = useUserStore()
+  const { verseTimelineEvents } = useStoryBibleStore()
   const { addToast } = useToastStore()
 
   const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -74,10 +76,15 @@ export default function StoryIntelligenceView() {
 
       const allText = chaptersToAnalyze.map((c: any) => (c.title || '') + '\n' + (c.content || '')).join('\n\n---\n\n')
       
+      let contextStr = currentBook.story_context || ''
+      if (verseTimelineEvents.length > 0) {
+        contextStr += '\n\nVERSE TIMELINE RECORD (Global World Events):\n' + [...verseTimelineEvents].sort((a,b) => (a.sort_order||0)-(b.sort_order||0)).map(e => `- ${e.event_date ? `[${e.event_date}] ` : ''}${e.title}: ${e.description}`).join('\n')
+      }
+
       // 1. Analyze Pacing, Emotion, Fatigue, Repetition
       const pacingAndEmotion = await aiService.analyzeStoryPacingAndEmotion({
         content: allText,
-        storyContext: currentBook.story_context,
+        storyContext: contextStr,
         provider: settings.ai_provider as any,
         apiKey: settings.ai_api_key
       })
@@ -112,7 +119,7 @@ export default function StoryIntelligenceView() {
         const arcResult = await aiService.analyzeCharacterArcProgression({
           content: allText,
           characterName: char.name,
-          storyContext: currentBook.story_context,
+          storyContext: contextStr,
           provider: settings.ai_provider as any,
           apiKey: settings.ai_api_key
         })

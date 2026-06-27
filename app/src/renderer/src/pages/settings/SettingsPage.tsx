@@ -76,7 +76,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-surface-950">
+    <div className="flex-1 overflow-y-auto bg-surface-950" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       <div className="max-w-2xl mx-auto px-8 py-10 space-y-8">
         <div className="flex items-start justify-between">
           <div>

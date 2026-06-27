@@ -19,7 +19,7 @@ export default function WorkspacePage() {
     setOrganizations, setWorldRules,
     openTab, setPanelState
   } = useWorkspaceStore()
-  const { setStoryBible, setCharacterProfiles, setLocationProfiles, setOrganizationProfiles, setLoreEntries } = useStoryBibleStore()
+  const { setStoryBible, setCharacterProfiles, setLocationProfiles, setOrganizationProfiles, setLoreEntries, setVerseTimelineEvents } = useStoryBibleStore()
   const navigate = useNavigate()
   const [isRestoringSession, setIsRestoringSession] = useState(true)
 
@@ -101,6 +101,9 @@ export default function WorkspacePage() {
       try {
         const timelineEvents = await window.api.timelineEvents.getByBook(bId)
         setTimelineEvents(timelineEvents as any[])
+
+        const verseTimelineEvents = await window.api.verseTimeline.getByBook(bId)
+        setVerseTimelineEvents(verseTimelineEvents as any[])
       } catch (e) { console.error('Failed to load timeline:', e) }
 
       try {

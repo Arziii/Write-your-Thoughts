@@ -5,7 +5,7 @@ import type {
   ChapterEmotion, SceneEmotion, ContinuityEvent, ContinuityWarning,
   StyleProfile, ChapterMetric,
   Relationship, RelationshipEvent, RelationshipState,
-  TimelineSettings, TimelineEvent
+  TimelineSettings, TimelineEvent, VerseTimelineEvent
 } from '../types'
 
 interface StoryBibleStore {
@@ -105,6 +105,12 @@ interface StoryBibleStore {
   addTimelineEvent: (event: TimelineEvent) => void
   updateTimelineEvent: (event: TimelineEvent) => void
   removeTimelineEvent: (id: string) => void
+
+  verseTimelineEvents: VerseTimelineEvent[]
+  setVerseTimelineEvents: (events: VerseTimelineEvent[]) => void
+  addVerseTimelineEvent: (event: VerseTimelineEvent) => void
+  updateVerseTimelineEvent: (event: VerseTimelineEvent) => void
+  removeVerseTimelineEvent: (id: string) => void
 }
 
 export const useStoryBibleStore = create<StoryBibleStore>((set) => ({
@@ -355,5 +361,15 @@ export const useStoryBibleStore = create<StoryBibleStore>((set) => ({
   })),
   removeTimelineEvent: (id) => set((state) => ({
     timelineEvents: state.timelineEvents.filter(e => e.id !== id)
+  })),
+
+  verseTimelineEvents: [],
+  setVerseTimelineEvents: (events) => set({ verseTimelineEvents: events }),
+  addVerseTimelineEvent: (event) => set((state) => ({ verseTimelineEvents: [...state.verseTimelineEvents, event] })),
+  updateVerseTimelineEvent: (event) => set((state) => ({
+    verseTimelineEvents: state.verseTimelineEvents.map(e => e.id === event.id ? event : e)
+  })),
+  removeVerseTimelineEvent: (id) => set((state) => ({
+    verseTimelineEvents: state.verseTimelineEvents.filter(e => e.id !== id)
   }))
 }))

@@ -12,6 +12,7 @@ import WikiEditor from '../../components/world/WikiEditor'
 import OrganizationEditor from '../../components/world/OrganizationEditor'
 import WorldRuleEditor from '../../components/world/WorldRuleEditor'
 import CalendarView from '../../components/world/CalendarView'
+import VerseTimelineView from '../../components/world/VerseTimelineView'
 import CommentSidebar from '../../components/editor/CommentSidebar'
 import EmotionPanel from '../../components/editor/EmotionPanel'
 import ContinuityPanel from '../../components/editor/ContinuityPanel'
@@ -91,18 +92,26 @@ export default function EditorView() {
   if (!activeTab) return null
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       {/* Chapter tabs */}
       <EditorTabs />
 
       {/* Chapter header */}
-      <div className="flex items-center gap-4 px-4 py-2 bg-surface-900 border-b border-surface-800 flex-shrink-0">
+      <div 
+        className="flex items-center gap-4 px-4 py-2 flex-shrink-0"
+        style={{
+          background: '#fffefb',
+          borderBottom: '1px solid #d0c9bc',
+        }}
+      >
         {/* Sidebar toggle (when sidebar hidden) */}
         {!panelState.sidebarOpen && (
           <button
             id="editor-toggle-sidebar"
             onClick={toggleSidebar}
-            className="text-surface-600 hover:text-surface-300 transition-colors"
+            style={{ color: '#7a8c77', background: 'none', border: 'none', cursor: 'pointer', transition: 'color 0.15s' }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = '#3d5c3a'}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = '#7a8c77'}
             title="Show sidebar"
           >
             <PanelLeft className="w-4 h-4" />
@@ -110,12 +119,14 @@ export default function EditorView() {
         )}
 
         <div className="flex-1">
-          <h2 className="text-sm font-semibold text-surface-200 truncate">{activeTab.title}</h2>
-          <p className="text-xs text-surface-600">{currentBook?.title}</p>
+          <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 16, fontWeight: 700, color: '#1a2e18', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {activeTab.title}
+          </h2>
+          <p style={{ fontSize: 11, color: '#7a8c77' }}>{currentBook?.title}</p>
         </div>
 
-        <div className="flex items-center gap-3 text-xs text-surface-600">
-          <span>{formatWordCount(wordCount)}</span>
+        <div className="flex items-center gap-3 text-xs" style={{ color: '#7a8c77', fontWeight: 500 }}>
+          <span>{formatWordCount(wordCount)} words</span>
         </div>
 
         {/* AI panel toggle (when AI panel hidden) */}
@@ -123,7 +134,9 @@ export default function EditorView() {
           <button
             id="editor-toggle-ai"
             onClick={toggleAIPanel}
-            className="text-surface-600 hover:text-accent-400 transition-colors"
+            style={{ color: '#7a8c77', background: 'none', border: 'none', cursor: 'pointer', transition: 'color 0.15s' }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = '#2d5a27'}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = '#7a8c77'}
             title="Show AI panel"
           >
             <Sparkles className="w-4 h-4" />
@@ -132,7 +145,7 @@ export default function EditorView() {
       </div>
 
       {/* Dynamic Content Area */}
-      <div className="flex-1 overflow-hidden relative flex">
+      <div className="flex-1 overflow-hidden relative flex" style={{ background: '#fffefb' }}>
         <div className="flex-1 overflow-hidden relative">
           {activeTab.type === 'chapter' && activeChapter && (
             <RichEditor
@@ -152,6 +165,7 @@ export default function EditorView() {
           {activeTab.type === 'timeline' && <CalendarView key={`calendar-${activeTab.entityId}`} />}
           {activeTab.type === 'story_intelligence' && <StoryIntelligenceView key={`story_intel-${activeTab.entityId}`} />}
           {activeTab.type === 'relationship_manager' && <GlobalRelationshipManager key={`rel_mgr-${activeTab.id}`} />}
+          {activeTab.type === 'verse_timeline' && <VerseTimelineView key={`verse_timeline-${activeTab.id}`} />}
         </div>
         
         {/* Comments Sidebar for Chapters */}
@@ -190,31 +204,37 @@ export default function EditorView() {
         
         {/* Right Vertical Tool Sidebar */}
         {activeTab.type === 'chapter' && (
-          <div className="w-12 bg-surface-900 border-l border-surface-800 flex flex-col items-center py-4 gap-4 flex-shrink-0">
+          <div 
+            className="w-12 flex flex-col items-center py-4 gap-4 flex-shrink-0"
+            style={{
+              background: '#f0ece4',
+              borderLeft: '1px solid #d0c9bc'
+            }}
+          >
             <button
               onClick={() => togglePanel('comments')}
-              className={`p-2 rounded-lg transition-colors ${isCommentSidebarOpen ? 'bg-surface-800 text-accent-400' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-800'}`}
+              className={`p-2 rounded-lg transition-colors ${isCommentSidebarOpen ? 'bg-[#fffefb] text-[#2d5a27] shadow-sm' : 'text-[#7a8c77] hover:text-[#3d5c3a] hover:bg-[#e8e2d8]'}`}
               title="Comments"
             >
               <MessageSquare className="w-4 h-4" />
             </button>
             <button
               onClick={() => togglePanel('emotion')}
-              className={`p-2 rounded-lg transition-colors ${isEmotionPanelOpen ? 'bg-surface-800 text-accent-400' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-800'}`}
+              className={`p-2 rounded-lg transition-colors ${isEmotionPanelOpen ? 'bg-[#fffefb] text-[#2d5a27] shadow-sm' : 'text-[#7a8c77] hover:text-[#3d5c3a] hover:bg-[#e8e2d8]'}`}
               title="Emotional Intelligence"
             >
               <Heart className="w-4 h-4" />
             </button>
             <button
               onClick={() => togglePanel('continuity')}
-              className={`p-2 rounded-lg transition-colors ${isContinuityPanelOpen ? 'bg-surface-800 text-accent-400' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-800'}`}
+              className={`p-2 rounded-lg transition-colors ${isContinuityPanelOpen ? 'bg-[#fffefb] text-[#2d5a27] shadow-sm' : 'text-[#7a8c77] hover:text-[#3d5c3a] hover:bg-[#e8e2d8]'}`}
               title="Continuity Engine"
             >
               <Shield className="w-4 h-4" />
             </button>
             <button
               onClick={() => togglePanel('style')}
-              className={`p-2 rounded-lg transition-colors ${isStylePanelOpen ? 'bg-surface-800 text-accent-400' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-800'}`}
+              className={`p-2 rounded-lg transition-colors ${isStylePanelOpen ? 'bg-[#fffefb] text-[#2d5a27] shadow-sm' : 'text-[#7a8c77] hover:text-[#3d5c3a] hover:bg-[#e8e2d8]'}`}
               title="Style Intelligence"
             >
               <Feather className="w-4 h-4" />

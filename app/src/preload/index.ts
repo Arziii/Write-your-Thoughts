@@ -280,6 +280,15 @@ const api = {
   chapterStatistics: {
     getByBook: (bookId: string) => ipcRenderer.invoke('storyIntelligence:getChapterStatistics', bookId),
     upsert: (data: any) => ipcRenderer.invoke('storyIntelligence:upsertChapterStatistics', data),
+  },
+
+  // Timeline Record (Verse Timeline)
+  verseTimeline: {
+    getByBook: (bookId: string) => ipcRenderer.invoke('verseTimeline:getByBook', bookId),
+    getById: (id: string) => ipcRenderer.invoke('verseTimeline:getById', id),
+    create: (data: any) => ipcRenderer.invoke('verseTimeline:create', data),
+    update: (data: any) => ipcRenderer.invoke('verseTimeline:update', data),
+    delete: (id: string) => ipcRenderer.invoke('verseTimeline:delete', id),
   }
 }
 

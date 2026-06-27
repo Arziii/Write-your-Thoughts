@@ -293,6 +293,22 @@ function createTables(): void {
   `)
 
   database.run(`
+    CREATE TABLE IF NOT EXISTS verse_timeline_events (
+      id TEXT PRIMARY KEY,
+      book_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      event_date TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
+      notes TEXT DEFAULT '',
+      synced INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
+    )
+  `)
+
+  database.run(`
     CREATE TABLE IF NOT EXISTS comments (
       id TEXT PRIMARY KEY,
       chapter_id TEXT NOT NULL,

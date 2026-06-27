@@ -23,6 +23,7 @@ import { registerEmotionalIntelligenceHandlers } from './emotionalIntelligence'
 import { registerContinuityHandlers } from './continuityEngine'
 import { registerStyleIntelligenceHandlers } from './styleIntelligence'
 import { setupRelationshipHandlers } from './relationships'
+import { registerVerseTimelineHandlers } from './verseTimeline'
 import { registerStoryIntelligenceHandlers } from './storyIntelligence'
 import { registerDatabaseHandlers } from './database'
 
@@ -51,6 +52,7 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   registerContinuityHandlers(ipcMain)
   registerStyleIntelligenceHandlers(ipcMain)
   setupRelationshipHandlers()
+  registerVerseTimelineHandlers(ipcMain)
   registerStoryIntelligenceHandlers(ipcMain)
 
   ipcMain.handle('entities:reorder', async (_event, data: { table: string, items: Array<{ id: string; sort_order: number }> }) => {

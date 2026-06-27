@@ -10,7 +10,7 @@ export default function ContinuityPanel({ chapterId }: { chapterId: string }) {
   const { 
     continuityEvents, setContinuityEvents, addContinuityEvent, removeContinuityEvent,
     continuityWarnings, setContinuityWarnings, addContinuityWarning, resolveContinuityWarning, removeContinuityWarning,
-    storyBible
+    storyBible, verseTimelineEvents
   } = useStoryBibleStore()
   
   const { chapters } = useWorkspaceStore()
@@ -50,9 +50,14 @@ export default function ContinuityPanel({ chapterId }: { chapterId: string }) {
 
     setIsAnalyzing(true)
     try {
+      let contextStr = storyBible?.premise || 'No context'
+      if (verseTimelineEvents.length > 0) {
+        contextStr += '\n\nVERSE TIMELINE RECORD (Global World Events):\n' + [...verseTimelineEvents].sort((a,b) => (a.sort_order||0)-(b.sort_order||0)).map(e => `- ${e.event_date ? `[${e.event_date}] ` : ''}${e.title}: ${e.description}`).join('\n')
+      }
+
       const result = await aiService.analyzeContinuity({
         content: activeChapter.content,
-        storyContext: storyBible?.premise || 'No context',
+        storyContext: contextStr,
         provider: settings.ai_provider as any,
         apiKey: settings.ai_api_key
       })

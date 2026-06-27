@@ -35,28 +35,54 @@ export default function EditorTabs() {
   }
 
   return (
-    <div className="flex items-end bg-surface-900 border-b border-surface-800 overflow-x-auto flex-shrink-0">
+    <div 
+      className="flex items-end overflow-x-auto flex-shrink-0"
+      style={{
+        background: '#f0ece4', // parchment background
+        borderBottom: '1px solid #d0c9bc',
+        fontFamily: "'DM Sans', sans-serif"
+      }}
+    >
       {tabs.map((tab) => (
         <div
           key={tab.id}
           id={`tab-${tab.id}`}
           onClick={() => handleTabClick(tab)}
-          className={cn(
-            'flex items-center gap-2 px-3 py-2 min-w-28 max-w-44 cursor-pointer border-r border-surface-800 flex-shrink-0 group transition-colors',
-            activeTabId === tab.id
-              ? 'bg-surface-950 border-t-2 border-t-accent-500 text-surface-100'
-              : 'text-surface-500 hover:text-surface-300 hover:bg-surface-800/60'
-          )}
+          className="flex items-center gap-2 px-3 py-2 min-w-28 max-w-44 cursor-pointer flex-shrink-0 group transition-all"
+          style={{
+            background: activeTabId === tab.id ? '#fffefb' : 'transparent',
+            borderRight: '1px solid #d0c9bc',
+            borderTop: activeTabId === tab.id ? '2px solid #2d5a27' : '2px solid transparent',
+            color: activeTabId === tab.id ? '#1a2e18' : '#7a8c77',
+            borderTopLeftRadius: activeTabId === tab.id ? 6 : 0,
+            borderTopRightRadius: activeTabId === tab.id ? 6 : 0,
+            fontWeight: activeTabId === tab.id ? 600 : 500,
+          }}
+          onMouseEnter={e => {
+            if (activeTabId !== tab.id) {
+              (e.currentTarget as HTMLElement).style.background = '#e8e2d8';
+              (e.currentTarget as HTMLElement).style.color = '#3d5c3a';
+            }
+          }}
+          onMouseLeave={e => {
+            if (activeTabId !== tab.id) {
+              (e.currentTarget as HTMLElement).style.background = 'transparent';
+              (e.currentTarget as HTMLElement).style.color = '#7a8c77';
+            }
+          }}
         >
           {tab.isDirty ? (
-            <Circle className="w-1.5 h-1.5 fill-accent-400 text-accent-400 flex-shrink-0" />
+            <Circle style={{ width: 6, height: 6, color: '#d97706', fill: '#d97706' }} className="flex-shrink-0" />
           ) : (
-            <TypeIcon type={tab.type} className="w-3.5 h-3.5 opacity-60 flex-shrink-0" />
+            <TypeIcon type={tab.type} className="w-3.5 h-3.5 opacity-70 flex-shrink-0" />
           )}
           <span className="truncate text-xs flex-1">{tab.title}</span>
           <button
             onClick={(e) => handleClose(e, tab.id)}
-            className="opacity-0 group-hover:opacity-100 hover:text-surface-100 transition-all flex-shrink-0"
+            className="opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+            style={{ color: '#a0b09e' }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = '#ef4444'}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = '#a0b09e'}
           >
             <X className="w-3 h-3" />
           </button>
