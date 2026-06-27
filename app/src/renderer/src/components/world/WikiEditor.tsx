@@ -16,14 +16,15 @@ interface WikiEditorProps {
 }
 
 export default function WikiEditor({ entityId }: WikiEditorProps) {
-  const { wiki, markTabDirty, updateWiki } = useWorkspaceStore()
+  const { wiki, markTabDirty, updateWiki, drafts, setDraft, clearDraft } = useWorkspaceStore()
   const { addToast } = useToastStore()
   const saveStatusRef = useRef<'saved' | 'saving' | 'unsaved'>('saved')
   const saveIndicatorRef = useRef<HTMLSpanElement>(null)
   
   const item = wiki.find(n => n.id === entityId)
-  const initialContent = item?.content || ''
-  const [title, setTitle] = useState(item?.title || '')
+  const draft = drafts[entityId]
+  const initialContent = draft?.content ?? item?.content ?? ''
+  const [title, setTitle] = useState(draft?.title ?? item?.title ?? '')
 
   const setSaveStatus = (status: 'saved' | 'saving' | 'unsaved') => {
     saveStatusRef.current = status
@@ -50,6 +51,7 @@ export default function WikiEditor({ entityId }: WikiEditorProps) {
         updateWiki(updated as any)
         markTabDirty(entityId, false)
         setSaveStatus('saved')
+        clearDraft(entityId)
       } catch {
         setSaveStatus('unsaved')
         addToast('Failed to save wiki article', 'error')
@@ -102,7 +104,7 @@ export default function WikiEditor({ entityId }: WikiEditorProps) {
   useEffect(() => {
     return () => {
       if (editor && saveStatusRef.current === 'unsaved') {
-        window.api.wiki.update({ id: entityId, content: editor.getHTML(), title })
+        setDraft(entityId, { content: editor.getHTML(), title })
       }
     }
   }, [editor, entityId, title])

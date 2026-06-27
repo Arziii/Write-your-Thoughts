@@ -16,14 +16,16 @@ interface NoteEditorProps {
 }
 
 export default function NoteEditor({ entityId }: NoteEditorProps) {
-  const { notes, markTabDirty, updateNote } = useWorkspaceStore()
+  const { notes, markTabDirty, updateNote, drafts, setDraft, clearDraft } = useWorkspaceStore()
   const { addToast } = useToastStore()
   const saveStatusRef = useRef<'saved' | 'saving' | 'unsaved'>('saved')
   const saveIndicatorRef = useRef<HTMLSpanElement>(null)
   
   const note = notes.find(n => n.id === entityId)
-  const initialContent = note?.content || ''
-  const [title, setTitle] = useState(note?.title || '')
+  // Seed content from in-memory draft (survives tab switch) or the last saved version
+  const draft = drafts[entityId]
+  const initialContent = draft?.content ?? note?.content ?? ''
+  const [title, setTitle] = useState(draft?.title ?? note?.title ?? '')
 
   const setSaveStatus = (status: 'saved' | 'saving' | 'unsaved') => {
     saveStatusRef.current = status
@@ -50,6 +52,7 @@ export default function NoteEditor({ entityId }: NoteEditorProps) {
         updateNote(updated as any)
         markTabDirty(entityId, false)
         setSaveStatus('saved')
+        clearDraft(entityId)
       } catch {
         setSaveStatus('unsaved')
         addToast('Failed to save note', 'error')
@@ -99,10 +102,12 @@ export default function NoteEditor({ entityId }: NoteEditorProps) {
     }
   }, [entityId, initialContent])
 
+  // On unmount: persist unsaved state to the store draft (not SQLite).
+  // This way switching tabs preserves the draft without an unwanted write.
   useEffect(() => {
     return () => {
       if (editor && saveStatusRef.current === 'unsaved') {
-        window.api.notes.update({ id: entityId, content: editor.getHTML(), title })
+        setDraft(entityId, { content: editor.getHTML(), title })
       }
     }
   }, [editor, entityId, title])

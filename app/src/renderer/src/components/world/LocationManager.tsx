@@ -1,28 +1,25 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { Camera, Save, Lock, Unlock } from 'lucide-react'
 import { useToastStore } from '../../stores/toastStore'
 import { cn } from '../../utils'
 
 export default function LocationManager({ entityId }: { entityId: string }) {
-  const { locations, updateLocation, panelState, toggleEntityLock } = useWorkspaceStore()
+  const { locations, updateLocation, panelState, toggleEntityLock, drafts, setDraft, clearDraft } = useWorkspaceStore()
   const { addToast } = useToastStore()
   
   const location = locations.find(l => l.id === entityId)
-  const [formData, setFormData] = useState(location || null)
   const [isSaving, setIsSaving] = useState(false)
 
-  useEffect(() => {
-    if (location && (!formData || formData.id !== location.id)) {
-      setFormData(location)
-    }
-  }, [location?.id])
+  // Read from the in-memory draft (survives tab switches) or fall back to saved data
+  const draft = drafts[entityId]
+  const formData = draft ?? location ?? null
 
   if (!formData) return <div>Location not found</div>
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
-    setFormData(prev => prev ? { ...prev, [name]: value } : null)
+    setDraft(entityId, { ...(drafts[entityId] ?? location ?? {}), [name]: value })
   }
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -31,7 +28,7 @@ export default function LocationManager({ entityId }: { entityId: string }) {
 
     const reader = new FileReader()
     reader.onload = () => {
-      setFormData(prev => prev ? { ...prev, image_url: reader.result as string } : null)
+      setDraft(entityId, { ...(drafts[entityId] ?? location ?? {}), image_url: reader.result as string })
     }
     reader.readAsDataURL(file)
   }
@@ -42,6 +39,7 @@ export default function LocationManager({ entityId }: { entityId: string }) {
     try {
       const updated = await window.api.locations.update(formData)
       updateLocation(updated as any)
+      clearDraft(entityId)
       addToast('Location saved', 'success')
     } catch {
       addToast('Failed to save location', 'error')
@@ -50,10 +48,19 @@ export default function LocationManager({ entityId }: { entityId: string }) {
     }
   }
 
+  const isDirty = !!drafts[entityId]
+
   return (
     <div className="p-8 max-w-4xl mx-auto overflow-y-auto h-full text-surface-200">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-surface-100">{formData.name || 'Unnamed Location'}</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-bold text-surface-100">{formData.name || 'Unnamed Location'}</h1>
+          {isDirty && (
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-warning-500/15 text-warning-400 border border-warning-500/20">
+              Unsaved
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-3">
           <button
             onClick={() => toggleEntityLock(entityId)}

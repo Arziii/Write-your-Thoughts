@@ -10,6 +10,7 @@ import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useToastStore } from '../../stores/toastStore'
 import { useUserStore } from '../../stores/userStore'
 import { countWords, debounce } from '../../utils'
+import { scheduleSyncBackup } from '../../services/syncService'
 import EditorToolbar from './EditorToolbar'
 import { CommentMark } from './extensions/CommentMark'
 
@@ -55,6 +56,8 @@ export default function RichEditor({ chapterId, initialContent, onContentChange 
         }
         markTabDirty(chapterId, false)
         setSaveStatus('saved')
+        // Schedule cloud upload ~15s after the last save (debounced)
+        scheduleSyncBackup(15_000)
       } catch {
         setSaveStatus('unsaved')
         addToast('Failed to save', 'error')

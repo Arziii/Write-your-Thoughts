@@ -1,17 +1,23 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { authService } from './services/authService'
 import { useUserStore } from './stores/userStore'
+import { useWorkspaceStore } from './stores/workspaceStore'
 import LoginPage from './pages/auth/LoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import WorkspacePage from './pages/workspace/WorkspacePage'
 import AppLayout from './layouts/AppLayout'
 import SettingsPage from './pages/settings/SettingsPage'
 import ToastContainer from './components/ui/ToastContainer'
+import { scheduleSyncBackup } from './services/syncService'
 
 function App() {
   const { user, isLoading, setUser, setLocalUser, setLoading, setSettings } = useUserStore()
   const navigate = useNavigate()
+
+  // Track previous books/chapters counts to detect real data writes
+  const prevBooksLen = useRef<number>(0)
+  const prevChaptersLen = useRef<number>(0)
 
   useEffect(() => {
     // Check existing session on app launch
@@ -63,20 +69,54 @@ function App() {
       if (!u) navigate('/login')
     })
 
-    // Setup 5-minute auto-backup interval
+    // ── Backup interval: 90 seconds (safety net) ──────────────────────────
     const backupInterval = setInterval(() => {
       authService.getSession().then((session) => {
         if (session?.user) {
           import('./services/syncService').then(({ syncService }) => {
-            syncService.backupDatabaseToCloud().catch(e => console.error('Auto-backup failed:', e))
+            syncService.backupDatabaseToCloud().catch(e => console.error('Interval backup failed:', e))
           })
         }
       })
-    }, 5 * 60 * 1000)
+    }, 90 * 1000)
+
+    // ── Upload immediately when the user switches away from the app ────────
+    // This ensures Device B gets the latest data even between interval ticks.
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        authService.getSession().then((session) => {
+          if (session?.user) {
+            import('./services/syncService').then(({ syncService }) => {
+              syncService.backupDatabaseToCloud().catch(e =>
+                console.error('Visibility-change backup failed:', e)
+              )
+            })
+          }
+        })
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // ── Subscribe to workspace store: trigger debounced backup on writes ──
+    // We watch books and chapters lengths; if they grow/shrink, data changed.
+    const unsubscribeStore = useWorkspaceStore.subscribe((state) => {
+      const booksChanged = state.books.length !== prevBooksLen.current
+      const chaptersChanged = state.chapters.length !== prevChaptersLen.current
+      prevBooksLen.current = state.books.length
+      prevChaptersLen.current = state.chapters.length
+
+      if (booksChanged || chaptersChanged) {
+        authService.getSession().then((session) => {
+          if (session?.user) scheduleSyncBackup(15_000)
+        })
+      }
+    })
 
     return () => {
       subscription.unsubscribe()
       clearInterval(backupInterval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      unsubscribeStore()
     }
   }, [])
 

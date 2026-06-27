@@ -9,17 +9,23 @@ import RelationshipIntelligenceTab from './RelationshipIntelligenceTab'
 type TabType = 'general' | 'voice' | 'relationships'
 
 export default function CharacterManager({ entityId }: { entityId: string }) {
-  const { characters, updateCharacter, panelState, toggleEntityLock } = useWorkspaceStore()
+  const { characters, updateCharacter, panelState, toggleEntityLock, drafts, setDraft, clearDraft } = useWorkspaceStore()
   const { addToast } = useToastStore()
   
   const character = characters.find(c => c.id === entityId)
-  const [formData, setFormData] = useState(character || null)
   const [isSaving, setIsSaving] = useState(false)
   const [activeTab, setActiveTab] = useState<TabType>('general')
 
+  // Use the in-memory draft if one exists, otherwise fall back to the saved entity.
+  // This means switching tabs and coming back preserves unsaved edits.
+  const draft = drafts[entityId]
+  const formData = draft ?? character ?? null
+
+  // When the character entity itself changes (e.g., renamed from sidebar),
+  // update the draft to reflect the new base — but only if there's no local draft yet.
   useEffect(() => {
-    if (character && (!formData || formData.id !== character.id)) {
-      setFormData(character)
+    if (character && !drafts[entityId]) {
+      // No draft yet — no action needed; formData already points to `character`
     }
   }, [character?.id])
 
@@ -27,7 +33,8 @@ export default function CharacterManager({ entityId }: { entityId: string }) {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
-    setFormData(prev => prev ? { ...prev, [name]: value } : null)
+    // Write the updated draft back to the store so it survives tab switches
+    setDraft(entityId, { ...(drafts[entityId] ?? character ?? {}), [name]: value })
   }
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -36,7 +43,7 @@ export default function CharacterManager({ entityId }: { entityId: string }) {
 
     const reader = new FileReader()
     reader.onload = () => {
-      setFormData(prev => prev ? { ...prev, image_url: reader.result as string } : null)
+      setDraft(entityId, { ...(drafts[entityId] ?? character ?? {}), image_url: reader.result as string })
     }
     reader.readAsDataURL(file)
   }
@@ -47,6 +54,8 @@ export default function CharacterManager({ entityId }: { entityId: string }) {
     try {
       const updated = await window.api.characters.update(formData)
       updateCharacter(updated as any)
+      // Clear the draft now that changes are persisted to SQLite
+      clearDraft(entityId)
       addToast('Character saved', 'success')
     } catch {
       addToast('Failed to save character', 'error')
@@ -55,10 +64,19 @@ export default function CharacterManager({ entityId }: { entityId: string }) {
     }
   }
 
+  const isDirty = !!drafts[entityId]
+
   return (
     <div className="p-8 max-w-4xl mx-auto overflow-y-auto h-full text-surface-200">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-surface-100">{formData.name || 'Unnamed Character'}</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-bold text-surface-100">{formData.name || 'Unnamed Character'}</h1>
+          {isDirty && (
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-warning-500/15 text-warning-400 border border-warning-500/20">
+              Unsaved
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-3">
           <button
             onClick={() => toggleEntityLock(entityId)}

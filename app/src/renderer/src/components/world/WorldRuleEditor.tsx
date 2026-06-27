@@ -16,14 +16,15 @@ interface WorldRuleEditorProps {
 }
 
 export default function WorldRuleEditor({ entityId }: WorldRuleEditorProps) {
-  const { worldRules, markTabDirty, updateWorldRule } = useWorkspaceStore()
+  const { worldRules, markTabDirty, updateWorldRule, drafts, setDraft, clearDraft } = useWorkspaceStore()
   const { addToast } = useToastStore()
   const saveStatusRef = useRef<'saved' | 'saving' | 'unsaved'>('saved')
   const saveIndicatorRef = useRef<HTMLSpanElement>(null)
   
   const item = worldRules.find(n => n.id === entityId)
-  const initialContent = item?.content || ''
-  const [title, setTitle] = useState(item?.title || '')
+  const draft = drafts[entityId]
+  const initialContent = draft?.content ?? item?.content ?? ''
+  const [title, setTitle] = useState(draft?.title ?? item?.title ?? '')
 
   const setSaveStatus = (status: 'saved' | 'saving' | 'unsaved') => {
     saveStatusRef.current = status
@@ -50,6 +51,7 @@ export default function WorldRuleEditor({ entityId }: WorldRuleEditorProps) {
         updateWorldRule(updated as any)
         markTabDirty(entityId, false)
         setSaveStatus('saved')
+        clearDraft(entityId)
       } catch {
         setSaveStatus('unsaved')
         addToast('Failed to save world rule', 'error')
@@ -102,7 +104,7 @@ export default function WorldRuleEditor({ entityId }: WorldRuleEditorProps) {
   useEffect(() => {
     return () => {
       if (editor && saveStatusRef.current === 'unsaved') {
-        window.api.worldRules.update({ id: entityId, content: editor.getHTML(), title })
+        setDraft(entityId, { content: editor.getHTML(), title })
       }
     }
   }, [editor, entityId, title])

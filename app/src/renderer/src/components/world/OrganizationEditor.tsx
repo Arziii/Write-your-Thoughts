@@ -16,14 +16,15 @@ interface OrganizationEditorProps {
 }
 
 export default function OrganizationEditor({ entityId }: OrganizationEditorProps) {
-  const { organizations, markTabDirty, updateOrganization } = useWorkspaceStore()
+  const { organizations, markTabDirty, updateOrganization, drafts, setDraft, clearDraft } = useWorkspaceStore()
   const { addToast } = useToastStore()
   const saveStatusRef = useRef<'saved' | 'saving' | 'unsaved'>('saved')
   const saveIndicatorRef = useRef<HTMLSpanElement>(null)
   
   const item = organizations.find(n => n.id === entityId)
-  const initialContent = item?.content || ''
-  const [title, setTitle] = useState(item?.title || '')
+  const draft = drafts[entityId]
+  const initialContent = draft?.content ?? item?.content ?? ''
+  const [title, setTitle] = useState(draft?.title ?? item?.title ?? '')
 
   const setSaveStatus = (status: 'saved' | 'saving' | 'unsaved') => {
     saveStatusRef.current = status
@@ -50,6 +51,7 @@ export default function OrganizationEditor({ entityId }: OrganizationEditorProps
         updateOrganization(updated as any)
         markTabDirty(entityId, false)
         setSaveStatus('saved')
+        clearDraft(entityId)
       } catch {
         setSaveStatus('unsaved')
         addToast('Failed to save organization', 'error')
@@ -102,7 +104,7 @@ export default function OrganizationEditor({ entityId }: OrganizationEditorProps
   useEffect(() => {
     return () => {
       if (editor && saveStatusRef.current === 'unsaved') {
-        window.api.organizations.update({ id: entityId, content: editor.getHTML(), title })
+        setDraft(entityId, { content: editor.getHTML(), title })
       }
     }
   }, [editor, entityId, title])

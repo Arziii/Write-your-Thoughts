@@ -102,6 +102,12 @@ interface WorkspaceStore {
   // Focus mode
   focusMode: boolean
   setFocusMode: (mode: boolean) => void
+
+  // In-memory drafts: unsaved form data keyed by entityId.
+  // Survives tab switching because it lives in the store, not component state.
+  drafts: Record<string, Record<string, any>>
+  setDraft: (entityId: string, data: Record<string, any>) => void
+  clearDraft: (entityId: string) => void
 }
 
 export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
@@ -329,4 +335,14 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   // Focus mode
   focusMode: false,
   setFocusMode: (focusMode) => set({ focusMode }),
+
+  // In-memory drafts
+  drafts: {},
+  setDraft: (entityId, data) =>
+    set((s) => ({ drafts: { ...s.drafts, [entityId]: data } })),
+  clearDraft: (entityId) =>
+    set((s) => {
+      const { [entityId]: _, ...rest } = s.drafts
+      return { drafts: rest }
+    }),
 }))

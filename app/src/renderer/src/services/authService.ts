@@ -8,6 +8,8 @@ export const authService = {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
 
+    let restoredFromCloud = false
+
     if (data.user) {
       // Store user in local SQLite
       await window.api.auth.storeUser({
@@ -16,18 +18,64 @@ export const authService = {
         displayName: data.user.user_metadata?.display_name,
       })
 
-      // Fetch cloud settings and update local DB
-      const result = await syncService.fetchCloudSettings()
-      if (result.success && result.settings) {
-        // We need to update local settings
-        await window.api.settings.update({
-          userId: data.user.id,
-          ...result.settings
-        })
+      // ── Smart cloud restore ─────────────────────────────────────────────
+      // Check when the cloud backup was last uploaded
+      const cloudInfo = await syncService.getCloudBackupInfo()
+
+      if (cloudInfo?.updatedAt) {
+        // Get the most recently modified book in local SQLite
+        const localBooks = (await window.api.books.getAll(data.user.id)) as any[]
+        const isEmpty = !localBooks || localBooks.length === 0
+
+        let localNewestDate: Date | null = null
+        if (!isEmpty) {
+          const maxUpdatedAt = localBooks.reduce(
+            (max: string, b: any) => (b.updated_at > max ? b.updated_at : max),
+            localBooks[0].updated_at as string
+          )
+          localNewestDate = new Date(maxUpdatedAt)
+        }
+
+        // Restore if: local DB is empty  OR  cloud snapshot is newer than local data
+        const cloudIsNewer = !localNewestDate || cloudInfo.updatedAt > localNewestDate
+        if (cloudIsNewer) {
+          console.log(
+            '[Sync] Cloud backup is newer than local data — restoring automatically.',
+            { cloudUpdatedAt: cloudInfo.updatedAt, localNewest: localNewestDate }
+          )
+          try {
+            const restoreResult = await syncService.restoreDatabaseFromCloud()
+            if (restoreResult.success) {
+              restoredFromCloud = true
+            } else {
+              console.warn('[Sync] Auto-restore returned failure:', restoreResult.error)
+            }
+          } catch (e) {
+            // Not fatal — user keeps their local data
+            console.warn('[Sync] Auto-restore threw, keeping local data:', e)
+          }
+        } else {
+          console.log('[Sync] Local data is up to date — no restore needed.')
+        }
+      } else {
+        // No cloud backup exists yet (brand new account or first-time backup pending)
+        console.log('[Sync] No cloud backup found — skipping restore.')
+      }
+      // ── End smart cloud restore ─────────────────────────────────────────
+
+      if (!restoredFromCloud) {
+        // DB was NOT replaced — apply any cloud settings on top of local data
+        const result = await syncService.fetchCloudSettings()
+        if (result.success && result.settings) {
+          await window.api.settings.update({
+            userId: data.user.id,
+            ...result.settings
+          })
+        }
       }
     }
 
-    return data
+    return { ...data, restoredFromCloud }
   },
 
   async signUp(email: string, password: string, displayName?: string) {
