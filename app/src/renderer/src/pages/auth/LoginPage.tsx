@@ -4,6 +4,7 @@ import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { authService } from '../../services/authService'
 import LogoImage from '../../assets/Logo.ico'
 import LoginBg from '../../assets/Login.png'
+import { useUserStore } from '../../stores/userStore'
 import { useToastStore } from '../../stores/toastStore'
 import { cn } from '../../utils'
 
@@ -15,6 +16,7 @@ export default function LoginPage() {
   const [isRestoring, setIsRestoring] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { addToast } = useToastStore()
+  const { setIsFreshLogin } = useUserStore()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -22,16 +24,17 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
+      setIsFreshLogin(true)
       const result = await authService.signIn(email, password)
       if (result.restoredFromCloud) {
         setIsRestoring(true)
         addToast('Data restored from cloud. Loading your workspace...', 'success')
-        // Reload so the freshly restored SQLite is picked up from scratch
-        setTimeout(() => window.location.reload(), 1200)
       } else {
-        addToast('Welcome back!', 'success')
+        setIsRestoring(true)
+        addToast('Syncing workspace...', 'success')
       }
     } catch (err: unknown) {
+      setIsFreshLogin(false)
       const message = err instanceof Error ? err.message : 'Failed to sign in'
       setError(message)
       setIsLoading(false)
@@ -41,11 +44,11 @@ export default function LoginPage() {
 
   return (
     <div 
-      className="flex h-full relative"
+      className="flex h-full relative font-sans"
       style={{ backgroundImage: `url(${LoginBg})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
     >
       {/* Global dark overlay to ensure readability everywhere */}
-      <div className="absolute inset-0 bg-surface-950/75 backdrop-blur-[2px]" />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
       {/* Left decorative panel */}
       <div className="hidden lg:flex lg:flex-1 flex-col justify-between p-12 border-r border-surface-800/30 relative z-10">
@@ -148,7 +151,7 @@ export default function LoginPage() {
               id="login-submit"
               type="submit"
               disabled={isLoading}
-              className="w-full py-2.5 bg-accent-600 hover:bg-accent-500 disabled:bg-accent-800 disabled:opacity-60 text-white font-medium rounded-lg text-sm transition-all flex items-center justify-center gap-2 mt-2"
+              className="w-full py-2.5 bg-accent-600 hover:bg-accent-500 disabled:bg-accent-800 disabled:opacity-60 text-white font-medium rounded-lg text-sm transition-all flex items-center justify-center gap-2 mt-6"
             >
               {isLoading ? (
                 <>
@@ -159,6 +162,12 @@ export default function LoginPage() {
                 'Sign in'
               )}
             </button>
+            
+            <div className="text-center mt-3">
+              <Link to="/forgot-password" className="text-sm font-medium text-accent-400 hover:text-accent-300 transition-colors">
+                Forgot Password?
+              </Link>
+            </div>
           </form>
 
           <p className="mt-6 text-center text-sm text-surface-500">

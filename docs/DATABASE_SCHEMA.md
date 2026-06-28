@@ -120,22 +120,33 @@ Individual chapter files.
 
 ## **chapter_versions** 
 
-Version history. 
+Version history (Local). 
 
 |Field|Type|
 |---|---|
 |id|UUID|
 |chapter_id|UUID|
-|version_number|Number|
+|user_id|UUID|
 |content|Rich Text|
-|source|String|
+|word_count|Number|
+|snapshot_type|String ('auto' \| 'milestone')|
+|milestone_name|String (Nullable)|
 |created_at|Timestamp|
 
+## **cloud_chapter_versions** 
 
+Version history (Supabase Cloud Sync). 
 
-Source: 
-
-• Manual • AI Polish • Rewrite • Restore 
+|Field|Type|
+|---|---|
+|id|UUID|
+|chapter_id|UUID|
+|user_id|UUID|
+|content|Rich Text|
+|word_count|Number|
+|snapshot_type|String|
+|milestone_name|String|
+|created_at|Timestamp|
 
 ## **characters** 
 

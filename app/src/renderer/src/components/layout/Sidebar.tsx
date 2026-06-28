@@ -53,7 +53,8 @@ export default function Sidebar() {
   const handleSignOut = async () => {
     try {
       await authService.signOut()
-      addToast('Signed out successfully', 'success')
+      // Hard reload to completely wipe memory and prevent state leakage
+      window.location.reload()
     } catch {
       addToast('Failed to sign out', 'error')
     }

@@ -10,6 +10,13 @@ const api = {
     onUnmaximized: (cb: () => void) => ipcRenderer.on('window:unmaximized', cb),
   },
 
+  // System
+  system: {
+    onDeepLink: (cb: (url: string) => void) => {
+      ipcRenderer.on('deep-link', (_event, url) => cb(url))
+    }
+  },
+
   // Auth
   auth: {
     storeUser: (user: unknown) => ipcRenderer.invoke('auth:storeUser', user),

@@ -1,5 +1,5 @@
 import { app, shell, BrowserWindow, ipcMain } from 'electron'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { initDatabase } from './database/init'
 import { registerIpcHandlers } from './ipc/handlers'
@@ -7,6 +7,45 @@ import electronUpdaterPkg from 'electron-updater'
 const { autoUpdater } = electronUpdaterPkg
 
 let mainWindow: BrowserWindow | null = null
+
+// Deep linking setup
+const PROTOCOL = 'wyt'
+
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [resolve(process.argv[1])])
+  }
+} else {
+  app.setAsDefaultProtocolClient(PROTOCOL)
+}
+
+const gotTheLock = app.requestSingleInstanceLock()
+
+if (!gotTheLock) {
+  app.quit()
+} else {
+  app.on('second-instance', (_event, commandLine, _workingDirectory) => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
+      
+      const url = commandLine.find(arg => arg.startsWith(`${PROTOCOL}://`))
+      if (url) {
+        mainWindow.webContents.send('deep-link', url)
+      }
+    }
+  })
+}
+
+// macOS deep linking
+app.on('open-url', (event, url) => {
+  event.preventDefault()
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.focus()
+    mainWindow.webContents.send('deep-link', url)
+  }
+})
 
 function createWindow(): void {
   const iconPath = join(__dirname, '../../build/icon.ico')

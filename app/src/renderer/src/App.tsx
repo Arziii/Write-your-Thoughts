@@ -6,6 +6,9 @@ import { useWorkspaceStore } from './stores/workspaceStore'
 import { useToastStore } from './stores/toastStore'
 import LoginPage from './pages/auth/LoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
+import VerifyEmailPage from './pages/auth/VerifyEmailPage'
+import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
+import ResetPasswordPage from './pages/auth/ResetPasswordPage'
 import WorkspacePage from './pages/workspace/WorkspacePage'
 import AppLayout from './layouts/AppLayout'
 import SettingsPage from './pages/settings/SettingsPage'
@@ -20,6 +23,29 @@ function App() {
 
 
   useEffect(() => {
+    // Deep Link Listener
+    window.api.system?.onDeepLink(async (url: string) => {
+      console.log('[DeepLink] Received:', url)
+      try {
+        const hashParams = new URLSearchParams(url.split('#')[1])
+        const accessToken = hashParams.get('access_token')
+        const refreshToken = hashParams.get('refresh_token')
+        
+        if (accessToken && refreshToken) {
+          console.log('[DeepLink] Setting session from deep link...')
+          const { error } = await authService.setSession(accessToken, refreshToken)
+          if (error) throw error
+          addToast('Successfully authenticated!', 'success')
+          navigate('/')
+        } else if (url.includes('auth/reset-password')) {
+           navigate('/reset-password' + (url.split('#')[1] ? '#' + url.split('#')[1] : ''))
+        }
+      } catch (err) {
+        console.error('[DeepLink] Error handling deep link:', err)
+        addToast('Failed to authenticate from link.', 'error')
+      }
+    })
+
     // Check existing session on app launch
     authService.getSession().then((session) => {
       if (session?.user) {
@@ -98,9 +124,81 @@ function App() {
     })
 
     // Listen for auth state changes
-    const { data: { subscription } } = authService.onAuthStateChange(async (u) => {
-      setUser(u)
-      if (!u) {
+    const { data: { subscription } } = authService.onAuthStateChange(async (event, u) => {
+      if (u) {
+        if (event === 'INITIAL_SESSION') {
+          // Handled by the getSession block on boot
+          return
+        }
+
+        if (event === 'SIGNED_IN') {
+          // It's a fresh manual login. 
+          // We DO NOT call setLoading(true) so the LoginPage stays visible with its button spinner!
+          
+          try {
+            // Wait 500ms to allow authService.signIn to finish saving the local user profile
+            await new Promise(r => setTimeout(r, 500))
+
+            const lUser = await window.api.auth.getStoredUser(u.id)
+            if (lUser) setLocalUser(lUser as never)
+            
+            const result: any = await window.api.settings.get(u.id)
+            if (result) {
+              setSettings({
+                theme: result.theme || 'light',
+                aiProvider: result.ai_provider,
+                aiApiKey: result.ai_api_key,
+                aiStylePrompt: result.ai_style_prompt,
+                preserveFormatting: result.preserve_formatting === 1,
+                autosaveInterval: result.autosave_interval
+              } as never)
+            }
+
+            const { syncService } = await import('./services/syncService')
+            
+            // Pull cloud books and data
+            await syncService.processSyncQueue()
+            const pullResult = await syncService.performInitialPull()
+            if (pullResult.success && pullResult.recordsPulled > 0) {
+              await refreshFromDb(u.id)
+            }
+            
+            // Subscribe to live updates
+            syncService.subscribeToRealtime(async (entityType, row, eventType) => {
+              if (eventType === 'DELETE') return
+              if (entityType === 'workspace_state') {
+                await window.api.editor.saveWorkspaceState({
+                  userId: u.id,
+                  currentBookId: row.current_book_id,
+                  currentChapterId: row.current_chapter_id,
+                  openTabs: typeof row.open_tabs === 'string' ? JSON.parse(row.open_tabs) : row.open_tabs,
+                  panelState: typeof row.panel_state === 'string' ? JSON.parse(row.panel_state) : row.panel_state
+                })
+              } else {
+                await window.api.database.upsertCloudRow({ entityType, row })
+              }
+              await refreshFromDb(u.id)
+            })
+            
+            // Fetch cloud settings
+            const res = await syncService.fetchCloudSettings()
+            if (res.success && res.settings) {
+              const updated: any = await window.api.settings.update({ userId: u.id, ...res.settings })
+              setSettings({
+                theme: updated.theme || 'light',
+                aiProvider: updated.ai_provider,
+                aiApiKey: updated.ai_api_key,
+                aiStylePrompt: updated.ai_style_prompt,
+                preserveFormatting: updated.preserve_formatting === 1,
+                autosaveInterval: updated.autosave_interval
+              } as never)
+            }
+          } finally {
+            // This instantly unmounts the LoginPage and reveals the perfectly loaded Dashboard!
+            setUser(u)
+          }
+        }
+      } else {
         // Unsubscribe from Realtime on logout
         const { syncService } = await import('./services/syncService')
         syncService.unsubscribeFromRealtime()
@@ -139,6 +237,9 @@ function App() {
         {/* Public routes */}
         <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
         <Route path="/register" element={user ? <Navigate to="/" replace /> : <RegisterPage />} />
+        <Route path="/verify-email" element={user ? <Navigate to="/" replace /> : <VerifyEmailPage />} />
+        <Route path="/forgot-password" element={user ? <Navigate to="/" replace /> : <ForgotPasswordPage />} />
+        <Route path="/reset-password" element={user ? <Navigate to="/" replace /> : <ResetPasswordPage />} />
 
         {/* Protected routes */}
         <Route element={user ? <AppLayout /> : <Navigate to="/login" replace />}>

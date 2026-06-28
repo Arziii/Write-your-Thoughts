@@ -38,7 +38,7 @@
   --brand-green-bg: 104 30% 92%; /* #e8f0e5 */
 }
 
-.dark {
+:root.dark {
   --surface-950: 226 24% 7%;
   --surface-900: 224 20% 10%;
   --surface-850: 222 16% 14%;
@@ -72,8 +72,8 @@ body {
   font-family: 'Charm', cursive;
   font-size: 1.15rem;
   font-weight: 700;
-  background: hsl(220, 20%, 98%);
-  color: hsl(226, 24%, 7%);
+  background: hsl(var(--surface-950));
+  color: hsl(var(--surface-50));
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   user-select: none; /* Prevent accidental selection outside editor */

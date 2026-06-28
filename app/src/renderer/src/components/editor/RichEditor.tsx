@@ -30,6 +30,7 @@ export default function RichEditor({ chapterId, initialContent, onContentChange 
   const saveStatusRef = useRef<'saved' | 'saving' | 'unsaved'>('saved')
   const saveIndicatorRef = useRef<HTMLSpanElement>(null)
   const lastSnapshotTimeRef = useRef<number>(Date.now())
+  const prevWcRef = useRef<number>(countWords(initialContent || ''))
   
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false)
 
@@ -107,6 +108,14 @@ export default function RichEditor({ chapterId, initialContent, onContentChange 
       onContentChange?.(html, wc)
       autosave(html, wc)
 
+      // Update Daily Progress in localStorage
+      const diff = wc - prevWcRef.current
+      if (diff > 0) {
+        const currentProgress = parseInt(localStorage.getItem('dailyProgress') || '0')
+        localStorage.setItem('dailyProgress', (currentProgress + diff).toString())
+      }
+      prevWcRef.current = wc
+
       // 15-minute background snapshots (Phase 5)
       const now = Date.now()
       if (now - lastSnapshotTimeRef.current > 15 * 60 * 1000) {
@@ -129,6 +138,7 @@ export default function RichEditor({ chapterId, initialContent, onContentChange 
     if (editor && initialContent !== editor.getHTML()) {
       editor.commands.setContent(initialContent || '', false)
       setSaveStatus('saved')
+      prevWcRef.current = countWords(initialContent || '')
     }
   }, [chapterId, initialContent])
 
