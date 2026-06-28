@@ -51,6 +51,15 @@ export function registerEditorHandlers(ipcMain: IpcMain): void {
       )
     }
 
+    // Phase 4: Push to sync queue
+    // We only sync tabs/books/panels (not raw scroll pixel changes unless they come with tab changes)
+    if (data.currentBookId !== undefined || data.currentChapterId !== undefined || data.openTabs !== undefined || data.panelState !== undefined) {
+      dbRun(
+        "INSERT INTO sync_queue (id, entity_type, entity_id, operation) VALUES (?, ?, ?, ?)",
+        [uuidv4(), 'workspace_state', data.userId, 'upsert']
+      )
+    }
+
     return dbGet('SELECT * FROM workspace_state WHERE user_id = ?', [data.userId])
   })
 }

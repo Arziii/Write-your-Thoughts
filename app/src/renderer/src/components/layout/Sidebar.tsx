@@ -141,7 +141,7 @@ export default function Sidebar() {
                   flex: 1, padding: '9px 0', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.09em',
                   background: sidebarTab === 'explorer' ? F.greenLight : 'transparent',
                   color: sidebarTab === 'explorer' ? F.green : F.textSoft,
-                  border: 'none', borderBottom: sidebarTab === 'explorer' ? `2px solid ${F.green}` : '2px solid transparent',
+                  borderTop: 'none', borderRight: 'none', borderLeft: 'none', borderBottom: sidebarTab === 'explorer' ? `2px solid ${F.green}` : '2px solid transparent',
                   cursor: 'pointer', transition: 'all 0.15s',
                 }}
               >
@@ -153,7 +153,7 @@ export default function Sidebar() {
                   flex: 1, padding: '9px 0', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.09em',
                   background: sidebarTab === 'timeline' ? F.greenLight : 'transparent',
                   color: sidebarTab === 'timeline' ? F.green : F.textSoft,
-                  border: 'none', borderBottom: sidebarTab === 'timeline' ? `2px solid ${F.green}` : '2px solid transparent',
+                  borderTop: 'none', borderRight: 'none', borderLeft: 'none', borderBottom: sidebarTab === 'timeline' ? `2px solid ${F.green}` : '2px solid transparent',
                   cursor: 'pointer', transition: 'all 0.15s',
                 }}
               >

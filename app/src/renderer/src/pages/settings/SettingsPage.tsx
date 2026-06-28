@@ -68,7 +68,7 @@ export default function SettingsPage() {
         lineSpacing: settings?.line_spacing || 1.8,
       })
       setSettings(updated as never)
-      
+
       // Sync to cloud in background
       import('../../services/syncService').then(({ syncService }) => {
         syncService.syncSettingsToCloud(updated as any).catch(e => console.error('Cloud sync failed', e))
@@ -93,7 +93,7 @@ export default function SettingsPage() {
             </h1>
             <p className="text-surface-500 text-sm mt-1">Configure your writing environment and AI preferences.</p>
           </div>
-          <button 
+          <button
             onClick={() => navigate(-1)}
             className="flex items-center gap-2 px-4 py-2 bg-surface-800 hover:bg-surface-700 text-surface-200 text-sm font-medium rounded-lg transition-colors border border-surface-700 hover:border-surface-600"
           >
@@ -174,7 +174,7 @@ export default function SettingsPage() {
               />
               <p className="text-[11px] text-surface-600 mt-1">Your API key is stored locally and never shared.</p>
             </div>
-            
+
             <div className="pt-2 border-t border-surface-800">
               <label className="block text-sm font-medium text-surface-300 mb-1.5">AI Style Profile</label>
               <textarea
@@ -220,7 +220,7 @@ export default function SettingsPage() {
                       <h3 className="text-sm font-medium text-surface-100">{p.name}</h3>
                       <p className="text-[11px] text-surface-400">{p.description} (v{p.version})</p>
                     </div>
-                    <button 
+                    <button
                       onClick={async () => {
                         await window.api.plugins.delete(p.id)
                         setPlugins(await window.api.plugins.getAll())
@@ -244,7 +244,7 @@ export default function SettingsPage() {
           </h2>
           <div className="space-y-3 glass-card rounded-xl p-5">
             <p className="text-[13px] text-surface-400 mb-2">Select a book from your workspace to generate a publication-ready file in PDF, DOCX, EPUB, or Markdown.</p>
-            
+
             {books.length === 0 ? (
               <p className="text-sm text-surface-500 py-2">No books available to export. Create a book first.</p>
             ) : (
@@ -279,8 +279,8 @@ export default function SettingsPage() {
           </h2>
           <div className="space-y-4 glass-card rounded-xl p-5">
             <p className="text-[13px] text-surface-400">
-              Securely back up your entire local database to your Supabase `user_backups` bucket. 
-              The system also auto-backs up every 5 minutes in the background.
+              Your data is <span className="text-accent-400 font-medium">automatically synced in real-time</span> to the cloud.
+              Use this only as an <span className="text-yellow-400 font-medium">emergency full-database snapshot</span> for disaster recovery (e.g. if your local database gets corrupted).
             </p>
             <div className="flex gap-3">
               <button
@@ -302,7 +302,7 @@ export default function SettingsPage() {
                 className="flex-1 px-4 py-2.5 bg-surface-800 hover:bg-surface-700 disabled:opacity-50 text-surface-100 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 border border-surface-700"
               >
                 {isBackingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
-                {isBackingUp ? 'Backing Up...' : 'Backup Now'}
+                {isBackingUp ? 'Backing Up...' : 'Emergency Snapshot'}
               </button>
 
               <button
@@ -345,13 +345,13 @@ export default function SettingsPage() {
           </button>
         </div>
       </div>
-      
+
       {selectedBookId && (
-        <ExportModal 
-          isOpen={isExportOpen} 
-          onClose={() => setIsExportOpen(false)} 
-          bookId={selectedBookId} 
-          bookTitle={books.find(b => b.id === selectedBookId)?.title || ''} 
+        <ExportModal
+          isOpen={isExportOpen}
+          onClose={() => setIsExportOpen(false)}
+          bookId={selectedBookId}
+          bookTitle={books.find(b => b.id === selectedBookId)?.title || ''}
           initialAuthorName={books.find(b => b.id === selectedBookId)?.authorName || ''}
         />
       )}

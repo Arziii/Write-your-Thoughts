@@ -5,7 +5,7 @@ import TextAlign from '@tiptap/extension-text-align'
 import Highlight from '@tiptap/extension-highlight'
 import Placeholder from '@tiptap/extension-placeholder'
 import CharacterCount from '@tiptap/extension-character-count'
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useToastStore } from '../../stores/toastStore'
 import { useUserStore } from '../../stores/userStore'
@@ -15,6 +15,7 @@ import EditorToolbar from './EditorToolbar'
 import { CommentMark } from './extensions/CommentMark'
 import SearchAndReplace from '@sereneinserenade/tiptap-search-and-replace'
 import EditorFindToolbar from './EditorFindToolbar'
+import VersionHistoryModal from './VersionHistoryModal'
 
 interface RichEditorProps {
   chapterId: string
@@ -24,10 +25,13 @@ interface RichEditorProps {
 
 export default function RichEditor({ chapterId, initialContent, onContentChange }: RichEditorProps) {
   const { markTabDirty, updateChapter, activeChapter } = useWorkspaceStore()
-  const { settings } = useUserStore()
+  const { settings, user } = useUserStore()
   const { addToast } = useToastStore()
   const saveStatusRef = useRef<'saved' | 'saving' | 'unsaved'>('saved')
   const saveIndicatorRef = useRef<HTMLSpanElement>(null)
+  const lastSnapshotTimeRef = useRef<number>(Date.now())
+  
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false)
 
   const setSaveStatus = (status: 'saved' | 'saving' | 'unsaved') => {
     saveStatusRef.current = status
@@ -102,6 +106,21 @@ export default function RichEditor({ chapterId, initialContent, onContentChange 
       setSaveStatus('unsaved')
       onContentChange?.(html, wc)
       autosave(html, wc)
+
+      // 15-minute background snapshots (Phase 5)
+      const now = Date.now()
+      if (now - lastSnapshotTimeRef.current > 15 * 60 * 1000) {
+        lastSnapshotTimeRef.current = now
+        if (user) {
+          window.api.chapters.saveVersion({
+            chapterId,
+            userId: user.id,
+            content: html,
+            wordCount: wc,
+            snapshotType: 'auto'
+          }).catch(e => console.error('Failed to save background snapshot', e))
+        }
+      }
     },
   })
 
@@ -124,7 +143,7 @@ export default function RichEditor({ chapterId, initialContent, onContentChange 
     }
   }, [editor, chapterId])
 
-  // Handle comment created/removed
+  // Handle comment created/removed and toolbar events
   useEffect(() => {
     const handleCommentCreated = (e: any) => {
       if (e.detail?.id && editor) {
@@ -136,13 +155,42 @@ export default function RichEditor({ chapterId, initialContent, onContentChange 
         editor.chain().focus().unsetComment(e.detail.id).run()
       }
     }
+    const handleOpenHistory = () => {
+      setIsHistoryModalOpen(true)
+    }
+    const handleSaveMilestone = async () => {
+      if (!editor || !user) return
+      const milestoneName = window.prompt('Enter a name for this milestone (e.g., "First Draft Completed"):')
+      if (!milestoneName) return // Cancelled or empty
+      
+      const html = editor.getHTML()
+      const wc = countWords(html)
+      try {
+        await window.api.chapters.saveVersion({
+          chapterId,
+          userId: user.id,
+          content: html,
+          wordCount: wc,
+          snapshotType: 'milestone',
+          milestoneName
+        })
+        addToast(`Milestone "${milestoneName}" saved to cloud!`, 'success')
+      } catch (e) {
+        addToast('Failed to save milestone', 'error')
+      }
+    }
+
     window.addEventListener('comment-created', handleCommentCreated)
     window.addEventListener('comment-removed', handleCommentRemoved)
+    window.addEventListener('open-version-history', handleOpenHistory)
+    window.addEventListener('save-milestone', handleSaveMilestone)
     return () => {
       window.removeEventListener('comment-created', handleCommentCreated)
       window.removeEventListener('comment-removed', handleCommentRemoved)
+      window.removeEventListener('open-version-history', handleOpenHistory)
+      window.removeEventListener('save-milestone', handleSaveMilestone)
     }
-  }, [editor])
+  }, [editor, chapterId, user])
 
   return (
     <div className="flex flex-col h-full bg-surface-950 relative">
@@ -166,6 +214,19 @@ export default function RichEditor({ chapterId, initialContent, onContentChange 
           />
         </div>
       </div>
+
+      <VersionHistoryModal 
+        chapterId={chapterId}
+        isOpen={isHistoryModalOpen}
+        onClose={() => setIsHistoryModalOpen(false)}
+        onRestore={(html, wc) => {
+          if (editor) {
+            editor.commands.setContent(html, false)
+            onContentChange?.(html, wc)
+            setSaveStatus('saved')
+          }
+        }}
+      />
     </div>
   )
 }

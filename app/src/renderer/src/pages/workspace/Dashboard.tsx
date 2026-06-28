@@ -1,12 +1,13 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BookOpen, Plus, Clock, ChevronRight, Camera, User as UserIcon, Target, Flame, ImagePlus } from 'lucide-react'
+import { BookOpen, Plus, Clock, ChevronRight, Camera, User as UserIcon, Target, Flame, ImagePlus, X } from 'lucide-react'
 import { useUserStore } from '../../stores/userStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useToastStore } from '../../stores/toastStore'
 import { cn, formatDate } from '../../utils'
 import Modal from '../../components/ui/Modal'
 import type { Book, Chapter } from '../../types'
+import { uploadImage, deleteImage } from '../../services/storageService'
 
 const statusColors: Record<string, string> = {
   planning: 'text-surface-500 bg-surface-800',
@@ -41,8 +42,13 @@ export default function Dashboard() {
   const coverPhotoRef = useRef<HTMLInputElement>(null)
 
   const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const [coverPhoto, setCoverPhoto] = useState<string>(() => localStorage.getItem('dashboardCover') || '')
+  const [coverPhoto, setCoverPhoto] = useState<string>(() => {
+    // Try cloud URL from user metadata or fall back to localStorage (legacy)
+    return localUser?.avatar_url?.includes('dashboard') ? localUser.avatar_url : localStorage.getItem('dashboardCover') || ''
+  })
   const [pendingCover, setPendingCover] = useState<string>('')
+  const [isUploadingCover, setIsUploadingCover] = useState(false)
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
   const [showCoverMenu, setShowCoverMenu] = useState(false)
   const [title, setTitle] = useState('')
   const [genre, setGenre] = useState('')
@@ -85,56 +91,104 @@ export default function Dashboard() {
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !user) return
-    if (file.size > 2 * 1024 * 1024) { addToast('Image must be under 2MB', 'error'); return }
-    const reader = new FileReader()
-    reader.onload = async (ev) => {
-      const base64 = ev.target?.result as string
-      try {
-        const updatedUser = await window.api.auth.storeUser({ id: user.id, email: user.email!, displayName: user.user_metadata?.display_name, avatarUrl: base64 })
-        setLocalUser(updatedUser as never)
-        addToast('Profile picture updated', 'success')
-      } catch { addToast('Failed to update picture', 'error') }
+    if (file.size > 5 * 1024 * 1024) { addToast('Image must be under 5MB', 'error'); return }
+    setIsUploadingAvatar(true)
+    try {
+      const url = await uploadImage(file, 'books', `${user.id}-avatar`)
+      const updatedUser = await window.api.auth.storeUser({ id: user.id, email: user.email!, displayName: user.user_metadata?.display_name, avatarUrl: url })
+      setLocalUser(updatedUser as never)
+      addToast('Profile picture updated', 'success')
+    } catch (err: any) {
+      addToast(err.message || 'Failed to update picture', 'error')
+    } finally {
+      setIsUploadingAvatar(false)
+      e.target.value = ''
     }
-    reader.readAsDataURL(file)
+  }
+
+  const handleAvatarDelete = async () => {
+    if (!user) return
+    try {
+      await deleteImage('books', `${user.id}-avatar`, 'unknown').catch(() => {})
+      const updatedUser = await window.api.auth.storeUser({ id: user.id, email: user.email!, displayName: user.user_metadata?.display_name, avatarUrl: '' })
+      setLocalUser(updatedUser as never)
+      addToast('Profile picture removed', 'success')
+    } catch (err: any) {
+      addToast(err.message || 'Failed to remove picture', 'error')
+    }
   }
 
   const handleBookCoverChange = async (e: React.ChangeEvent<HTMLInputElement>, bookId: string) => {
     const file = e.target.files?.[0]
     if (!file || !bookId) return
-    if (file.size > 2 * 1024 * 1024) { addToast('Image must be under 2MB', 'error'); return }
-    const reader = new FileReader()
-    reader.onload = async (ev) => {
-      const base64 = ev.target?.result as string
-      try {
-        const updatedBook = await window.api.books.update({ id: bookId, coverImage: base64 })
-        updateBook(updatedBook as Book)
-        addToast('Book cover updated', 'success')
-      } catch { addToast('Failed to update cover', 'error') }
+    if (file.size > 5 * 1024 * 1024) { addToast('Image must be under 5MB', 'error'); return }
+    try {
+      const url = await uploadImage(file, 'books', bookId)
+      const updatedBook = await window.api.books.update({ id: bookId, coverImage: url })
+      updateBook(updatedBook as Book)
+      addToast('Book cover updated', 'success')
+    } catch (err: any) {
+      addToast(err.message || 'Failed to update cover', 'error')
     }
-    reader.readAsDataURL(file)
     e.target.value = ''
+  }
+
+  const handleBookCoverDelete = async (bookId: string) => {
+    try {
+      await deleteImage('books', bookId, 'unknown').catch(() => {})
+      const updatedBook = await window.api.books.update({ id: bookId, coverImage: '' })
+      updateBook(updatedBook as Book)
+      addToast('Book cover removed', 'success')
+    } catch (err: any) {
+      addToast(err.message || 'Failed to remove cover', 'error')
+    }
   }
 
   const handleCoverPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     if (file.size > 5 * 1024 * 1024) { addToast('Cover image must be under 5MB', 'error'); return }
+    // Show preview locally before uploading
     const reader = new FileReader()
     reader.onload = (ev) => { setPendingCover(ev.target?.result as string) }
     reader.readAsDataURL(file)
+    // Stash the file for upload on confirm
+    ;(coverPhotoRef.current as any).__pendingFile = file
     e.target.value = ''
   }
 
-  const confirmCover = () => {
-    setCoverPhoto(pendingCover)
-    localStorage.setItem('dashboardCover', pendingCover)
-    setPendingCover('')
-    addToast('Dashboard cover updated!', 'success')
+  const confirmCover = async () => {
+    const file = (coverPhotoRef.current as any).__pendingFile
+    if (!file || !user) {
+      // Fallback: just save the base64 preview locally
+      setCoverPhoto(pendingCover)
+      localStorage.setItem('dashboardCover', pendingCover)
+      setPendingCover('')
+      addToast('Dashboard cover updated!', 'success')
+      return
+    }
+    setIsUploadingCover(true)
+    try {
+      const url = await uploadImage(file, 'books', `${user.id}-dashboard-cover`)
+      setCoverPhoto(url)
+      localStorage.setItem('dashboardCover', url)
+      setPendingCover('')
+      ;(coverPhotoRef.current as any).__pendingFile = null
+      addToast('Dashboard cover updated!', 'success')
+    } catch (err: any) {
+      addToast(err.message || 'Failed to upload cover', 'error')
+    } finally {
+      setIsUploadingCover(false)
+    }
   }
 
-  const cancelPending = () => setPendingCover('')
+  const cancelPending = () => {
+    setPendingCover('')
+    ;(coverPhotoRef.current as any).__pendingFile = null
+  }
 
-  const removeCover = () => {
+  const removeCover = async () => {
+    if (user) await deleteImage('books', `${user.id}-dashboard-cover`, 'unknown').catch(() => {})
     setCoverPhoto(''); setPendingCover('')
     localStorage.removeItem('dashboardCover')
     setShowCoverMenu(false)
@@ -162,17 +216,19 @@ export default function Dashboard() {
         {pendingCover && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px', borderRadius: 10, background: 'rgba(255,253,248,0.97)', border: `1px solid ${F.border}`, boxShadow: '0 2px 10px rgba(45,90,39,0.1)' }}>
             <img src={pendingCover} alt="preview" style={{ width: 30, height: 20, objectFit: 'cover', borderRadius: 4, border: `1px solid ${F.border}` }} />
-            <span style={{ fontSize: 12, color: F.textMid, fontWeight: 500 }}>Use this photo?</span>
-            <button onClick={confirmCover} style={{ fontSize: 11, fontWeight: 700, background: F.green, color: 'white', border: 'none', borderRadius: 6, padding: '3px 10px', cursor: 'pointer' }}>✓ Confirm</button>
-            <button onClick={cancelPending} style={{ fontSize: 11, fontWeight: 700, background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}>✕</button>
+             <span style={{ fontSize: 12, color: F.textMid, fontWeight: 500 }}>Use this photo?</span>
+             <button onClick={confirmCover} disabled={isUploadingCover} style={{ fontSize: 11, fontWeight: 700, background: F.green, color: 'white', border: 'none', borderRadius: 6, padding: '3px 10px', cursor: 'pointer', opacity: isUploadingCover ? 0.7 : 1 }}>
+               {isUploadingCover ? '⏳ Uploading...' : '✓ Confirm'}
+             </button>
+             <button onClick={cancelPending} disabled={isUploadingCover} style={{ fontSize: 11, fontWeight: 700, background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}>✕</button>
           </div>
         )}
         <div style={{ position: 'relative' }}>
           <button
             onClick={() => setShowCoverMenu(p => !p)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: 'pointer', background: (coverPhoto || pendingCover) ? 'rgba(255,253,248,0.95)' : 'rgba(45,90,39,0.9)', color: (coverPhoto || pendingCover) ? F.textMid : '#d6f0d0', border: `1px solid ${(coverPhoto || pendingCover) ? F.border : 'rgba(255,255,255,0.15)'}`, boxShadow: '0 2px 8px rgba(45,90,39,0.15)' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: 'pointer', background: (coverPhoto || pendingCover) ? 'rgba(255,253,248,0.95)' : 'rgba(45,90,39,0.9)', color: (coverPhoto || pendingCover) ? F.textMid : '#d6f0d0', border: `1px solid ${(coverPhoto || pendingCover) ? F.border : 'rgba(255,255,255,0.15)'}`, boxShadow: '0 2px 8px rgba(45,90,39,0.15)' }}
           >
-            <ImagePlus style={{ width: 14, height: 14 }} />
+            <ImagePlus style={{ width: 12, height: 12 }} />
             {coverPhoto ? 'Cover Photo' : 'Add Cover'}
           </button>
           {showCoverMenu && (
@@ -202,21 +258,39 @@ export default function Dashboard() {
       </div>
 
       {/* ── Main Content ─────────────────────────────────────── */}
-      <div style={{ maxWidth: 1020, margin: '0 auto', padding: '32px 36px 56px' }}>
+      <div style={{ maxWidth: 1020, margin: '0 auto', padding: '48px 36px 56px' }}>
 
         {/* Header card */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 22, marginBottom: 28, padding: '20px 26px', background: 'rgba(255,253,248,0.95)', border: `1px solid ${F.border}`, borderRadius: 20, boxShadow: '0 2px 16px rgba(45,90,39,0.08)' }}>
           {/* Avatar */}
-          <div onClick={() => fileInputRef.current?.click()} style={{ position: 'relative', width: 68, height: 68, flexShrink: 0, cursor: 'pointer' }} className="group">
+          <div style={{ position: 'relative', width: 68, height: 68, flexShrink: 0, cursor: 'pointer' }} className="group">
             <div style={{ width: 68, height: 68, borderRadius: '50%', border: `3px solid ${F.green}`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: F.greenLight, boxShadow: '0 2px 10px rgba(45,90,39,0.2)' }}>
-              {localUser?.avatar_url
+              {isUploadingAvatar ? (
+                <div className="flex items-center justify-center w-full h-full bg-surface-900/80">
+                  <svg className="animate-spin w-6 h-6 text-accent-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                </div>
+              ) : localUser?.avatar_url
                 ? <img src={localUser.avatar_url} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 : <UserIcon style={{ width: 28, height: 28, color: F.green, opacity: 0.65 }} />
               }
             </div>
-            <div className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-              <Camera style={{ width: 16, height: 16, color: 'white' }} />
-            </div>
+            {!isUploadingAvatar && (
+              <div
+                className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Camera style={{ width: 14, height: 14, color: 'white' }} />
+                {localUser?.avatar_url && (
+                  <button
+                    onClick={e => { e.stopPropagation(); handleAvatarDelete() }}
+                    className="p-0.5 bg-red-600/80 hover:bg-red-600 rounded-full mt-0.5"
+                    title="Remove photo"
+                  >
+                    <X style={{ width: 9, height: 9, color: 'white' }} />
+                  </button>
+                )}
+              </div>
+            )}
             <input type="file" ref={fileInputRef} className="hidden" accept="image/jpeg,image/png,image/webp" onChange={handleAvatarChange} />
           </div>
 
@@ -317,10 +391,22 @@ export default function Dashboard() {
                         ? <img src={book.cover_image} alt={book.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
                         : <BookOpen style={{ width: 22, height: 22, color: F.green, opacity: 0.5 }} />
                       }
-                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/cover:opacity-100 transition-opacity flex items-center justify-center"
-                        style={{ cursor: 'pointer' }}
-                        onClick={e => { e.stopPropagation(); document.getElementById(`cover-input-${book.id}`)?.click() }}>
-                        <Camera style={{ width: 13, height: 13, color: 'white' }} />
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/cover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1"
+                        style={{ cursor: 'pointer' }}>
+                        <div
+                          onClick={e => { e.stopPropagation(); document.getElementById(`cover-input-${book.id}`)?.click() }}
+                          className="flex items-center justify-center">
+                          <Camera style={{ width: 13, height: 13, color: 'white' }} />
+                        </div>
+                        {book.cover_image && (
+                          <button
+                            onClick={e => { e.stopPropagation(); handleBookCoverDelete(book.id) }}
+                            className="p-0.5 bg-red-600/80 hover:bg-red-600 rounded-full"
+                            title="Remove cover"
+                          >
+                            <X style={{ width: 10, height: 10, color: 'white' }} />
+                          </button>
+                        )}
                       </div>
                       <input id={`cover-input-${book.id}`} type="file" className="hidden" accept="image/jpeg,image/png,image/webp" onClick={e => e.stopPropagation()} onChange={e => handleBookCoverChange(e, book.id)} />
                     </div>

@@ -47,25 +47,25 @@ export default function WorkspacePage() {
           setPanelState(ps)
         } catch {}
 
+        // Extract tabs
+        let tabIdsToRestore: string[] = []
+        if (state.open_tabs) {
+          try {
+            tabIdsToRestore = JSON.parse(state.open_tabs) as string[]
+          } catch {}
+        }
+
         // Restore open book
         if (state.current_book_id && !bookId) {
-          await loadBookAndChapter(state.current_book_id, state.current_chapter_id ?? undefined)
+          await loadBookAndChapter(state.current_book_id, state.current_chapter_id ?? undefined, tabIdsToRestore)
           if (state.current_book_id) {
             navigate(`/book/${state.current_book_id}`, { replace: true })
           }
         } else if (bookId) {
-          await loadBookAndChapter(bookId, chapterId)
-        }
-
-        // Restore tabs
-        if (state.open_tabs) {
-          try {
-            const tabIds = JSON.parse(state.open_tabs) as string[]
-            // Tabs will be populated as chapters load
-          } catch {}
+          await loadBookAndChapter(bookId, chapterId, tabIdsToRestore)
         }
       } else if (bookId) {
-        await loadBookAndChapter(bookId, chapterId)
+        await loadBookAndChapter(bookId, chapterId, [])
       }
     } catch (err) {
       console.error('Session restore failed:', err)
@@ -74,7 +74,7 @@ export default function WorkspacePage() {
     }
   }
 
-  async function loadBookAndChapter(bId: string, cId?: string) {
+  async function loadBookAndChapter(bId: string, cId?: string, tabIdsToRestore: string[] = []) {
     try {
       const book = await window.api.books.getById(bId)
       if (!book) return
@@ -177,6 +177,40 @@ export default function WorkspacePage() {
         const chapter = (chapters as Chapter[]).find((c) => c.id === cId)
         if (chapter) {
           openTab(chapter.id, 'chapter', chapter.title)
+        }
+      }
+
+      // Phase 4: Restore background tabs
+      if (tabIdsToRestore.length > 0) {
+        const { setTabs, tabs, chapters, characters, locations, notes, codex, wiki, organizations, worldRules } = useWorkspaceStore.getState()
+        // If tabs are already open, we might not want to overwrite, but during session restore it should be empty
+        if (tabs.length <= 1) {
+          const restoredTabs: any[] = []
+          for (const tId of tabIdsToRestore) {
+            let found = false
+            const check = (arr: any[], type: string, labelField: string) => {
+              if (found) return
+              const match = arr.find(item => item.id === tId)
+              if (match) {
+                restoredTabs.push({ id: tId, type, title: match[labelField] })
+                found = true
+              }
+            }
+            
+            check(chapters, 'chapter', 'title')
+            check(characters, 'character', 'name')
+            check(locations, 'location', 'name')
+            check(notes, 'note', 'title')
+            check(codex, 'codex', 'title')
+            check(wiki, 'world-wiki', 'title')
+            // Timeline and story bible use hardcoded IDs
+            if (tId === 'story-bible') { restoredTabs.push({ id: tId, type: 'story-bible', title: 'Story Bible' }); found = true; }
+            if (tId === 'character-board') { restoredTabs.push({ id: tId, type: 'character-board', title: 'Characters' }); found = true; }
+            if (tId === 'verse-timeline') { restoredTabs.push({ id: tId, type: 'verse-timeline', title: 'Verse Timeline' }); found = true; }
+          }
+          if (restoredTabs.length > 0) {
+            setTabs(restoredTabs)
+          }
         }
       }
     } catch (err) {

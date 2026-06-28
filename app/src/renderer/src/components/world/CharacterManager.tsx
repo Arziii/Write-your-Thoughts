@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
-import { Camera, Save, Lock, Unlock } from 'lucide-react'
+import { Camera, Save, Lock, Unlock, X, Loader2 } from 'lucide-react'
 import { useToastStore } from '../../stores/toastStore'
 import { cn } from '../../utils'
 import VoiceIntelligenceTab from './VoiceIntelligenceTab'
 import RelationshipIntelligenceTab from './RelationshipIntelligenceTab'
+import { uploadImage, deleteImage } from '../../services/storageService'
 
 type TabType = 'general' | 'voice' | 'relationships'
 
@@ -14,6 +15,7 @@ export default function CharacterManager({ entityId }: { entityId: string }) {
   
   const character = characters.find(c => c.id === entityId)
   const [isSaving, setIsSaving] = useState(false)
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
   const [activeTab, setActiveTab] = useState<TabType>('general')
 
   // Use the in-memory draft if one exists, otherwise fall back to the saved entity.
@@ -37,15 +39,29 @@ export default function CharacterManager({ entityId }: { entityId: string }) {
     setDraft(entityId, { ...(drafts[entityId] ?? character ?? {}), [name]: value })
   }
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (file.size > 5 * 1024 * 1024) { addToast('Image must be under 5MB', 'error'); return }
 
-    const reader = new FileReader()
-    reader.onload = () => {
-      setDraft(entityId, { ...(drafts[entityId] ?? character ?? {}), image_url: reader.result as string })
+    setIsUploadingImage(true)
+    try {
+      const url = await uploadImage(file, 'characters', entityId)
+      setDraft(entityId, { ...(drafts[entityId] ?? character ?? {}), image_url: url })
+      addToast('Image uploaded', 'success')
+    } catch (err: any) {
+      addToast(err.message || 'Upload failed', 'error')
+    } finally {
+      setIsUploadingImage(false)
+      e.target.value = ''
     }
-    reader.readAsDataURL(file)
+  }
+
+  const handleImageDelete = async () => {
+    setDraft(entityId, { ...(drafts[entityId] ?? character ?? {}), image_url: '' })
+    // Best-effort delete from storage (unknown ext, try all common ones)
+    await deleteImage('characters', entityId, 'unknown').catch(() => {})
+    addToast('Image removed', 'success')
   }
 
   const handleSave = async () => {
@@ -129,16 +145,32 @@ export default function CharacterManager({ entityId }: { entityId: string }) {
         <div className="col-span-1 space-y-6">
           <div className="relative group">
             <div className="aspect-[3/4] bg-surface-800 rounded-lg overflow-hidden border border-surface-700 flex items-center justify-center">
-              {formData.image_url ? (
+              {isUploadingImage ? (
+                <div className="flex flex-col items-center gap-2">
+                  <Loader2 className="w-8 h-8 text-accent-400 animate-spin" />
+                  <span className="text-xs text-surface-400">Uploading...</span>
+                </div>
+              ) : formData.image_url ? (
                 <img src={formData.image_url} alt={formData.name} className="w-full h-full object-cover" />
               ) : (
                 <Camera className="w-12 h-12 text-surface-600" />
               )}
             </div>
-            <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity rounded-lg">
-              <span className="text-white text-sm font-medium">Upload Image</span>
-              <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-            </label>
+            {!isUploadingImage && (
+              <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center cursor-pointer transition-opacity rounded-lg gap-2">
+                <span className="text-white text-sm font-medium">Upload Image</span>
+                <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+              </label>
+            )}
+            {formData.image_url && !isUploadingImage && (
+              <button
+                onClick={handleImageDelete}
+                className="absolute top-2 right-2 z-10 p-1 bg-red-600/80 hover:bg-red-600 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Remove image"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
           </div>
 
           <div className="space-y-4">

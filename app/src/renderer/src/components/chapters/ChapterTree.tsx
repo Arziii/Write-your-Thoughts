@@ -128,15 +128,17 @@ export default function ChapterTree({ book }: ChapterTreeProps) {
                           opacity: snapshot.isDragging ? 0.9 : 1,
                         }}
                       >
-                        <button
+                        <div
                           id={`chapter-${chapter.id}`}
                           onClick={() => openChapter(chapter)}
+                          role="button"
+                          tabIndex={0}
                           style={{
                             display: 'flex', alignItems: 'center', gap: 6, width: '100%',
                             padding: '6px 6px', borderRadius: 6, fontSize: 13, fontWeight: activeTabId === chapter.id ? 600 : 500,
                             background: activeTabId === chapter.id ? F.greenLight : 'transparent',
                             color: activeTabId === chapter.id ? F.green : F.textSoft,
-                            border: 'none', borderLeft: activeTabId === chapter.id ? `2px solid ${F.green}` : '2px solid transparent',
+                            borderTop: 'none', borderRight: 'none', borderBottom: 'none', borderLeft: activeTabId === chapter.id ? `2px solid ${F.green}` : '2px solid transparent',
                             cursor: 'pointer', transition: 'all 0.1s', textAlign: 'left',
                             boxShadow: snapshot.isDragging ? `0 4px 12px rgba(45,90,39,0.15)` : 'none'
                           }}
@@ -175,7 +177,7 @@ export default function ChapterTree({ book }: ChapterTreeProps) {
                               <MoreHorizontal style={{ width: 14, height: 14 }} />
                             </button>
                           </div>
-                        </button>
+                        </div>
                       </div>
                     )}
                   </Draggable>

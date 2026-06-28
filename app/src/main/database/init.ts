@@ -184,17 +184,6 @@ function createTables(): void {
   `)
 
   database.run(`
-    CREATE TABLE IF NOT EXISTS sync_queue (
-      id TEXT PRIMARY KEY,
-      entity_type TEXT NOT NULL,
-      entity_id TEXT NOT NULL,
-      operation TEXT NOT NULL,
-      status TEXT DEFAULT 'pending',
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `)
-
-  database.run(`
     CREATE TABLE IF NOT EXISTS characters (
       id TEXT PRIMARY KEY,
       book_id TEXT NOT NULL,
@@ -748,4 +737,31 @@ function createTables(): void {
       }
     }
   }
+
+  // Restore sync_queue
+  database.run(`
+    CREATE TABLE IF NOT EXISTS sync_queue (
+      id TEXT PRIMARY KEY,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      operation TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+
+  // Phase 5: Version History
+  database.run(`
+    CREATE TABLE IF NOT EXISTS chapter_versions (
+      id TEXT PRIMARY KEY,
+      chapter_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      content TEXT NOT NULL,
+      word_count INTEGER DEFAULT 0,
+      snapshot_type TEXT DEFAULT 'auto',
+      milestone_name TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (chapter_id) REFERENCES chapters(id) ON DELETE CASCADE
+    )
+  `)
 }

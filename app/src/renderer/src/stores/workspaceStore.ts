@@ -117,6 +117,10 @@ interface WorkspaceStore {
     startIndex: number,
     endIndex: number
   ) => Promise<void>
+
+  // Phase 3: Refresh the entire store from the local SQLite DB.
+  // Called after a cloud pull so React sees the new/updated data.
+  refreshFromDb: (userId: string) => Promise<void>
 }
 
 export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
@@ -381,4 +385,35 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     const updates = items.map((item: any, idx: number) => ({ id: item.id, sort_order: idx }))
     await window.api.entities.reorder({ table, items: updates })
   },
+
+  // Phase 3: reload all entities from local SQLite into the React store.
+  refreshFromDb: async (userId: string) => {
+    try {
+      const [books, characters, locations, notes, codex, wiki, organizations, worldRules] = await Promise.all([
+        window.api.books.getAll(userId),
+        window.api.characters?.getAll ? window.api.characters.getAll(userId) : Promise.resolve([]),
+        window.api.locations?.getAll ? window.api.locations.getAll(userId) : Promise.resolve([]),
+        window.api.notes?.getAll ? window.api.notes.getAll(userId) : Promise.resolve([]),
+        window.api.codex?.getAll ? window.api.codex.getAll(userId) : Promise.resolve([]),
+        window.api.wiki?.getAll ? window.api.wiki.getAll(userId) : Promise.resolve([]),
+        window.api.organizations?.getAll ? window.api.organizations.getAll(userId) : Promise.resolve([]),
+        window.api.worldRules?.getAll ? window.api.worldRules.getAll(userId) : Promise.resolve([]),
+      ])
+
+      set({
+        books: (books as any[]) ?? [],
+        characters: (characters as any[]) ?? [],
+        locations: (locations as any[]) ?? [],
+        notes: (notes as any[]) ?? [],
+        codex: (codex as any[]) ?? [],
+        wiki: (wiki as any[]) ?? [],
+        organizations: (organizations as any[]) ?? [],
+        worldRules: (worldRules as any[]) ?? [],
+      })
+      console.log('[Store] Refreshed from local DB after cloud pull.')
+    } catch (e) {
+      console.error('[Store] refreshFromDb failed:', e)
+    }
+  },
 }))
+
