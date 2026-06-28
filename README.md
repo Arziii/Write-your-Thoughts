@@ -1,4 +1,4 @@
-# Write Your Thoughts (v2.0.0)
+# Write Your Thoughts (v1.0.0)
 
 A desktop-first writing software designed for authors, combining offline reliability with cloud synchronization and intelligent AI assistance. Built with Electron, React, and TypeScript.
 
@@ -92,7 +92,7 @@ Detailed documentation about the architecture and specific systems can be found 
 - [Sync System](docs/SYNC_SYSTEM.md)
 - [Authentication System](docs/AUTH_SYSTEM.md)
 - [UI/UX Guidelines](docs/UI_UX.md)
-- **[Release Notes](RELEASE_NOTES.md)** - *Changelogs and update history (v2.0.0+).*
+- **[Release Notes](RELEASE_NOTES.md)** - *Changelogs and update history.*
 - **[Product Roadmap](ROADMAP.md)** - *Planned future updates including AI Continuity, Visual Timelines, and Export Engine.*
 
 ## License
