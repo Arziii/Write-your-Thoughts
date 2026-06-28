@@ -18,7 +18,8 @@ Synchronization occurs automatically in the background via a sophisticated 5-Pha
 - **Supabase Storage:** Files are written to the local filesystem first. In the background, they are uploaded to a Supabase Storage bucket, and a `cloud_url` is returned and saved.
 
 ### Phase 3: Multi-Device Support (Cloud → Local)
-- **Initial Pull:** Upon app launch, the system checks the `updated_at` timestamps of local tables and pulls any newer records from the cloud to update the local SQLite database.
+- **Smart Login Restore:** Upon a fresh login, the system compares the timestamp of your newest local file against your most recent complete cloud backup. If the cloud is strictly newer, it intelligently downloads and restores the entire `write-your-thoughts.db` file to fully hydrate your workspace instantly.
+- **Incremental Pull:** During normal boot, the system checks the `updated_at` timestamps of local tables and pulls any missing individual records from the cloud.
 - **Realtime Websockets:** The app uses Supabase Realtime Channels. When an edit is made on Device A, Device B receives a WebSocket payload and silently merges the update into its local database, triggering a UI refresh.
 
 ### Phase 4: Workspace State Sync

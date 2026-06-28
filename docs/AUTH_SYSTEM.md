@@ -12,13 +12,15 @@ Supabase Auth
 
 - Session persistence 
 
-- Password reset 
+- Password reset via Email Deep Linking (`wyt://auth/reset-password`)
+
+- Automatic workspace hydration on sign-in
+
+- Global React state authentication markers (`isFreshLogin`) for Strict-Mode resilience
 
 - Remember device 
 
-- Logout everywhere 
-
-## **Future Support** 
+- Logout everywhere
 
 - Google login 
 
