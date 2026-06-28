@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { useUserStore } from '../../stores/userStore'
 import { useToastStore } from '../../stores/toastStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
-import { Settings, Key, Palette, Bot, Loader2, ArrowLeft, Download, Book, Puzzle, Cloud, UploadCloud, DownloadCloud } from 'lucide-react'
+import { Settings, Key, Palette, Bot, Loader2, ArrowLeft, Download, Book, Puzzle, Cloud, UploadCloud, DownloadCloud, User } from 'lucide-react'
 import ExportModal from '../../components/books/ExportModal'
+import { authService } from '../../services/authService'
 import { useEffect } from 'react'
 
 export interface PluginInfo {
@@ -23,6 +24,7 @@ export default function SettingsPage() {
   const { addToast } = useToastStore()
 
   const [theme, setTheme] = useState<'light' | 'dark'>(settings?.theme || 'light')
+  const [displayName, setDisplayName] = useState(user?.user_metadata?.display_name || '')
   const [aiProvider, setAiProvider] = useState(settings?.ai_provider || 'openai')
   const [aiApiKey, setAiApiKey] = useState(settings?.ai_api_key || '')
   const [aiStylePrompt, setAiStylePrompt] = useState(settings?.ai_style_prompt || '')
@@ -36,7 +38,10 @@ export default function SettingsPage() {
       setAiStylePrompt(settings.ai_style_prompt || '')
       setPreserveFormatting(settings.preserve_formatting ?? true)
     }
-  }, [settings])
+    if (user) {
+      setDisplayName(user.user_metadata?.display_name || '')
+    }
+  }, [settings, user])
 
   // Note: App.tsx handles the actual document.documentElement.classList based on useUserStore.
   // We will instantly update the store when the toggle is clicked.
@@ -68,6 +73,13 @@ export default function SettingsPage() {
         lineSpacing: settings?.line_spacing || 1.8,
       })
       setSettings(updated as never)
+
+      // Update display name if changed
+      if (displayName !== (user?.user_metadata?.display_name || '')) {
+        await authService.updateProfile(displayName)
+        const updatedLocalUser = await window.api.auth.getUser(user.id)
+        useUserStore.getState().setLocalUser(updatedLocalUser as any)
+      }
 
       // Sync to cloud in background
       import('../../services/syncService').then(({ syncService }) => {
@@ -104,7 +116,30 @@ export default function SettingsPage() {
 
         {/* Appearance Section */}
         <section className="space-y-4">
-          <h2 className="text-sm font-semibold text-surface-300 uppercase tracking-wider flex items-center gap-2">
+          {/* Account Profile Settings */}
+          <div className="bg-surface-900 border border-surface-800 rounded-xl p-6">
+            <h2 className="text-lg font-medium text-surface-100 flex items-center gap-2 mb-4">
+              <User className="w-5 h-5 text-accent-400" />
+              Account Profile
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-surface-300 mb-1">
+                  Display Name
+                </label>
+                <input
+                  type="text"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="Enter your pen name"
+                  className="w-full bg-surface-950 border border-surface-700 text-surface-50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-accent-500 focus:border-transparent outline-none transition-all placeholder:text-surface-600"
+                />
+                <p className="text-surface-500 text-xs mt-1">This name is used on your dashboard and across your books.</p>
+              </div>
+            </div>
+          </div>
+
+          <h2 className="text-lg font-medium text-surface-100 flex items-center gap-2 border-b border-surface-800 pb-2">
             <Palette className="w-4 h-4 text-accent-400" />
             Appearance
           </h2>
@@ -118,12 +153,31 @@ export default function SettingsPage() {
                 onClick={async () => {
                   const newTheme = theme === 'light' ? 'dark' : 'light'
                   setTheme(newTheme)
-                  if (settings && user) {
+                  
+                  if (user) {
+                    const currentSettings = settings || {
+                      theme: 'light',
+                      ai_provider: 'openai',
+                      ai_api_key: '',
+                      ai_style_prompt: '',
+                      preserve_formatting: true,
+                      editor_font: 'Georgia',
+                      font_size: 16,
+                      line_spacing: 1.8,
+                    }
+                    
+                    const updatedSettings = { ...currentSettings, theme: newTheme }
                     // Instantly apply globally
-                    setSettings({ ...settings, theme: newTheme })
+                    setSettings(updatedSettings as never)
+                    
                     try {
                       const updated = await window.api.settings.update({ userId: user.id, theme: newTheme })
                       setSettings(updated as never)
+                      
+                      // Also sync the theme change instantly to cloud
+                      import('../../services/syncService').then(({ syncService }) => {
+                        syncService.syncSettingsToCloud(updated as any).catch(e => console.error('Cloud sync failed', e))
+                      })
                     } catch (e) {
                       console.error('Failed to save theme instantly', e)
                     }

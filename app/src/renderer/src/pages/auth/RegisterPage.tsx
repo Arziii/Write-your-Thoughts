@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff, Loader2, BookOpen } from 'lucide-react'
 import { authService } from '../../services/authService'
 import LogoImage from '../../assets/Logo.ico'
@@ -14,8 +14,7 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
-  const { addToast } = useToastStore()
+  const navigate = useNavigate()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -32,47 +31,33 @@ export default function RegisterPage() {
 
     setIsLoading(true)
     try {
-      await authService.signUp(email, password, displayName)
-      setSuccess(true)
-      addToast('Account created! Check your email to verify.', 'success', 5000)
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to create account'
+      const data = await authService.signUp(email, password, displayName)
+      // Supabase returns session=null if email confirmation is required
+      if (!data?.session) {
+        navigate('/verify-email')
+      } else {
+        // If email confirmation is off, they are logged in directly
+        navigate('/')
+      }
+    } catch (err: any) {
+      console.error('[Register Error]', err)
+      let message = err?.message || 'Failed to create account'
+      if (message === '{}') {
+        message = 'Email could not be sent. This usually happens if you hit a rate limit, or if your SMTP provider rejected the email (e.g. sending to an unauthorized email address).'
+      }
       setError(message)
     } finally {
       setIsLoading(false)
     }
   }
 
-  if (success) {
-    return (
-      <div className="flex h-full items-center justify-center bg-surface-950">
-        <div className="w-full max-w-md text-center animate-fade-in px-8">
-          <div className="w-16 h-16 rounded-full bg-success-500/10 flex items-center justify-center mx-auto mb-4">
-            <BookOpen className="w-8 h-8 text-success-400" />
-          </div>
-          <h2 className="text-2xl font-bold text-surface-50 mb-2">Almost there!</h2>
-          <p className="text-surface-400 mb-6">
-            We sent a verification link to <strong className="text-surface-200">{email}</strong>. 
-            Please check your inbox and click the link to activate your account.
-          </p>
-          <Link
-            to="/login"
-            className="inline-flex items-center px-5 py-2.5 bg-accent-600 hover:bg-accent-500 text-white font-medium rounded-lg text-sm transition-all"
-          >
-            Go to Sign In
-          </Link>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div 
-      className="flex h-full relative"
+      className="flex h-full relative font-sans"
       style={{ backgroundImage: `url(${LoginBg})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
     >
       {/* Global dark overlay to ensure readability everywhere */}
-      <div className="absolute inset-0 bg-surface-950/75 backdrop-blur-[2px]" />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
       {/* Left decorative panel */}
       <div className="hidden lg:flex lg:flex-1 flex-col justify-between p-12 border-r border-surface-800/30 relative z-10">

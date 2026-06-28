@@ -8,7 +8,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Charm', 'cursive'],
+        sans: ['DM Sans', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        charm: ['Charm', 'cursive'],
         serif: ['Georgia', 'serif'],
         mono: ['JetBrains Mono', 'monospace'],
       },
@@ -28,18 +29,18 @@ export default {
           900: 'hsl(var(--surface-900))',
           950: 'hsl(var(--surface-950))',
         },
-        // Accent (Light blue matching screenshot)
+        // Accent (Forest Green matching theme)
         accent: {
-          50: 'hsl(214, 100%, 97%)',
-          100: 'hsl(214, 100%, 94%)',
-          200: 'hsl(214, 96%, 88%)',
-          300: 'hsl(214, 94%, 78%)',
-          400: 'hsl(214, 90%, 65%)',
-          500: 'hsl(214, 84%, 55%)',
-          600: 'hsl(214, 82%, 48%)',
-          700: 'hsl(214, 80%, 40%)',
-          800: 'hsl(214, 76%, 32%)',
-          900: 'hsl(214, 70%, 26%)',
+          50: 'hsl(142, 100%, 97%)',
+          100: 'hsl(142, 100%, 94%)',
+          200: 'hsl(142, 96%, 88%)',
+          300: 'hsl(142, 94%, 78%)',
+          400: 'hsl(142, 90%, 65%)',
+          500: 'hsl(142, 84%, 55%)',
+          600: 'hsl(142, 82%, 48%)',
+          700: 'hsl(142, 80%, 40%)',
+          800: 'hsl(142, 76%, 32%)',
+          900: 'hsl(142, 70%, 26%)',
         },
         // Success
         success: {

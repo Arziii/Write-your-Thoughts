@@ -1,16 +1,21 @@
 import { Minus, Square, X, PanelLeft } from 'lucide-react'
+import { useLocation } from 'react-router-dom'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { cn } from '../../utils'
 import LogoImage from '../../assets/Logo.ico'
 
 export default function TitleBar() {
   const { currentBook, activeChapter, panelState, toggleSidebar } = useWorkspaceStore()
+  const location = useLocation()
+  const isEditorRoute = location.pathname.startsWith('/book')
 
-  const title = activeChapter
-    ? `${activeChapter.title} — ${currentBook?.title ?? ''}`
-    : currentBook
-      ? currentBook.title
-      : 'Write Your Thoughts'
+  const title = isEditorRoute
+    ? (activeChapter
+      ? `${activeChapter.title} — ${currentBook?.title ?? ''}`
+      : currentBook
+        ? currentBook.title
+        : 'Write Your Thoughts')
+    : 'Write Your Thoughts'
 
   return (
     <div className="titlebar-drag flex items-center h-9 bg-surface-900 border-b border-surface-800 flex-shrink-0 select-none">

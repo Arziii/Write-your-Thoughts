@@ -35,7 +35,8 @@ export const syncService = {
    * last-modified timestamp. Returns null if no backup exists yet.
    */
   async getCloudBackupInfo(): Promise<{ updatedAt: Date | null; size: number } | null> {
-    const { data: userData } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    const userData = { user: session?.user }
     if (!userData.user) return null
 
     try {
@@ -65,7 +66,9 @@ export const syncService = {
 
       const chapters = await window.api.chapters.getByBook(localBookId)
       
-      const { data: userData, error: userError } = await supabase.auth.getUser()
+      const { data: { session } } = await supabase.auth.getSession()
+      const userData = { user: session?.user }
+      const userError = !session?.user ? new Error('Not logged in') : null
       if (userError || !userData.user) throw new Error('Must be logged in to publish')
 
       // 1. Create cloud book
@@ -119,7 +122,8 @@ export const syncService = {
   },
 
   async lockChapter(cloudChapterId: string) {
-    const { data: userData } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    const userData = { user: session?.user }
     if (!userData.user) return false
 
     const { error } = await supabase
@@ -133,7 +137,8 @@ export const syncService = {
   },
 
   async unlockChapter(cloudChapterId: string) {
-    const { data: userData } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    const userData = { user: session?.user }
     if (!userData.user) return false
 
     const { error } = await supabase
@@ -146,7 +151,8 @@ export const syncService = {
   },
 
   async getSharedBooks() {
-    const { data: userData } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    const userData = { user: session?.user }
     if (!userData.user) return []
 
     // Step 1: Get book IDs where the user is a collaborator
@@ -178,7 +184,8 @@ export const syncService = {
   },
 
   async syncSettingsToCloud(localSettings: import('../types').Settings) {
-    const { data: userData } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    const userData = { user: session?.user }
     if (!userData.user) return { success: false }
 
     const { error } = await supabase
@@ -197,16 +204,17 @@ export const syncService = {
   },
 
   async fetchCloudSettings() {
-    const { data: userData } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    const userData = { user: session?.user }
     if (!userData.user) return { success: false, settings: null }
 
     const { data, error } = await supabase
       .from('cloud_settings')
       .select('settings')
       .eq('user_id', userData.user.id)
-      .single()
+      .maybeSingle()
 
-    if (error && error.code !== 'PGRST116') { // PGRST116 = not found
+    if (error) {
       console.error('Failed to fetch cloud settings:', error)
       return { success: false, error: error.message, settings: null }
     }
@@ -215,7 +223,8 @@ export const syncService = {
   },
 
   async backupDatabaseToCloud() {
-    const { data: userData } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    const userData = { user: session?.user }
     if (!userData.user) return { success: false, error: 'Not logged in' }
 
     try {
@@ -239,7 +248,8 @@ export const syncService = {
   },
 
   async restoreDatabaseFromCloud() {
-    const { data: userData } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    const userData = { user: session?.user }
     if (!userData.user) return { success: false, error: 'Not logged in' }
 
     try {
@@ -262,7 +272,8 @@ export const syncService = {
   },
 
   async processSyncQueue() {
-    const { data: userData } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    const userData = { user: session?.user }
     if (!userData.user) return { success: false, error: 'Not logged in' }
 
     try {
@@ -348,7 +359,8 @@ export const syncService = {
    *     return a list of conflict notices to display as toasts.
    */
   async performInitialPull(): Promise<{ success: boolean; conflicts: string[]; recordsPulled: number }> {
-    const { data: userData } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    const userData = { user: session?.user }
     if (!userData.user) return { success: false, conflicts: [], recordsPulled: 0 }
 
     const conflicts: string[] = []

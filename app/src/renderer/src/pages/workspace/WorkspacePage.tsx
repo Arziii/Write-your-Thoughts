@@ -9,7 +9,7 @@ import type { Book, Chapter, WorkspaceState } from '../../types'
 
 export default function WorkspacePage() {
   const { bookId, chapterId } = useParams()
-  const { user } = useUserStore()
+  const { user, isFreshLogin } = useUserStore()
   const {
     activeTabId, currentBook, setCurrentBook, setChapters,
     setCharacters, setLocations, setNotes, setTimelineEvents,
@@ -55,8 +55,8 @@ export default function WorkspacePage() {
           } catch {}
         }
 
-        // Restore open book
-        if (state.current_book_id && !bookId) {
+        // Restore open book only if not a fresh login
+        if (state.current_book_id && !bookId && !isFreshLogin) {
           await loadBookAndChapter(state.current_book_id, state.current_chapter_id ?? undefined, tabIdsToRestore)
           if (state.current_book_id) {
             navigate(`/book/${state.current_book_id}`, { replace: true })

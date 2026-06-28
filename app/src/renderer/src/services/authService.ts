@@ -16,6 +16,7 @@ export const authService = {
         id: data.user.id,
         email: data.user.email!,
         displayName: data.user.user_metadata?.display_name,
+        avatarUrl: data.user.user_metadata?.avatar_url,
       })
 
       // ── Smart cloud restore ─────────────────────────────────────────────
@@ -84,6 +85,7 @@ export const authService = {
       password,
       options: {
         data: { display_name: displayName },
+        emailRedirectTo: 'wyt://auth/callback',
       },
     })
     if (error) throw error
@@ -114,11 +116,57 @@ export const authService = {
     return user
   },
 
-  onAuthStateChange(callback: (user: import('@supabase/supabase-js').User | null) => void) {
-    return supabase.auth.onAuthStateChange((_event, session) => {
-      callback(session?.user ?? null)
+  onAuthStateChange(callback: (event: string, user: import('@supabase/supabase-js').User | null) => void) {
+    return supabase.auth.onAuthStateChange((event, session) => {
+      callback(event, session?.user ?? null)
     })
   },
+
+  async setSession(access_token: string, refresh_token: string) {
+    return await supabase.auth.setSession({ access_token, refresh_token })
+  },
+
+  async resetPasswordForEmail(email: string) {
+    return await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: 'wyt://auth/reset-password',
+    })
+  },
+
+  async updatePassword(password: string) {
+    return await supabase.auth.updateUser({ password })
+  },
+
+  async updateProfile(displayName: string) {
+    const { data, error } = await supabase.auth.updateUser({
+      data: { display_name: displayName }
+    })
+    if (error) throw error
+
+    if (data.user) {
+      await window.api.auth.storeUser({
+        id: data.user.id,
+        email: data.user.email!,
+        displayName: displayName,
+      })
+    }
+    return data
+  },
+
+  async updateDashboardCover(coverUrl: string | null) {
+    const { data, error } = await supabase.auth.updateUser({
+      data: { dashboard_cover: coverUrl }
+    })
+    if (error) throw error
+    return data
+  },
+
+  async updateAvatar(avatarUrl: string | null) {
+    const { data, error } = await supabase.auth.updateUser({
+      data: { avatar_url: avatarUrl }
+    })
+    if (error) throw error
+    return data
+  }
 }
 
 export type { User }

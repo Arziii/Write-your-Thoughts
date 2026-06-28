@@ -10,10 +10,13 @@ export async function uploadImage(
   type: 'books' | 'characters' | 'locations',
   entityId: string
 ): Promise<string> {
-  const { data: userData } = await supabase.auth.getUser()
+  const { data: { session } } = await supabase.auth.getSession()
+  const userData = { user: session?.user }
   if (!userData.user) throw new Error('Not authenticated')
 
-  const ext = file.name.split('.').pop() ?? 'jpg'
+  let ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
+  if (ext === 'jfif') ext = 'jpeg'
+  
   const path = `${userData.user.id}/${type}/${entityId}.${ext}`
 
   const { error } = await supabase.storage
@@ -36,7 +39,8 @@ export async function deleteImage(
   entityId: string,
   ext: string = 'jpg'
 ): Promise<void> {
-  const { data: userData } = await supabase.auth.getUser()
+  const { data: { session } } = await supabase.auth.getSession()
+  const userData = { user: session?.user }
   if (!userData.user) return
 
   const extensions = ['jpg', 'jpeg', 'png', 'webp', 'gif']
