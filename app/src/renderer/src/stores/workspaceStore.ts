@@ -21,6 +21,7 @@ interface WorkspaceStore {
   addChapter: (chapter: Chapter) => void
   updateChapter: (chapter: Chapter) => void
   removeChapter: (chapterId: string) => void
+  reorderChapters: (startIndex: number, endIndex: number) => Promise<void>
 
   // Characters
   characters: Character[]
@@ -102,6 +103,24 @@ interface WorkspaceStore {
   // Focus mode
   focusMode: boolean
   setFocusMode: (mode: boolean) => void
+
+  // In-memory drafts: unsaved form data keyed by entityId.
+  // Survives tab switching because it lives in the store, not component state.
+  drafts: Record<string, Record<string, any>>
+  setDraft: (entityId: string, data: Record<string, any>) => void
+  clearDraft: (entityId: string) => void
+
+  // Drag and Drop
+  reorderEntity: (
+    stateKey: 'characters' | 'locations' | 'notes' | 'codex' | 'wiki' | 'organizations' | 'worldRules',
+    table: string,
+    startIndex: number,
+    endIndex: number
+  ) => Promise<void>
+
+  // Phase 3: Refresh the entire store from the local SQLite DB.
+  // Called after a cloud pull so React sees the new/updated data.
+  refreshFromDb: (userId: string) => Promise<void>
 }
 
 export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
@@ -142,6 +161,19 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       activeChapter: s.activeChapter?.id === chapterId ? null : s.activeChapter
     }
   }),
+  reorderChapters: async (startIndex, endIndex) => {
+    const { chapters } = get()
+    const result = Array.from(chapters)
+    const [removed] = result.splice(startIndex, 1)
+    result.splice(endIndex, 0, removed)
+    
+    // Update local state optimisticly
+    set({ chapters: result })
+
+    // Call IPC to save order
+    const updates = result.map((ch, idx) => ({ id: ch.id, order: idx }))
+    await window.api.chapters.reorder(updates)
+  },
 
   // Characters
   characters: [],
@@ -329,4 +361,59 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   // Focus mode
   focusMode: false,
   setFocusMode: (focusMode) => set({ focusMode }),
+
+  // In-memory drafts
+  drafts: {},
+  setDraft: (entityId, data) =>
+    set((s) => ({ drafts: { ...s.drafts, [entityId]: data } })),
+  clearDraft: (entityId) =>
+    set((s) => {
+      const { [entityId]: _, ...rest } = s.drafts
+      return { drafts: rest }
+    }),
+
+  reorderEntity: async (stateKey, table, startIndex, endIndex) => {
+    const state = get()
+    const items = Array.from(state[stateKey] as any[])
+    const [removed] = items.splice(startIndex, 1)
+    items.splice(endIndex, 0, removed)
+
+    // Optimistic update
+    set({ [stateKey]: items } as any)
+
+    // Sync to backend
+    const updates = items.map((item: any, idx: number) => ({ id: item.id, sort_order: idx }))
+    await window.api.entities.reorder({ table, items: updates })
+  },
+
+  // Phase 3: reload all entities from local SQLite into the React store.
+  refreshFromDb: async (userId: string) => {
+    try {
+      const [books, characters, locations, notes, codex, wiki, organizations, worldRules] = await Promise.all([
+        window.api.books.getAll(userId),
+        window.api.characters?.getAll ? window.api.characters.getAll(userId) : Promise.resolve([]),
+        window.api.locations?.getAll ? window.api.locations.getAll(userId) : Promise.resolve([]),
+        window.api.notes?.getAll ? window.api.notes.getAll(userId) : Promise.resolve([]),
+        window.api.codex?.getAll ? window.api.codex.getAll(userId) : Promise.resolve([]),
+        window.api.wiki?.getAll ? window.api.wiki.getAll(userId) : Promise.resolve([]),
+        window.api.organizations?.getAll ? window.api.organizations.getAll(userId) : Promise.resolve([]),
+        window.api.worldRules?.getAll ? window.api.worldRules.getAll(userId) : Promise.resolve([]),
+      ])
+
+      set({
+        books: (books as any[]) ?? [],
+        characters: (characters as any[]) ?? [],
+        locations: (locations as any[]) ?? [],
+        notes: (notes as any[]) ?? [],
+        codex: (codex as any[]) ?? [],
+        wiki: (wiki as any[]) ?? [],
+        organizations: (organizations as any[]) ?? [],
+        worldRules: (worldRules as any[]) ?? [],
+      })
+      console.log('[Store] Refreshed from local DB after cloud pull.')
+    } catch (e) {
+      console.error('[Store] refreshFromDb failed:', e)
+    }
+  },
 }))
+

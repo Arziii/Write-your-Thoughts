@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 export function registerCharacterHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('characters:getByBook', async (_event, bookId: string) => {
-    return dbAll('SELECT * FROM characters WHERE book_id = ? ORDER BY name ASC', [bookId])
+    return dbAll('SELECT * FROM characters WHERE book_id = ? ORDER BY sort_order ASC, name ASC', [bookId])
   })
 
   ipcMain.handle('characters:getById', async (_event, id: string) => {

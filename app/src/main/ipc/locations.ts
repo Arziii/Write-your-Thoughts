@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 export function registerLocationHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('locations:getByBook', async (_event, bookId: string) => {
-    return dbAll('SELECT * FROM locations WHERE book_id = ? ORDER BY name ASC', [bookId])
+    return dbAll('SELECT * FROM locations WHERE book_id = ? ORDER BY sort_order ASC, name ASC', [bookId])
   })
 
   ipcMain.handle('locations:getById', async (_event, id: string) => {

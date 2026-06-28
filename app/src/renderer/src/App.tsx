@@ -2,6 +2,8 @@ import { useEffect } from 'react'
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { authService } from './services/authService'
 import { useUserStore } from './stores/userStore'
+import { useWorkspaceStore } from './stores/workspaceStore'
+import { useToastStore } from './stores/toastStore'
 import LoginPage from './pages/auth/LoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import WorkspacePage from './pages/workspace/WorkspacePage'
@@ -11,7 +13,11 @@ import ToastContainer from './components/ui/ToastContainer'
 
 function App() {
   const { user, isLoading, setUser, setLocalUser, setLoading, setSettings } = useUserStore()
+  const theme = useUserStore(state => state.settings?.theme)
+  const { refreshFromDb } = useWorkspaceStore()
+  const { addToast } = useToastStore()
   const navigate = useNavigate()
+
 
   useEffect(() => {
     // Check existing session on app launch
@@ -26,9 +32,43 @@ function App() {
         window.api.settings.get(session.user.id).then(async (localSettings) => {
           if (localSettings) setSettings(localSettings as never)
 
-          // Background sync with cloud
           try {
             const { syncService } = await import('./services/syncService')
+
+            // ── Phase 1: Push any pending local changes up ──────────────
+            await syncService.processSyncQueue()
+
+            // ── Phase 3: Pull cloud data down into local SQLite ─────────
+            const pullResult = await syncService.performInitialPull()
+            if (pullResult.success && pullResult.recordsPulled > 0) {
+              // Refresh the React store from the freshly-updated SQLite DB
+              await refreshFromDb(session.user.id)
+              addToast(`Synced ${pullResult.recordsPulled} records from cloud`, 'success')
+            }
+            // Show conflict toasts if any
+            for (const conflict of pullResult.conflicts) {
+              addToast(conflict, 'info')
+            }
+
+            // ── Phase 3 & 4: Subscribe to Realtime for live updates ─────────
+            syncService.subscribeToRealtime(async (entityType, row, eventType) => {
+              if (eventType === 'DELETE') return // deletes are rare; skip for now
+              
+              if (entityType === 'workspace_state') {
+                await window.api.editor.saveWorkspaceState({
+                  userId: session.user.id,
+                  currentBookId: row.current_book_id,
+                  currentChapterId: row.current_chapter_id,
+                  openTabs: typeof row.open_tabs === 'string' ? JSON.parse(row.open_tabs) : row.open_tabs,
+                  panelState: typeof row.panel_state === 'string' ? JSON.parse(row.panel_state) : row.panel_state
+                })
+              } else {
+                await window.api.database.upsertCloudRow({ entityType, row })
+              }
+              await refreshFromDb(session.user.id)
+            })
+
+            // ── Settings sync ────────────────────────────────────────────
             const result = await syncService.fetchCloudSettings()
             if (result.success && result.settings) {
               const updated = await window.api.settings.update({
@@ -47,7 +87,7 @@ function App() {
               setSettings(updated as never)
             }
           } catch (e) {
-            console.error('Failed to sync cloud settings on boot', e)
+            console.error('Failed to sync on boot', e)
           } finally {
             setLoading(false)
           }
@@ -58,27 +98,29 @@ function App() {
     })
 
     // Listen for auth state changes
-    const { data: { subscription } } = authService.onAuthStateChange((u) => {
+    const { data: { subscription } } = authService.onAuthStateChange(async (u) => {
       setUser(u)
-      if (!u) navigate('/login')
+      if (!u) {
+        // Unsubscribe from Realtime on logout
+        const { syncService } = await import('./services/syncService')
+        syncService.unsubscribeFromRealtime()
+        navigate('/login')
+      }
     })
-
-    // Setup 5-minute auto-backup interval
-    const backupInterval = setInterval(() => {
-      authService.getSession().then((session) => {
-        if (session?.user) {
-          import('./services/syncService').then(({ syncService }) => {
-            syncService.backupDatabaseToCloud().catch(e => console.error('Auto-backup failed:', e))
-          })
-        }
-      })
-    }, 5 * 60 * 1000)
 
     return () => {
       subscription.unsubscribe()
-      clearInterval(backupInterval)
     }
   }, [])
+
+  // Apply theme class to document
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [theme])
 
   if (isLoading) {
     return (

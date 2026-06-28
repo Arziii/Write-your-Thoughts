@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 export function registerOrganizationsHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('organizations:getByBook', async (_event, bookId: string) => {
-    return dbAll('SELECT * FROM organizations WHERE book_id = ? ORDER BY updated_at DESC', [bookId])
+    return dbAll('SELECT * FROM organizations WHERE book_id = ? ORDER BY sort_order ASC, updated_at DESC', [bookId])
   })
 
   ipcMain.handle('organizations:getById', async (_event, id: string) => {

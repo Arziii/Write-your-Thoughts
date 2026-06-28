@@ -12,6 +12,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isRestoring, setIsRestoring] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { addToast } = useToastStore()
 
@@ -21,14 +22,21 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
-      await authService.signIn(email, password)
-      addToast('Welcome back!', 'success')
+      const result = await authService.signIn(email, password)
+      if (result.restoredFromCloud) {
+        setIsRestoring(true)
+        addToast('Data restored from cloud. Loading your workspace...', 'success')
+        // Reload so the freshly restored SQLite is picked up from scratch
+        setTimeout(() => window.location.reload(), 1200)
+      } else {
+        addToast('Welcome back!', 'success')
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to sign in'
       setError(message)
-    } finally {
       setIsLoading(false)
     }
+    // Don't set isLoading(false) on success if reloading — the page will reload
   }
 
   return (
@@ -145,7 +153,7 @@ export default function LoginPage() {
               {isLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Signing in...
+                  {isRestoring ? 'Restoring data...' : 'Signing in...'}
                 </>
               ) : (
                 'Sign in'

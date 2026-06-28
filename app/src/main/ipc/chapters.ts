@@ -29,11 +29,10 @@ export function registerChapterHandlers(ipcMain: IpcMain): void {
        VALUES (?, ?, ?, '', 0, ?, ?, ?)`,
       [id, data.bookId, data.title, nextOrder, now, now]
     )
-    dbRun(
-      `INSERT INTO chapter_versions (id, chapter_id, version_number, content, source, created_at)
-       VALUES (?, ?, 1, '', 'manual', ?)`,
-      [uuidv4(), id, now]
-    )
+    
+    // We don't automatically insert a version on chapter creation anymore, because 
+    // empty chapters don't need a snapshot until the user types something.
+    
     dbRun(
       `INSERT INTO sync_queue (id, entity_type, entity_id, operation, status, created_at)
        VALUES (?, 'chapter', ?, 'create', 'pending', ?)`,
@@ -107,55 +106,70 @@ export function registerChapterHandlers(ipcMain: IpcMain): void {
 
   ipcMain.handle('chapters:getVersions', async (_event, chapterId: string) => {
     return dbAll(
-      'SELECT * FROM chapter_versions WHERE chapter_id = ? ORDER BY version_number DESC',
+      'SELECT * FROM chapter_versions WHERE chapter_id = ? ORDER BY created_at DESC',
       [chapterId]
     )
   })
 
   ipcMain.handle('chapters:saveVersion', async (_event, data: {
-    chapterId: string; content: string; source: string
+    chapterId: string; userId: string; content: string; wordCount: number; snapshotType: 'auto' | 'milestone'; milestoneName?: string
   }) => {
     const now = new Date().toISOString()
-    const maxVerRow = dbGet(
-      'SELECT MAX(version_number) as max_ver FROM chapter_versions WHERE chapter_id = ?',
-      [data.chapterId]
-    )
-    const nextVer = ((maxVerRow?.max_ver as number | null) ?? 0) + 1
     const id = uuidv4()
+    
+    // Check if we need to prune old 'auto' snapshots to prevent SQLite bloat
+    if (data.snapshotType === 'auto') {
+      const autos = dbAll('SELECT id FROM chapter_versions WHERE chapter_id = ? AND snapshot_type = ? ORDER BY created_at DESC', [data.chapterId, 'auto'])
+      if (autos.length >= 20) {
+        // Keep only the newest 19, delete the rest
+        const toDelete = autos.slice(19).map((r: any) => r.id)
+        for (const delId of toDelete) {
+          dbRun('DELETE FROM chapter_versions WHERE id = ?', [delId])
+        }
+      }
+    }
+
     dbRun(
-      `INSERT INTO chapter_versions (id, chapter_id, version_number, content, source, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [id, data.chapterId, nextVer, data.content, data.source, now]
+      `INSERT INTO chapter_versions (id, chapter_id, user_id, content, word_count, snapshot_type, milestone_name, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, data.chapterId, data.userId, data.content, data.wordCount, data.snapshotType, data.milestoneName || null, now]
     )
+
+    // If it's a milestone, queue it for cloud sync
+    if (data.snapshotType === 'milestone') {
+      dbRun(
+        `INSERT INTO sync_queue (id, entity_type, entity_id, operation, status, created_at)
+         VALUES (?, 'chapter_version', ?, 'create', 'pending', ?)`,
+        [uuidv4(), id, now]
+      )
+    }
+
     return dbGet('SELECT * FROM chapter_versions WHERE id = ?', [id])
   })
 
   ipcMain.handle('chapters:restoreVersion', async (_event, data: {
-    chapterId: string; versionId: string
+    chapterId: string; versionId: string; userId: string
   }) => {
     const version = dbGet('SELECT * FROM chapter_versions WHERE id = ?', [data.versionId])
     if (!version) return { success: false, error: 'Version not found' }
 
     const now = new Date().toISOString()
     const content = version.content as string
-    const wordCount = content.replace(/<[^>]*>/g, '').trim().split(/\s+/).filter(Boolean).length
+    const wordCount = version.word_count as number
 
     dbRun(
       'UPDATE chapters SET content = ?, word_count = ?, updated_at = ?, synced = 0 WHERE id = ?',
       [content, wordCount, now, data.chapterId]
     )
-
-    const maxVerRow = dbGet(
-      'SELECT MAX(version_number) as max_ver FROM chapter_versions WHERE chapter_id = ?',
-      [data.chapterId]
-    )
-    const nextVer = ((maxVerRow?.max_ver as number | null) ?? 0) + 1
+    
     dbRun(
-      `INSERT INTO chapter_versions (id, chapter_id, version_number, content, source, created_at)
-       VALUES (?, ?, ?, ?, 'restore', ?)`,
-      [uuidv4(), data.chapterId, nextVer, content, now]
+      `INSERT INTO sync_queue (id, entity_type, entity_id, operation, status, created_at)
+       VALUES (?, 'chapter', ?, 'update', 'pending', ?)`,
+      [uuidv4(), data.chapterId, now]
     )
 
-    return { success: true }
+    // Create an auto snapshot of the current state before restore (just in case they regret the restore!)
+    // Wait, let's just let the normal autosave handle it. Restoring overwrites the content directly.
+    return { success: true, restoredContent: content, restoredWordCount: wordCount }
   })
 }

@@ -12,11 +12,13 @@ import WikiEditor from '../../components/world/WikiEditor'
 import OrganizationEditor from '../../components/world/OrganizationEditor'
 import WorldRuleEditor from '../../components/world/WorldRuleEditor'
 import CalendarView from '../../components/world/CalendarView'
+import VerseTimelineView from '../../components/world/VerseTimelineView'
 import CommentSidebar from '../../components/editor/CommentSidebar'
 import EmotionPanel from '../../components/editor/EmotionPanel'
 import ContinuityPanel from '../../components/editor/ContinuityPanel'
 import StyleIntelligencePanel from '../../components/editor/StyleIntelligencePanel'
 import StoryIntelligenceView from '../../components/world/StoryIntelligenceView'
+import GlobalRelationshipManager from '../../components/world/GlobalRelationshipManager'
 import type { Chapter } from '../../types'
 import { BookOpen, PanelLeft, Sparkles, Heart, Shield, MessageSquare, Feather } from 'lucide-react'
 
@@ -30,8 +32,12 @@ export default function EditorView() {
 
   // Sync wordcount
   useEffect(() => {
-    setWordCount(activeChapter?.word_count ?? 0)
-  }, [activeChapter?.id])
+    if (activeTabId && tabs.find(t => t.id === activeTabId)?.type === 'chapter') {
+      setWordCount(activeChapter?.word_count ?? 0)
+    } else {
+      setWordCount(0)
+    }
+  }, [activeTabId, activeChapter?.id])
 
   const [isCommentSidebarOpen, setIsCommentSidebarOpen] = useState(false)
   const [isEmotionPanelOpen, setIsEmotionPanelOpen] = useState(false)
@@ -86,18 +92,26 @@ export default function EditorView() {
   if (!activeTab) return null
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       {/* Chapter tabs */}
       <EditorTabs />
 
       {/* Chapter header */}
-      <div className="flex items-center gap-4 px-4 py-2 bg-surface-900 border-b border-surface-800 flex-shrink-0">
+      <div 
+        className="flex items-center gap-4 px-4 py-2 flex-shrink-0"
+        style={{
+          background: 'hsl(var(--surface-950))',
+          borderBottom: '1px solid hsl(var(--surface-800))',
+        }}
+      >
         {/* Sidebar toggle (when sidebar hidden) */}
         {!panelState.sidebarOpen && (
           <button
             id="editor-toggle-sidebar"
             onClick={toggleSidebar}
-            className="text-surface-600 hover:text-surface-300 transition-colors"
+            style={{ color: 'hsl(var(--surface-500))', background: 'none', border: 'none', cursor: 'pointer', transition: 'color 0.15s' }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'hsl(var(--surface-300))'}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'hsl(var(--surface-500))'}
             title="Show sidebar"
           >
             <PanelLeft className="w-4 h-4" />
@@ -105,12 +119,14 @@ export default function EditorView() {
         )}
 
         <div className="flex-1">
-          <h2 className="text-sm font-semibold text-surface-200 truncate">{activeTab.title}</h2>
-          <p className="text-xs text-surface-600">{currentBook?.title}</p>
+          <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 16, fontWeight: 700, color: 'hsl(var(--surface-50))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {activeTab.title}
+          </h2>
+          <p style={{ fontSize: 11, color: 'hsl(var(--surface-500))' }}>{currentBook?.title}</p>
         </div>
 
-        <div className="flex items-center gap-3 text-xs text-surface-600">
-          <span>{formatWordCount(wordCount)}</span>
+        <div className="flex items-center gap-3 text-xs" style={{ color: 'hsl(var(--surface-500))', fontWeight: 500 }}>
+          <span>{formatWordCount(wordCount)} words</span>
         </div>
 
         {/* AI panel toggle (when AI panel hidden) */}
@@ -118,7 +134,9 @@ export default function EditorView() {
           <button
             id="editor-toggle-ai"
             onClick={toggleAIPanel}
-            className="text-surface-600 hover:text-accent-400 transition-colors"
+            style={{ color: 'hsl(var(--surface-500))', background: 'none', border: 'none', cursor: 'pointer', transition: 'color 0.15s' }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'hsl(var(--accent-600))'}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'hsl(var(--surface-500))'}
             title="Show AI panel"
           >
             <Sparkles className="w-4 h-4" />
@@ -127,7 +145,7 @@ export default function EditorView() {
       </div>
 
       {/* Dynamic Content Area */}
-      <div className="flex-1 overflow-hidden relative flex">
+      <div className="flex-1 overflow-hidden relative flex" style={{ background: 'hsl(var(--surface-950))' }}>
         <div className="flex-1 overflow-hidden relative">
           {activeTab.type === 'chapter' && activeChapter && (
             <RichEditor
@@ -139,19 +157,21 @@ export default function EditorView() {
           )}
           {activeTab.type === 'character' && <CharacterManager key={`char-${activeTab.entityId}`} entityId={activeTab.entityId} />}
           {activeTab.type === 'location' && <LocationManager key={`loc-${activeTab.entityId}`} entityId={activeTab.entityId} />}
-          {activeTab.type === 'note' && <NoteEditor key={`note-${activeTab.entityId}`} entityId={activeTab.entityId} />}
-          {activeTab.type === 'codex' && <CodexEditor key={`codex-${activeTab.entityId}`} entityId={activeTab.entityId} />}
-          {activeTab.type === 'wiki' && <WikiEditor key={`wiki-${activeTab.entityId}`} entityId={activeTab.entityId} />}
-          {activeTab.type === 'organization' && <OrganizationEditor key={`org-${activeTab.entityId}`} entityId={activeTab.entityId} />}
-          {activeTab.type === 'world_rule' && <WorldRuleEditor key={`rule-${activeTab.entityId}`} entityId={activeTab.entityId} />}
+          {activeTab.type === 'note' && <NoteEditor key={`note-${activeTab.entityId}`} entityId={activeTab.entityId} onWordCountChange={setWordCount} />}
+          {activeTab.type === 'codex' && <CodexEditor key={`codex-${activeTab.entityId}`} entityId={activeTab.entityId} onWordCountChange={setWordCount} />}
+          {activeTab.type === 'wiki' && <WikiEditor key={`wiki-${activeTab.entityId}`} entityId={activeTab.entityId} onWordCountChange={setWordCount} />}
+          {activeTab.type === 'organization' && <OrganizationEditor key={`org-${activeTab.entityId}`} entityId={activeTab.entityId} onWordCountChange={setWordCount} />}
+          {activeTab.type === 'world_rule' && <WorldRuleEditor key={`rule-${activeTab.entityId}`} entityId={activeTab.entityId} onWordCountChange={setWordCount} />}
           {activeTab.type === 'timeline' && <CalendarView key={`calendar-${activeTab.entityId}`} />}
           {activeTab.type === 'story_intelligence' && <StoryIntelligenceView key={`story_intel-${activeTab.entityId}`} />}
+          {activeTab.type === 'relationship_manager' && <GlobalRelationshipManager key={`rel_mgr-${activeTab.id}`} />}
+          {activeTab.type === 'verse_timeline' && <VerseTimelineView key={`verse_timeline-${activeTab.id}`} />}
         </div>
         
-        {/* Comments Sidebar for Chapters */}
-        {activeTab.type === 'chapter' && activeChapter && (
+        {/* Comments Sidebar */}
+        {activeTab && (
           <CommentSidebar
-            chapterId={activeChapter.id}
+            chapterId={activeTab.type === 'chapter' && activeChapter ? activeChapter.id : activeTab.entityId || activeTab.id}
             isOpen={isCommentSidebarOpen}
             onClose={() => setIsCommentSidebarOpen(false)}
             onResolve={async (id) => {
@@ -183,33 +203,42 @@ export default function EditorView() {
         )}
         
         {/* Right Vertical Tool Sidebar */}
-        {activeTab.type === 'chapter' && (
-          <div className="w-12 bg-surface-900 border-l border-surface-800 flex flex-col items-center py-4 gap-4 flex-shrink-0">
+        {activeTab && (
+          <div 
+            className="w-12 flex flex-col items-center py-4 gap-4 flex-shrink-0"
+            style={{
+              background: 'hsl(var(--surface-900))',
+              borderLeft: '1px solid hsl(var(--surface-800))'
+            }}
+          >
             <button
               onClick={() => togglePanel('comments')}
-              className={`p-2 rounded-lg transition-colors ${isCommentSidebarOpen ? 'bg-surface-800 text-accent-400' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-800'}`}
+              className={`p-2 rounded-lg transition-colors ${isCommentSidebarOpen ? 'bg-surface-950 text-accent-600 shadow-sm' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-850'}`}
               title="Comments"
             >
               <MessageSquare className="w-4 h-4" />
             </button>
             <button
-              onClick={() => togglePanel('emotion')}
-              className={`p-2 rounded-lg transition-colors ${isEmotionPanelOpen ? 'bg-surface-800 text-accent-400' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-800'}`}
-              title="Emotional Intelligence"
+              onClick={() => activeTab.type === 'chapter' && togglePanel('emotion')}
+              className={`p-2 rounded-lg transition-colors ${activeTab.type !== 'chapter' ? 'opacity-30 cursor-not-allowed text-surface-500' : isEmotionPanelOpen ? 'bg-surface-950 text-accent-600 shadow-sm' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-850'}`}
+              title={activeTab.type === 'chapter' ? "Emotional Intelligence" : "Emotional Intelligence (Chapters only)"}
+              disabled={activeTab.type !== 'chapter'}
             >
               <Heart className="w-4 h-4" />
             </button>
             <button
-              onClick={() => togglePanel('continuity')}
-              className={`p-2 rounded-lg transition-colors ${isContinuityPanelOpen ? 'bg-surface-800 text-accent-400' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-800'}`}
-              title="Continuity Engine"
+              onClick={() => activeTab.type === 'chapter' && togglePanel('continuity')}
+              className={`p-2 rounded-lg transition-colors ${activeTab.type !== 'chapter' ? 'opacity-30 cursor-not-allowed text-surface-500' : isContinuityPanelOpen ? 'bg-surface-950 text-accent-600 shadow-sm' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-850'}`}
+              title={activeTab.type === 'chapter' ? "Continuity Engine" : "Continuity Engine (Chapters only)"}
+              disabled={activeTab.type !== 'chapter'}
             >
               <Shield className="w-4 h-4" />
             </button>
             <button
-              onClick={() => togglePanel('style')}
-              className={`p-2 rounded-lg transition-colors ${isStylePanelOpen ? 'bg-surface-800 text-accent-400' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-800'}`}
-              title="Style Intelligence"
+              onClick={() => activeTab.type === 'chapter' && togglePanel('style')}
+              className={`p-2 rounded-lg transition-colors ${activeTab.type !== 'chapter' ? 'opacity-30 cursor-not-allowed text-surface-500' : isStylePanelOpen ? 'bg-surface-950 text-accent-600 shadow-sm' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-850'}`}
+              title={activeTab.type === 'chapter' ? "Style Intelligence" : "Style Intelligence (Chapters only)"}
+              disabled={activeTab.type !== 'chapter'}
             >
               <Feather className="w-4 h-4" />
             </button>

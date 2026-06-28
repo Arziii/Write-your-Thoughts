@@ -83,22 +83,22 @@ export default function CalendarView() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#202020] text-surface-200">
+    <div className="flex flex-col h-full bg-surface-950 text-surface-50">
       {/* Header toolbar matching reference */}
-      <div className="flex items-center px-4 py-2 border-b border-surface-800 bg-[#2b2b2b] gap-4">
+      <div className="flex items-center px-4 py-2 border-b border-surface-800 bg-surface-950 gap-4">
         <div className="flex items-center gap-2">
-          <button onClick={goToToday} className="px-3 py-1 text-xs font-medium bg-surface-700 hover:bg-surface-600 rounded text-surface-200 transition-colors">
+          <button onClick={goToToday} className="px-3 py-1 text-xs font-medium bg-[#e8f0e5] hover:bg-[#d4e9d0] rounded text-[#2d5a27] transition-colors">
             First Day
           </button>
           <div className="flex items-center">
-            <button onClick={prevMonth} className="p-1 hover:bg-surface-700 rounded transition-colors">
+            <button onClick={prevMonth} className="p-1 hover:bg-surface-850 text-surface-500 hover:text-surface-300 rounded transition-colors">
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <button onClick={nextMonth} className="p-1 hover:bg-surface-700 rounded transition-colors">
+            <button onClick={nextMonth} className="p-1 hover:bg-surface-850 text-surface-500 hover:text-surface-300 rounded transition-colors">
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
-          <span className="text-sm font-semibold ml-2 text-surface-100">
+          <span className="text-sm font-semibold ml-2 text-[#1a2e18]" style={{ fontFamily: "'Playfair Display', serif" }}>
             {formatMonthYear(currentDate)}
             {timelineSettings?.start_date_string && isNaN(new Date(timelineSettings.start_date_string).getTime()) && ` (${timelineSettings.start_date_string})`}
           </span>
@@ -106,9 +106,9 @@ export default function CalendarView() {
       </div>
 
       {/* Days of week header */}
-      <div className="grid grid-cols-7 border-b border-surface-800 flex-shrink-0 bg-[#252525]">
+      <div className="grid grid-cols-7 border-b border-surface-800 flex-shrink-0 bg-surface-900">
         {DAYS_OF_WEEK.map(day => (
-          <div key={day} className="px-2 py-2 text-xs font-medium text-center text-surface-400 border-r border-surface-800 last:border-r-0">
+          <div key={day} className="px-2 py-2 text-xs font-bold text-center text-[#7a8c77] border-r border-[#d0c9bc] last:border-r-0 uppercase tracking-widest">
             {day}
           </div>
         ))}
@@ -130,12 +130,12 @@ export default function CalendarView() {
             return (
               <div 
                 key={idx} 
-                className={`border-r border-b border-surface-800 flex flex-col p-1 transition-colors hover:bg-surface-800/30 ${
-                  !isCurrentMonth ? 'bg-[#1a1a1a] opacity-50' : 'bg-[#202020]'
+                className={`border-r border-b border-surface-800 flex flex-col p-1 transition-colors hover:bg-surface-900 ${
+                  !isCurrentMonth ? 'bg-surface-950 opacity-60' : 'bg-surface-950'
                 }`}
               >
                 <div className="flex justify-between items-center px-1 mb-1">
-                  <span className={`text-xs font-medium ${isCurrentMonth ? 'text-surface-300' : 'text-surface-600'}`}>
+                  <span className={`text-xs font-semibold ${isCurrentMonth ? 'text-surface-200' : 'text-surface-600'}`}>
                     {date.getDate()}
                   </span>
                 </div>
@@ -144,10 +144,10 @@ export default function CalendarView() {
                   {dayEvents.map(ev => (
                     <div 
                       key={ev.id} 
-                      className="text-[11px] truncate px-2 py-1 rounded bg-[#1e3a5f] text-accent-100 border border-[#2b5282] cursor-pointer hover:bg-[#2b5282] transition-colors"
+                      className="text-[11px] font-medium truncate px-2 py-1 rounded bg-[#e8f0e5] text-[#2d5a27] border border-[#d4e9d0] cursor-pointer hover:bg-[#d4e9d0] transition-colors shadow-sm"
                       title={ev.title}
                     >
-                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block mr-1.5 align-middle"></span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#dc2626] inline-block mr-1.5 align-middle"></span>
                       {ev.title}
                     </div>
                   ))}

@@ -22,6 +22,7 @@ export default function SettingsPage() {
   const { books } = useWorkspaceStore()
   const { addToast } = useToastStore()
 
+  const [theme, setTheme] = useState<'light' | 'dark'>(settings?.theme || 'light')
   const [aiProvider, setAiProvider] = useState(settings?.ai_provider || 'openai')
   const [aiApiKey, setAiApiKey] = useState(settings?.ai_api_key || '')
   const [aiStylePrompt, setAiStylePrompt] = useState(settings?.ai_style_prompt || '')
@@ -29,12 +30,17 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (settings) {
+      setTheme(settings.theme || 'light')
       setAiProvider(settings.ai_provider || 'openai')
       setAiApiKey(settings.ai_api_key || '')
       setAiStylePrompt(settings.ai_style_prompt || '')
       setPreserveFormatting(settings.preserve_formatting ?? true)
     }
   }, [settings])
+
+  // Note: App.tsx handles the actual document.documentElement.classList based on useUserStore.
+  // We will instantly update the store when the toggle is clicked.
+
   const [isSaving, setIsSaving] = useState(false)
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [isBackingUp, setIsBackingUp] = useState(false)
@@ -52,6 +58,7 @@ export default function SettingsPage() {
     try {
       const updated = await window.api.settings.update({
         userId: user.id,
+        theme,
         aiProvider,
         aiApiKey,
         aiStylePrompt,
@@ -61,7 +68,7 @@ export default function SettingsPage() {
         lineSpacing: settings?.line_spacing || 1.8,
       })
       setSettings(updated as never)
-      
+
       // Sync to cloud in background
       import('../../services/syncService').then(({ syncService }) => {
         syncService.syncSettingsToCloud(updated as any).catch(e => console.error('Cloud sync failed', e))
@@ -76,7 +83,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-surface-950">
+    <div className="flex-1 overflow-y-auto bg-surface-950" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       <div className="max-w-2xl mx-auto px-8 py-10 space-y-8">
         <div className="flex items-start justify-between">
           <div>
@@ -86,7 +93,7 @@ export default function SettingsPage() {
             </h1>
             <p className="text-surface-500 text-sm mt-1">Configure your writing environment and AI preferences.</p>
           </div>
-          <button 
+          <button
             onClick={() => navigate(-1)}
             className="flex items-center gap-2 px-4 py-2 bg-surface-800 hover:bg-surface-700 text-surface-200 text-sm font-medium rounded-lg transition-colors border border-surface-700 hover:border-surface-600"
           >
@@ -94,6 +101,43 @@ export default function SettingsPage() {
             Back
           </button>
         </div>
+
+        {/* Appearance Section */}
+        <section className="space-y-4">
+          <h2 className="text-sm font-semibold text-surface-300 uppercase tracking-wider flex items-center gap-2">
+            <Palette className="w-4 h-4 text-accent-400" />
+            Appearance
+          </h2>
+          <div className="space-y-3 glass-card rounded-xl p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="block text-sm font-medium text-surface-300">Theme</label>
+                <p className="text-[11px] text-surface-600 mt-0.5">Toggle between Light and Dark mode.</p>
+              </div>
+              <button
+                onClick={async () => {
+                  const newTheme = theme === 'light' ? 'dark' : 'light'
+                  setTheme(newTheme)
+                  if (settings && user) {
+                    // Instantly apply globally
+                    setSettings({ ...settings, theme: newTheme })
+                    try {
+                      const updated = await window.api.settings.update({ userId: user.id, theme: newTheme })
+                      setSettings(updated as never)
+                    } catch (e) {
+                      console.error('Failed to save theme instantly', e)
+                    }
+                  }
+                }}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${theme === 'dark' ? 'bg-accent-600' : 'bg-surface-700'}`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${theme === 'dark' ? 'translate-x-6' : 'translate-x-1'}`}
+                />
+              </button>
+            </div>
+          </div>
+        </section>
 
         {/* AI Section */}
         <section className="space-y-4">
@@ -130,7 +174,7 @@ export default function SettingsPage() {
               />
               <p className="text-[11px] text-surface-600 mt-1">Your API key is stored locally and never shared.</p>
             </div>
-            
+
             <div className="pt-2 border-t border-surface-800">
               <label className="block text-sm font-medium text-surface-300 mb-1.5">AI Style Profile</label>
               <textarea
@@ -176,7 +220,7 @@ export default function SettingsPage() {
                       <h3 className="text-sm font-medium text-surface-100">{p.name}</h3>
                       <p className="text-[11px] text-surface-400">{p.description} (v{p.version})</p>
                     </div>
-                    <button 
+                    <button
                       onClick={async () => {
                         await window.api.plugins.delete(p.id)
                         setPlugins(await window.api.plugins.getAll())
@@ -200,7 +244,7 @@ export default function SettingsPage() {
           </h2>
           <div className="space-y-3 glass-card rounded-xl p-5">
             <p className="text-[13px] text-surface-400 mb-2">Select a book from your workspace to generate a publication-ready file in PDF, DOCX, EPUB, or Markdown.</p>
-            
+
             {books.length === 0 ? (
               <p className="text-sm text-surface-500 py-2">No books available to export. Create a book first.</p>
             ) : (
@@ -235,8 +279,8 @@ export default function SettingsPage() {
           </h2>
           <div className="space-y-4 glass-card rounded-xl p-5">
             <p className="text-[13px] text-surface-400">
-              Securely back up your entire local database to your Supabase `user_backups` bucket. 
-              The system also auto-backs up every 5 minutes in the background.
+              Your data is <span className="text-accent-400 font-medium">automatically synced in real-time</span> to the cloud.
+              Use this only as an <span className="text-yellow-400 font-medium">emergency full-database snapshot</span> for disaster recovery (e.g. if your local database gets corrupted).
             </p>
             <div className="flex gap-3">
               <button
@@ -258,7 +302,7 @@ export default function SettingsPage() {
                 className="flex-1 px-4 py-2.5 bg-surface-800 hover:bg-surface-700 disabled:opacity-50 text-surface-100 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 border border-surface-700"
               >
                 {isBackingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
-                {isBackingUp ? 'Backing Up...' : 'Backup Now'}
+                {isBackingUp ? 'Backing Up...' : 'Emergency Snapshot'}
               </button>
 
               <button
@@ -301,13 +345,13 @@ export default function SettingsPage() {
           </button>
         </div>
       </div>
-      
+
       {selectedBookId && (
-        <ExportModal 
-          isOpen={isExportOpen} 
-          onClose={() => setIsExportOpen(false)} 
-          bookId={selectedBookId} 
-          bookTitle={books.find(b => b.id === selectedBookId)?.title || ''} 
+        <ExportModal
+          isOpen={isExportOpen}
+          onClose={() => setIsExportOpen(false)}
+          bookId={selectedBookId}
+          bookTitle={books.find(b => b.id === selectedBookId)?.title || ''}
           initialAuthorName={books.find(b => b.id === selectedBookId)?.authorName || ''}
         />
       )}

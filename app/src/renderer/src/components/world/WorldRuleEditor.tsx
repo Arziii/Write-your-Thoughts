@@ -8,22 +8,28 @@ import CharacterCount from '@tiptap/extension-character-count'
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useToastStore } from '../../stores/toastStore'
+import { useUserStore } from '../../stores/userStore'
 import { debounce } from '../../utils'
 import EditorToolbar from '../editor/EditorToolbar'
+import SearchAndReplace from '@sereneinserenade/tiptap-search-and-replace'
+import EditorFindToolbar from '../editor/EditorFindToolbar'
 
 interface WorldRuleEditorProps {
   entityId: string
+  onWordCountChange?: (wc: number) => void
 }
 
-export default function WorldRuleEditor({ entityId }: WorldRuleEditorProps) {
-  const { worldRules, markTabDirty, updateWorldRule } = useWorkspaceStore()
+export default function WorldRuleEditor({ entityId, onWordCountChange }: WorldRuleEditorProps) {
+  const { worldRules, markTabDirty, updateWorldRule, drafts, setDraft, clearDraft } = useWorkspaceStore()
   const { addToast } = useToastStore()
+  const { settings } = useUserStore()
   const saveStatusRef = useRef<'saved' | 'saving' | 'unsaved'>('saved')
   const saveIndicatorRef = useRef<HTMLSpanElement>(null)
   
   const item = worldRules.find(n => n.id === entityId)
-  const initialContent = item?.content || ''
-  const [title, setTitle] = useState(item?.title || '')
+  const draft = drafts[entityId]
+  const initialContent = draft?.content ?? item?.content ?? ''
+  const [title, setTitle] = useState(draft?.title ?? item?.title ?? '')
 
   const setSaveStatus = (status: 'saved' | 'saving' | 'unsaved') => {
     saveStatusRef.current = status
@@ -50,6 +56,7 @@ export default function WorldRuleEditor({ entityId }: WorldRuleEditorProps) {
         updateWorldRule(updated as any)
         markTabDirty(entityId, false)
         setSaveStatus('saved')
+        clearDraft(entityId)
       } catch {
         setSaveStatus('unsaved')
         addToast('Failed to save world rule', 'error')
@@ -76,6 +83,7 @@ export default function WorldRuleEditor({ entityId }: WorldRuleEditorProps) {
       Highlight.configure({ multicolor: false }),
       Placeholder.configure({ placeholder: 'Write world rule details here...' }),
       CharacterCount,
+      SearchAndReplace,
     ],
     content: initialContent,
     editorProps: {
@@ -89,6 +97,9 @@ export default function WorldRuleEditor({ entityId }: WorldRuleEditorProps) {
       markTabDirty(entityId, true)
       setSaveStatus('unsaved')
       autosave(html, title)
+      if (onWordCountChange) {
+        onWordCountChange(editor.storage.characterCount.words())
+      }
     },
   })
 
@@ -100,9 +111,15 @@ export default function WorldRuleEditor({ entityId }: WorldRuleEditorProps) {
   }, [entityId, initialContent])
 
   useEffect(() => {
+    if (editor && onWordCountChange) {
+      onWordCountChange(editor.storage.characterCount.words())
+    }
+  }, [editor, entityId, onWordCountChange])
+
+  useEffect(() => {
     return () => {
       if (editor && saveStatusRef.current === 'unsaved') {
-        window.api.worldRules.update({ id: entityId, content: editor.getHTML(), title })
+        setDraft(entityId, { content: editor.getHTML(), title })
       }
     }
   }, [editor, entityId, title])
@@ -110,30 +127,32 @@ export default function WorldRuleEditor({ entityId }: WorldRuleEditorProps) {
   if (!item) return <div>World rule not found</div>
 
   return (
-    <div className="flex flex-col h-full bg-surface-950">
-      <div className="px-12 pt-6 pb-2">
-        <input 
-          type="text" 
-          value={title} 
-          onChange={handleTitleChange}
-          placeholder="World Rule Title"
-          className="text-2xl font-bold bg-transparent text-surface-100 border-none focus:outline-none focus:ring-0 w-full"
-        />
-      </div>
+    <div className="flex flex-col h-full bg-surface-950 relative">
+      <EditorFindToolbar editor={editor} />
       
-      <div className="border-b border-surface-800 bg-surface-900 mt-2">
+      <div className="border-b border-surface-800 bg-surface-900">
         <EditorToolbar editor={editor} saveIndicatorRef={saveIndicatorRef} />
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto px-12 py-8">
+        <div className="max-w-3xl mx-auto px-12 py-10">
+          <input 
+            type="text" 
+            value={title} 
+            onChange={handleTitleChange}
+            placeholder="World Rule Name"
+            className="text-3xl font-bold bg-transparent text-surface-100 border-none focus:outline-none focus:ring-0 w-full mb-6 px-0"
+            style={{
+              fontFamily: settings?.editor_font || 'Georgia, serif',
+            }}
+          />
           <EditorContent
             editor={editor}
-            className="min-h-full text-surface-200"
+            className="min-h-full text-surface-100"
             style={{
-              fontFamily: 'Inter, sans-serif',
-              fontSize: '16px',
-              lineHeight: '1.7',
+              fontFamily: settings?.editor_font || 'Georgia, serif',
+              fontSize: `${settings?.font_size || 16}px`,
+              lineHeight: `${settings?.line_spacing || 1.8}`,
             }}
           />
         </div>

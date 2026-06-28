@@ -151,13 +151,26 @@ export interface TimelineEvent {
   id: string
   book_id: string
   title: string
-  description: string
+  description?: string
   story_day: number
   duration_days: number
   chapter_id?: string
-  characters_involved: string
-  created_at: string
-  updated_at: string
+  characters_involved: string[]
+  created_at?: string
+  updated_at?: string
+}
+
+export interface VerseTimelineEvent {
+  id: string
+  book_id: string
+  title: string
+  description?: string
+  event_date?: string
+  sort_order?: number
+  notes?: string
+  synced?: number
+  created_at?: string
+  updated_at?: string
 }
 
 export interface RelationshipEvent {
@@ -427,7 +440,7 @@ export interface ChapterStatistics {
 
 // ── Tab type ───────────────────────────────────────────────────────
 
-export type TabType = 'chapter' | 'character' | 'location' | 'note' | 'timeline' | 'codex' | 'wiki' | 'organization' | 'world_rule' | 'story_intelligence'
+export type TabType = 'chapter' | 'character' | 'location' | 'note' | 'timeline' | 'codex' | 'wiki' | 'organization' | 'world_rule' | 'story_intelligence' | 'relationship_manager' | 'verse_timeline'
 
 export interface EditorTab {
   id: string          // Unique ID for the tab (usually the entity ID)

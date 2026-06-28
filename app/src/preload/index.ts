@@ -16,10 +16,15 @@ const api = {
     getStoredUser: (userId: string) => ipcRenderer.invoke('auth:getStoredUser', userId),
   },
 
-  // Database Backup/Restore
+  // Database Backup/Restore & Sync
   database: {
     getBuffer: () => ipcRenderer.invoke('database:getBuffer'),
     restoreBuffer: (buffer: Uint8Array) => ipcRenderer.invoke('database:restoreBuffer', buffer),
+    getPendingSync: () => ipcRenderer.invoke('database:getPendingSync'),
+    markSyncComplete: (id: string) => ipcRenderer.invoke('database:markSyncComplete', id),
+    getEntityRow: (data: { entityType: string, entityId: string }) => ipcRenderer.invoke('database:getEntityRow', data),
+    upsertEntityRow: (data: { entityType: string, row: any }) => ipcRenderer.invoke('database:upsertEntityRow', data),
+    upsertCloudRow: (data: { entityType: string, row: any }) => ipcRenderer.invoke('database:upsertCloudRow', data),
   },
 
   // Books
@@ -34,16 +39,16 @@ const api = {
   // Chapters
   chapters: {
     getByBook: (bookId: string) => ipcRenderer.invoke('chapters:getByBook', bookId),
-    getById: (id: string) => ipcRenderer.invoke('chapters:getById', id),
-    create: (data: unknown) => ipcRenderer.invoke('chapters:create', data),
-    save: (data: unknown) => ipcRenderer.invoke('chapters:save', data),
-    update: (data: unknown) => ipcRenderer.invoke('chapters:update', data),
-    rename: (data: unknown) => ipcRenderer.invoke('chapters:rename', data),
-    delete: (id: string) => ipcRenderer.invoke('chapters:delete', id),
-    reorder: (chapters: unknown) => ipcRenderer.invoke('chapters:reorder', chapters),
+    getById: (chapterId: string) => ipcRenderer.invoke('chapters:getById', chapterId),
+    create: (data: { bookId: string; title: string }) => ipcRenderer.invoke('chapters:create', data),
+    save: (data: { id: string; content: string; wordCount: number }) => ipcRenderer.invoke('chapters:save', data),
+    rename: (data: { id: string; title: string }) => ipcRenderer.invoke('chapters:rename', data),
+    update: (data: { id: string; title?: string; content?: string; wordCount?: number; chapterOrder?: number; synced?: number; cloud_id?: string }) => ipcRenderer.invoke('chapters:update', data),
+    delete: (chapterId: string) => ipcRenderer.invoke('chapters:delete', chapterId),
+    reorder: (chapters: Array<{ id: string; order: number }>) => ipcRenderer.invoke('chapters:reorder', chapters),
     getVersions: (chapterId: string) => ipcRenderer.invoke('chapters:getVersions', chapterId),
-    saveVersion: (data: unknown) => ipcRenderer.invoke('chapters:saveVersion', data),
-    restoreVersion: (data: unknown) => ipcRenderer.invoke('chapters:restoreVersion', data),
+    saveVersion: (data: { chapterId: string; userId: string; content: string; wordCount: number; snapshotType: 'auto' | 'milestone'; milestoneName?: string }) => ipcRenderer.invoke('chapters:saveVersion', data),
+    restoreVersion: (data: { chapterId: string; versionId: string; userId: string }) => ipcRenderer.invoke('chapters:restoreVersion', data)
   },
 
   // Editor / Workspace
@@ -98,6 +103,10 @@ const api = {
 
   export: {
     book: (bookId: string, format: string, authorName?: string) => ipcRenderer.invoke('export:book', { bookId, format, authorName }),
+  },
+
+  entities: {
+    reorder: (data: { table: string, items: Array<{ id: string, sort_order: number }> }) => ipcRenderer.invoke('entities:reorder', data)
   },
 
   // Plugins
@@ -276,6 +285,15 @@ const api = {
   chapterStatistics: {
     getByBook: (bookId: string) => ipcRenderer.invoke('storyIntelligence:getChapterStatistics', bookId),
     upsert: (data: any) => ipcRenderer.invoke('storyIntelligence:upsertChapterStatistics', data),
+  },
+
+  // Timeline Record (Verse Timeline)
+  verseTimeline: {
+    getByBook: (bookId: string) => ipcRenderer.invoke('verseTimeline:getByBook', bookId),
+    getById: (id: string) => ipcRenderer.invoke('verseTimeline:getById', id),
+    create: (data: any) => ipcRenderer.invoke('verseTimeline:create', data),
+    update: (data: any) => ipcRenderer.invoke('verseTimeline:update', data),
+    delete: (id: string) => ipcRenderer.invoke('verseTimeline:delete', id),
   }
 }
 

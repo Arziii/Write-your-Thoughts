@@ -4,7 +4,8 @@ import {
   Bold, Italic, Underline, Strikethrough,
   Heading1, Heading2, Heading3,
   List, ListOrdered, AlignLeft, AlignCenter, AlignRight,
-  Highlighter, Undo, Redo, Minus, Focus, MessageSquare
+  Highlighter, Undo, Redo, Minus, Focus, MessageSquare,
+  History, Save
 } from 'lucide-react'
 import { cn } from '../../utils'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
@@ -276,6 +277,24 @@ export default function EditorToolbar({ editor, saveIndicatorRef }: EditorToolba
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* Version History & Milestones */}
+      <ToolbarButton
+        id="toolbar-history"
+        onClick={() => window.dispatchEvent(new CustomEvent('open-version-history'))}
+        title="Version History"
+      >
+        <History className="w-3.5 h-3.5" />
+      </ToolbarButton>
+      <ToolbarButton
+        id="toolbar-save-milestone"
+        onClick={() => window.dispatchEvent(new CustomEvent('save-milestone'))}
+        title="Save Milestone to Cloud"
+      >
+        <Save className="w-3.5 h-3.5" />
+      </ToolbarButton>
+
+      <Divider />
 
       {/* Save status */}
       <span ref={saveIndicatorRef} className="text-success-400 text-xs mr-2">Saved</span>

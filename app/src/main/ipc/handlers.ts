@@ -1,4 +1,5 @@
 import { IpcMain } from 'electron'
+import { dbRun } from '../database/init'
 import { registerBookHandlers } from './books'
 import { registerChapterHandlers } from './chapters'
 import { registerEditorHandlers } from './editor'
@@ -22,6 +23,7 @@ import { registerEmotionalIntelligenceHandlers } from './emotionalIntelligence'
 import { registerContinuityHandlers } from './continuityEngine'
 import { registerStyleIntelligenceHandlers } from './styleIntelligence'
 import { setupRelationshipHandlers } from './relationships'
+import { registerVerseTimelineHandlers } from './verseTimeline'
 import { registerStoryIntelligenceHandlers } from './storyIntelligence'
 import { registerDatabaseHandlers } from './database'
 
@@ -50,5 +52,17 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   registerContinuityHandlers(ipcMain)
   registerStyleIntelligenceHandlers(ipcMain)
   setupRelationshipHandlers()
+  registerVerseTimelineHandlers(ipcMain)
   registerStoryIntelligenceHandlers(ipcMain)
+
+  ipcMain.handle('entities:reorder', async (_event, data: { table: string, items: Array<{ id: string; sort_order: number }> }) => {
+    const allowedTables = ['codex', 'characters', 'locations', 'notes', 'organizations', 'world_rules', 'wiki']
+    if (!allowedTables.includes(data.table)) {
+      throw new Error('Invalid table name for reordering')
+    }
+    for (const item of data.items) {
+      dbRun(`UPDATE ${data.table} SET sort_order = ? WHERE id = ?`, [item.sort_order, item.id])
+    }
+    return { success: true }
+  })
 }

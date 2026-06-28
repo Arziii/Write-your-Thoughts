@@ -20,7 +20,7 @@ export default function SearchModal() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'f')) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault()
         if (currentBook) {
           setIsOpen(true)

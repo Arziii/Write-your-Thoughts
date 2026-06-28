@@ -8,6 +8,7 @@ import { useUserStore } from '../../stores/userStore'
 import { useToastStore } from '../../stores/toastStore'
 import { aiService } from '../../services/aiService'
 import type { AIPolishResult, ChapterVersion, AIMode, AIBrainstormMessage } from '../../types'
+import { useStoryBibleStore } from '../../stores/storyBibleStore'
 import { cn, formatDate } from '../../utils'
 import VersionHistory from './VersionHistory'
 import Modal from '../ui/Modal'
@@ -26,6 +27,7 @@ export default function AIPanel() {
   const { activeChapter, updateChapter, characters, locations, timelineEvents, toggleAIPanel, panelState } = useWorkspaceStore()
   const { settings } = useUserStore()
   const { addToast } = useToastStore()
+  const { verseTimelineEvents } = useStoryBibleStore()
 
   const [isPolishing, setIsPolishing] = useState(false)
   const [polishResult, setPolishResult] = useState<AIPolishResult | null>(null)
@@ -68,6 +70,10 @@ export default function AIPanel() {
       const matchedLocations = locations.filter(l => lockedIds.includes(l.id) || chapterText.includes(l.name))
       if (matchedLocations.length > 0) {
         storyContext += 'LOCATIONS:\n' + matchedLocations.map(l => `- ${l.name}: ${l.description}. Culture: ${l.culture}`).join('\n') + '\n\n'
+      }
+
+      if (verseTimelineEvents.length > 0) {
+        storyContext += 'VERSE TIMELINE RECORD (Global World Events):\n' + [...verseTimelineEvents].sort((a,b) => (a.sort_order||0)-(b.sort_order||0)).map(e => `- ${e.event_date ? `[${e.event_date}] ` : ''}${e.title}: ${e.description}`).join('\n') + '\n\n'
       }
 
       // Save version before polishing
@@ -156,6 +162,10 @@ export default function AIPanel() {
         storyContext += 'LOCATIONS:\n' + matchedLocations.map(l => `- ${l.name}: ${l.description}. Culture: ${l.culture}`).join('\n') + '\n\n'
       }
 
+      if (verseTimelineEvents.length > 0) {
+        storyContext += 'VERSE TIMELINE RECORD (Global World Events):\n' + [...verseTimelineEvents].sort((a,b) => (a.sort_order||0)-(b.sort_order||0)).map(e => `- ${e.event_date ? `[${e.event_date}] ` : ''}${e.title}: ${e.description}`).join('\n') + '\n\n'
+      }
+
       const response = await aiService.brainstorm({
         messages: newMessages,
         provider: settings.ai_provider || 'openai',
@@ -178,7 +188,7 @@ export default function AIPanel() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-surface-900 w-80">
+    <div className="flex flex-col h-full bg-surface-900 w-80" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       {/* Panel header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-surface-800 h-9">
         <div className="flex items-center gap-1">

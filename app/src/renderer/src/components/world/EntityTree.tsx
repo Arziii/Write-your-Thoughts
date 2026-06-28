@@ -1,14 +1,28 @@
 import { useState } from 'react'
-import { Plus, MoreHorizontal, Pencil, Trash2, ChevronDown } from 'lucide-react'
-import { cn } from '../../utils'
+import { Plus, MoreHorizontal, Pencil, Trash2, ChevronDown, GripVertical } from 'lucide-react'
+import { Droppable, Draggable } from '@hello-pangea/dnd'
 import Modal from '../ui/Modal'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
+
+// ── Forest Literary Palette ──────────────────────────────────────────
+const F = {
+  bg: 'hsl(var(--surface-900))',
+  bgHover: 'hsl(var(--surface-850))',
+  active: 'hsl(var(--surface-800))',
+  border: 'hsl(var(--surface-800))',
+  green: 'hsl(var(--brand-green))',
+  greenLight: 'hsl(var(--brand-green-bg))',
+  text: 'hsl(var(--surface-50))',
+  textMid: 'hsl(var(--surface-300))',
+  textSoft: 'hsl(var(--surface-500))',
+  textFaint: 'hsl(var(--surface-600))',
+}
 
 interface EntityTreeProps {
   title: string
   items: Array<{ id: string; title: string }>
   icon: React.ReactNode
-  type: 'character' | 'location' | 'note' | 'timeline'
+  type: 'character' | 'location' | 'note' | 'timeline' | 'codex' | 'wiki' | 'organization' | 'world_rule'
   onCreate: (title: string) => Promise<void>
   onRename: (id: string, newTitle: string) => Promise<void>
   onDelete: (id: string) => Promise<void>
@@ -36,7 +50,6 @@ export default function EntityTree({ title, items, staticItems, icon, type, onCr
       setNewTitle('')
     } catch (err) {
       console.error('Failed to create entity:', err)
-      // Provide a generic fail fallback to unblock the UI if the toast store is not accessible directly here
       setIsCreateOpen(false) 
     }
   }
@@ -58,71 +71,135 @@ export default function EntityTree({ title, items, staticItems, icon, type, onCr
   }
 
   return (
-    <div className="px-1 mt-2">
+    <div style={{ padding: '0 10px', marginTop: 12 }}>
+      {/* Header */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center gap-2 w-full px-2 py-1.5 text-xs font-semibold text-surface-500 hover:text-surface-300 transition-colors uppercase tracking-wider"
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 8px',
+          color: F.green, background: 'none', border: 'none', borderRadius: 8,
+          fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em',
+          cursor: 'pointer', transition: 'all 0.15s', textAlign: 'left',
+        }}
+        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = F.greenLight; (e.currentTarget as HTMLElement).style.background = F.bgHover }}
+        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = F.green; (e.currentTarget as HTMLElement).style.background = 'transparent' }}
       >
-        <ChevronDown className={cn('w-3 h-3 transition-transform', !isExpanded && '-rotate-90')} />
+        <ChevronDown style={{ width: 12, height: 12, transition: 'transform 0.15s', transform: isExpanded ? 'rotate(0)' : 'rotate(-90deg)' }} />
         {title}
       </button>
 
       {isExpanded && (
-        <div className="space-y-0.5">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
           {staticItems?.map(item => (
             <div key={item.id} className="group relative">
               <button
                 onClick={() => openTab(item.id, type, item.title)}
-                className={cn(
-                  'flex items-center gap-2.5 w-full px-2 py-1.5 text-sm rounded-md transition-colors',
-                  activeTabId === item.id
-                    ? 'bg-accent-600/20 text-accent-300 border-l-2 border-accent-500'
-                    : 'text-surface-400 hover:text-surface-200 hover:bg-surface-800/60'
-                )}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+                  padding: '6px 6px', borderRadius: 6, fontSize: 13, fontWeight: activeTabId === item.id ? 600 : 500,
+                  background: activeTabId === item.id ? F.greenLight : 'transparent',
+                  color: activeTabId === item.id ? F.green : F.textSoft,
+                  border: 'none', borderLeft: activeTabId === item.id ? `2px solid ${F.green}` : '2px solid transparent',
+                  cursor: 'pointer', transition: 'all 0.1s', textAlign: 'left',
+                }}
+                onMouseEnter={e => { if (activeTabId !== item.id) { (e.currentTarget as HTMLElement).style.background = F.bgHover; (e.currentTarget as HTMLElement).style.color = F.textMid } }}
+                onMouseLeave={e => { if (activeTabId !== item.id) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = F.textSoft } }}
               >
-                <div className="flex-shrink-0 flex items-center justify-center opacity-70">{item.icon || icon}</div>
-                <span className="truncate flex-1 text-left text-xs">{item.title}</span>
+                <div style={{ paddingLeft: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: activeTabId === item.id ? 1 : 0.7 }}>
+                  {item.icon || icon}
+                </div>
+                <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</span>
               </button>
             </div>
           ))}
 
-          {items.map((item) => (
-            <div key={item.id} className="group relative">
-              <button
-                onClick={() => openItem(item)}
-                className={cn(
-                  'flex items-center gap-2.5 w-full px-2 py-1.5 text-sm rounded-md transition-colors',
-                  activeTabId === item.id
-                    ? 'bg-accent-600/20 text-accent-300 border-l-2 border-accent-500'
-                    : 'text-surface-400 hover:text-surface-200 hover:bg-surface-800/60'
-                )}
+          <Droppable droppableId={type} isDropDisabled={items.length === 0}>
+            {(provided) => (
+              <div 
+                style={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+                {...provided.droppableProps}
+                ref={provided.innerRef}
               >
-                <div className="flex-shrink-0 flex items-center justify-center opacity-70">{icon}</div>
-                <span className="truncate flex-1 text-left text-xs">{item.title}</span>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setContextMenu({ id: item.id, x: e.clientX, y: e.clientY })
-                    }}
-                    className="opacity-0 group-hover:opacity-100 text-surface-600 hover:text-surface-300 transition-all"
-                  >
-                    <MoreHorizontal className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </button>
-            </div>
-          ))}
+                {items.map((item, idx) => (
+                  <Draggable key={item.id} draggableId={item.id} index={idx}>
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        className="group relative"
+                        style={{
+                          ...provided.draggableProps.style,
+                          zIndex: snapshot.isDragging ? 50 : 'auto',
+                          opacity: snapshot.isDragging ? 0.9 : 1,
+                        }}
+                      >
+                        <button
+                          onClick={() => openItem(item)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+                            padding: '6px 6px', borderRadius: 6, fontSize: 13, fontWeight: activeTabId === item.id ? 600 : 500,
+                            background: activeTabId === item.id ? F.greenLight : 'transparent',
+                            color: activeTabId === item.id ? F.green : F.textSoft,
+                            border: 'none', borderLeft: activeTabId === item.id ? `2px solid ${F.green}` : '2px solid transparent',
+                            cursor: 'pointer', transition: 'all 0.1s', textAlign: 'left',
+                            boxShadow: snapshot.isDragging ? `0 4px 12px rgba(45,90,39,0.15)` : 'none'
+                          }}
+                          onMouseEnter={e => { if (activeTabId !== item.id) { (e.currentTarget as HTMLElement).style.background = F.bgHover; (e.currentTarget as HTMLElement).style.color = F.textMid } }}
+                          onMouseLeave={e => { if (activeTabId !== item.id) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = F.textSoft } }}
+                        >
+                          <div
+                            {...provided.dragHandleProps}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity"
+                            style={{ color: F.textFaint, padding: 2, marginLeft: -4, cursor: 'grab' }}
+                            onClick={(e) => e.stopPropagation()}
+                            onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = F.textMid}
+                            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = F.textFaint}
+                          >
+                            <GripVertical style={{ width: 14, height: 14 }} />
+                          </div>
+                          
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: activeTabId === item.id ? 1 : 0.7 }}>
+                            {icon}
+                          </div>
+                          <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</span>
+                          
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, paddingRight: 4 }}>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setContextMenu({ id: item.id, x: e.clientX, y: e.clientY }) }}
+                              className="opacity-0 group-hover:opacity-100 transition-all"
+                              style={{ color: F.textFaint, background: 'none', border: 'none', cursor: 'pointer' }}
+                              onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = F.textMid}
+                              onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = F.textFaint}
+                            >
+                              <MoreHorizontal style={{ width: 14, height: 14 }} />
+                            </button>
+                          </div>
+                        </button>
+                      </div>
+                    )}
+                  </Draggable>
+                ))}
+                {provided.placeholder}
+              </div>
+            )}
+          </Droppable>
 
           {items.length === 0 && (
-            <p className="text-xs text-surface-600 px-2 py-1">{emptyMessage}</p>
+            <p style={{ fontSize: 12, color: F.textFaint, padding: '4px 8px' }}>{emptyMessage}</p>
           )}
 
+          {/* Add entity */}
           <button
             onClick={() => { setNewTitle(''); setIsCreateOpen(true) }}
-            className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-surface-600 hover:text-accent-400 hover:bg-surface-800/40 rounded-md transition-colors"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 8px',
+              color: F.textSoft, background: 'none', border: 'none', borderRadius: 6,
+              fontSize: 12, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = F.bgHover; (e.currentTarget as HTMLElement).style.color = F.green }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'none'; (e.currentTarget as HTMLElement).style.color = F.textSoft }}
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus style={{ width: 14, height: 14 }} />
             New {singularTitle || title.slice(0, -1)}
           </button>
         </div>
@@ -133,30 +210,28 @@ export default function EntityTree({ title, items, staticItems, icon, type, onCr
         <>
           <div className="fixed inset-0 z-40" onClick={() => setContextMenu(null)} />
           <div
-            className="fixed z-50 bg-surface-800 border border-surface-700 rounded-lg shadow-xl py-1 min-w-36 animate-fade-in"
-            style={{ left: contextMenu.x, top: contextMenu.y }}
+            className="fixed z-50 animate-fade-in"
+            style={{ left: contextMenu.x, top: contextMenu.y, background: '#fffefb', border: `1px solid ${F.border}`, borderRadius: 12, boxShadow: '0 4px 18px rgba(45,90,39,0.13)', padding: '4px 0', minWidth: 150 }}
           >
             {(() => {
               const it = items.find((c) => c.id === contextMenu.id)!
               return (
                 <>
                   <button
-                    onClick={() => {
-                      setEditItem(it)
-                      setEditTitle(it.title)
-                      setContextMenu(null)
-                    }}
-                    className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-surface-300 hover:bg-surface-700 hover:text-surface-100 transition-colors"
+                    onClick={() => { setEditItem(it); setEditTitle(it.title); setContextMenu(null) }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 16px', fontSize: 13, fontWeight: 500, color: F.textMid, background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = F.greenLight}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
                   >
-                    <Pencil className="w-3.5 h-3.5" />
-                    Rename
+                    <Pencil style={{ width: 14, height: 14 }} /> Rename
                   </button>
                   <button
                     onClick={() => { setDeleteItem(it); setContextMenu(null) }}
-                    className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-danger-400 hover:bg-surface-700 transition-colors"
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 16px', fontSize: 13, fontWeight: 500, color: '#ef4444', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#fff0f0'}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Delete
+                    <Trash2 style={{ width: 14, height: 14 }} /> Delete
                   </button>
                 </>
               )
@@ -167,61 +242,44 @@ export default function EntityTree({ title, items, staticItems, icon, type, onCr
 
       {/* Create Modal */}
       <Modal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} title={`New ${title.slice(0, -1)}`} size="sm">
-        <div className="space-y-4">
+        <div className="space-y-4" style={{ fontFamily: "'DM Sans', sans-serif" }}>
           <input
-            type="text"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            placeholder="Name..."
-            autoFocus
+            type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Name..." autoFocus
             onKeyDown={(e) => e.key === 'Enter' && newTitle.trim() && handleCreate()}
-            className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 text-sm focus:outline-none focus:border-accent-500 transition-all"
+            className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent-500 transition-all"
+            style={{ background: '#fffefb', borderColor: F.border, color: F.text }}
           />
           <div className="flex gap-3">
-            <button onClick={() => setIsCreateOpen(false)} className="flex-1 py-2 bg-surface-700 hover:bg-surface-600 text-surface-200 rounded-lg text-sm font-medium transition-colors">Cancel</button>
-            <button
-              onClick={handleCreate}
-              disabled={!newTitle.trim()}
-              className="flex-1 py-2 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
-            >
-              Create
-            </button>
+            <button onClick={() => setIsCreateOpen(false)} className="flex-1 py-2 rounded-lg text-sm font-medium transition-colors" style={{ background: F.bgHover, color: F.textMid }}>Cancel</button>
+            <button onClick={handleCreate} disabled={!newTitle.trim()} className="flex-1 py-2 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors" style={{ background: F.green }}>Create</button>
           </div>
         </div>
       </Modal>
 
       {/* Rename Modal */}
       <Modal isOpen={!!editItem} onClose={() => setEditItem(null)} title="Rename" size="sm">
-        <div className="space-y-4">
+        <div className="space-y-4" style={{ fontFamily: "'DM Sans', sans-serif" }}>
           <input
-            type="text"
-            value={editTitle}
-            onChange={(e) => setEditTitle(e.target.value)}
-            autoFocus
+            type="text" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} autoFocus
             onKeyDown={(e) => e.key === 'Enter' && editTitle.trim() && handleRename()}
-            className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 text-sm focus:outline-none focus:border-accent-500 transition-all"
+            className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent-500 transition-all"
+            style={{ background: '#fffefb', borderColor: F.border, color: F.text }}
           />
           <div className="flex gap-3">
-            <button onClick={() => setEditItem(null)} className="flex-1 py-2 bg-surface-700 hover:bg-surface-600 text-surface-200 rounded-lg text-sm font-medium transition-colors">Cancel</button>
-            <button
-              onClick={handleRename}
-              disabled={!editTitle.trim()}
-              className="flex-1 py-2 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
-            >
-              Rename
-            </button>
+            <button onClick={() => setEditItem(null)} className="flex-1 py-2 rounded-lg text-sm font-medium transition-colors" style={{ background: F.bgHover, color: F.textMid }}>Cancel</button>
+            <button onClick={handleRename} disabled={!editTitle.trim()} className="flex-1 py-2 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors" style={{ background: F.green }}>Rename</button>
           </div>
         </div>
       </Modal>
 
       {/* Delete Confirm */}
       <Modal isOpen={!!deleteItem} onClose={() => setDeleteItem(null)} title="Delete" size="sm">
-        <p className="text-sm text-surface-300 mb-5">
-          Delete <strong className="text-surface-100">"{deleteItem?.title}"</strong>? This cannot be undone.
+        <p style={{ fontSize: 14, color: F.textSoft, marginBottom: 20 }}>
+          Delete <strong style={{ color: F.text }}>"{deleteItem?.title}"</strong>?
         </p>
         <div className="flex gap-3">
-          <button onClick={() => setDeleteItem(null)} className="flex-1 py-2 bg-surface-700 hover:bg-surface-600 text-surface-200 rounded-lg text-sm font-medium transition-colors">Cancel</button>
-          <button onClick={handleDelete} className="flex-1 py-2 bg-danger-500 hover:bg-danger-400 text-white rounded-lg text-sm font-medium transition-colors">Delete</button>
+          <button onClick={() => setDeleteItem(null)} className="flex-1 py-2 rounded-lg text-sm font-medium transition-colors" style={{ background: F.bgHover, color: F.textMid }}>Cancel</button>
+          <button onClick={handleDelete} className="flex-1 py-2 text-white rounded-lg text-sm font-medium transition-colors" style={{ background: '#ef4444' }}>Delete</button>
         </div>
       </Modal>
     </div>

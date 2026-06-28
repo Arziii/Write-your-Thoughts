@@ -3,7 +3,8 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { initDatabase } from './database/init'
 import { registerIpcHandlers } from './ipc/handlers'
-import { autoUpdater } from 'electron-updater'
+import electronUpdaterPkg from 'electron-updater'
+const { autoUpdater } = electronUpdaterPkg
 
 let mainWindow: BrowserWindow | null = null
 

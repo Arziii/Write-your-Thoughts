@@ -184,17 +184,6 @@ function createTables(): void {
   `)
 
   database.run(`
-    CREATE TABLE IF NOT EXISTS sync_queue (
-      id TEXT PRIMARY KEY,
-      entity_type TEXT NOT NULL,
-      entity_id TEXT NOT NULL,
-      operation TEXT NOT NULL,
-      status TEXT DEFAULT 'pending',
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `)
-
-  database.run(`
     CREATE TABLE IF NOT EXISTS characters (
       id TEXT PRIMARY KEY,
       book_id TEXT NOT NULL,
@@ -208,6 +197,7 @@ function createTables(): void {
       relationships TEXT DEFAULT '',
       notes TEXT DEFAULT '',
       image_url TEXT,
+      sort_order INTEGER DEFAULT 0,
       synced INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
@@ -225,6 +215,7 @@ function createTables(): void {
       history TEXT DEFAULT '',
       notes TEXT DEFAULT '',
       image_url TEXT,
+      sort_order INTEGER DEFAULT 0,
       synced INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
@@ -238,6 +229,7 @@ function createTables(): void {
       book_id TEXT NOT NULL,
       title TEXT NOT NULL,
       content TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
       synced INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
@@ -251,6 +243,7 @@ function createTables(): void {
       book_id TEXT NOT NULL,
       title TEXT NOT NULL,
       content TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
       synced INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
@@ -264,6 +257,7 @@ function createTables(): void {
       book_id TEXT NOT NULL,
       title TEXT NOT NULL,
       content TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
       synced INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
@@ -273,6 +267,22 @@ function createTables(): void {
 
   database.run(`
     CREATE TABLE IF NOT EXISTS timeline_events (
+      id TEXT PRIMARY KEY,
+      book_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      event_date TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
+      notes TEXT DEFAULT '',
+      synced INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
+    )
+  `)
+
+  database.run(`
+    CREATE TABLE IF NOT EXISTS verse_timeline_events (
       id TEXT PRIMARY KEY,
       book_id TEXT NOT NULL,
       title TEXT NOT NULL,
@@ -307,6 +317,7 @@ function createTables(): void {
       book_id TEXT NOT NULL,
       title TEXT NOT NULL,
       content TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
       synced INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
@@ -320,6 +331,7 @@ function createTables(): void {
       book_id TEXT NOT NULL,
       title TEXT NOT NULL,
       content TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
       synced INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
@@ -713,4 +725,43 @@ function createTables(): void {
       console.error('Migration error adding duration_days:', e)
     }
   }
+
+  // Phase 15 Migrations for sort_order
+  const tablesWithSortOrder = ['codex', 'characters', 'locations', 'notes', 'organizations', 'world_rules', 'wiki']
+  for (const table of tablesWithSortOrder) {
+    try {
+      database.run(`ALTER TABLE ${table} ADD COLUMN sort_order INTEGER DEFAULT 0`)
+    } catch (e: any) {
+      if (!e.message.includes('duplicate column name')) {
+        console.error(`Migration error adding sort_order to ${table}:`, e)
+      }
+    }
+  }
+
+  // Restore sync_queue
+  database.run(`
+    CREATE TABLE IF NOT EXISTS sync_queue (
+      id TEXT PRIMARY KEY,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      operation TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+
+  // Phase 5: Version History
+  database.run(`
+    CREATE TABLE IF NOT EXISTS chapter_versions (
+      id TEXT PRIMARY KEY,
+      chapter_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      content TEXT NOT NULL,
+      word_count INTEGER DEFAULT 0,
+      snapshot_type TEXT DEFAULT 'auto',
+      milestone_name TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (chapter_id) REFERENCES chapters(id) ON DELETE CASCADE
+    )
+  `)
 }

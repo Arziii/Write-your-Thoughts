@@ -8,22 +8,29 @@ import CharacterCount from '@tiptap/extension-character-count'
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useToastStore } from '../../stores/toastStore'
+import { useUserStore } from '../../stores/userStore'
 import { debounce } from '../../utils'
 import EditorToolbar from '../editor/EditorToolbar'
+import SearchAndReplace from '@sereneinserenade/tiptap-search-and-replace'
+import EditorFindToolbar from '../editor/EditorFindToolbar'
 
 interface NoteEditorProps {
   entityId: string
+  onWordCountChange?: (wc: number) => void
 }
 
-export default function NoteEditor({ entityId }: NoteEditorProps) {
-  const { notes, markTabDirty, updateNote } = useWorkspaceStore()
+export default function NoteEditor({ entityId, onWordCountChange }: NoteEditorProps) {
+  const { notes, markTabDirty, updateNote, drafts, setDraft, clearDraft } = useWorkspaceStore()
   const { addToast } = useToastStore()
+  const { settings } = useUserStore()
   const saveStatusRef = useRef<'saved' | 'saving' | 'unsaved'>('saved')
   const saveIndicatorRef = useRef<HTMLSpanElement>(null)
   
   const note = notes.find(n => n.id === entityId)
-  const initialContent = note?.content || ''
-  const [title, setTitle] = useState(note?.title || '')
+  // Seed content from in-memory draft (survives tab switch) or the last saved version
+  const draft = drafts[entityId]
+  const initialContent = draft?.content ?? note?.content ?? ''
+  const [title, setTitle] = useState(draft?.title ?? note?.title ?? '')
 
   const setSaveStatus = (status: 'saved' | 'saving' | 'unsaved') => {
     saveStatusRef.current = status
@@ -50,6 +57,7 @@ export default function NoteEditor({ entityId }: NoteEditorProps) {
         updateNote(updated as any)
         markTabDirty(entityId, false)
         setSaveStatus('saved')
+        clearDraft(entityId)
       } catch {
         setSaveStatus('unsaved')
         addToast('Failed to save note', 'error')
@@ -74,8 +82,9 @@ export default function NoteEditor({ entityId }: NoteEditorProps) {
       Underline,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Highlight.configure({ multicolor: false }),
-      Placeholder.configure({ placeholder: 'Write your notes here...' }),
+      Placeholder.configure({ placeholder: 'Write your note here...' }),
       CharacterCount,
+      SearchAndReplace,
     ],
     content: initialContent,
     editorProps: {
@@ -89,6 +98,9 @@ export default function NoteEditor({ entityId }: NoteEditorProps) {
       markTabDirty(entityId, true)
       setSaveStatus('unsaved')
       autosave(html, title)
+      if (onWordCountChange) {
+        onWordCountChange(editor.storage.characterCount.words())
+      }
     },
   })
 
@@ -100,9 +112,17 @@ export default function NoteEditor({ entityId }: NoteEditorProps) {
   }, [entityId, initialContent])
 
   useEffect(() => {
+    if (editor && onWordCountChange) {
+      onWordCountChange(editor.storage.characterCount.words())
+    }
+  }, [editor, entityId, onWordCountChange])
+
+  // On unmount: persist unsaved state to the store draft (not SQLite).
+  // This way switching tabs preserves the draft without an unwanted write.
+  useEffect(() => {
     return () => {
       if (editor && saveStatusRef.current === 'unsaved') {
-        window.api.notes.update({ id: entityId, content: editor.getHTML(), title })
+        setDraft(entityId, { content: editor.getHTML(), title })
       }
     }
   }, [editor, entityId, title])
@@ -110,30 +130,32 @@ export default function NoteEditor({ entityId }: NoteEditorProps) {
   if (!note) return <div>Note not found</div>
 
   return (
-    <div className="flex flex-col h-full bg-surface-950">
-      <div className="px-12 pt-6 pb-2">
-        <input 
-          type="text" 
-          value={title} 
-          onChange={handleTitleChange}
-          placeholder="Note Title"
-          className="text-2xl font-bold bg-transparent text-surface-100 border-none focus:outline-none focus:ring-0 w-full"
-        />
-      </div>
+    <div className="flex flex-col h-full bg-surface-950 relative">
+      <EditorFindToolbar editor={editor} />
       
-      <div className="border-b border-surface-800 bg-surface-900 mt-2">
+      <div className="border-b border-surface-800 bg-surface-900">
         <EditorToolbar editor={editor} saveIndicatorRef={saveIndicatorRef} />
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto px-12 py-8">
+        <div className="max-w-3xl mx-auto px-12 py-10">
+          <input 
+            type="text" 
+            value={title} 
+            onChange={handleTitleChange}
+            placeholder="Note Title"
+            className="text-3xl font-bold bg-transparent text-surface-100 border-none focus:outline-none focus:ring-0 w-full mb-6 px-0"
+            style={{
+              fontFamily: settings?.editor_font || 'Georgia, serif',
+            }}
+          />
           <EditorContent
             editor={editor}
-            className="min-h-full text-surface-200"
+            className="min-h-full text-surface-100"
             style={{
-              fontFamily: 'Inter, sans-serif',
-              fontSize: '16px',
-              lineHeight: '1.7',
+              fontFamily: settings?.editor_font || 'Georgia, serif',
+              fontSize: `${settings?.font_size || 16}px`,
+              lineHeight: `${settings?.line_spacing || 1.8}`,
             }}
           />
         </div>
