@@ -453,6 +453,23 @@ export default function AIPanel() {
               )}
             </div>
             <div className="flex flex-col gap-2 mt-auto shrink-0">
+              {selectedText && selectedText.trim().length > 0 && (() => {
+                const words = selectedText.trim().split(/\s+/)
+                const wordCount = words.length
+                let displaySnippet = selectedText.trim()
+                if (wordCount > 30) {
+                  displaySnippet = words.slice(0, 15).join(' ') + ' ... ' + words.slice(-10).join(' ')
+                }
+                return (
+                  <div className="px-2.5 py-2 bg-surface-800 border border-surface-700 border-l-2 border-l-accent-500 rounded-lg text-xs shadow-sm flex flex-col gap-1">
+                    <div className="flex justify-between items-center text-surface-400 font-medium">
+                      <span>Targeting Selection</span>
+                      <span className="text-[10px] bg-surface-700 px-1.5 py-0.5 rounded">{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
+                    </div>
+                    <span className="text-surface-200 italic line-clamp-4">"{displaySnippet}"</span>
+                  </div>
+                )
+              })()}
               <textarea
                 value={brainstormInput}
                 onChange={(e) => setBrainstormInput(e.target.value)}

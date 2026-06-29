@@ -226,7 +226,7 @@ export default function StoryIntelligenceView() {
                 <div className="text-sm">{emotionAnalysis.emotional_flow_status}</div>
               </div>
               {emotionAnalysis.warning && (
-                <div className="bg-red-500/10 text-red-400 rounded-lg p-4 border border-red-500/20 text-sm flex items-start gap-2">
+                <div className="bg-red-500/10 text-red-600 dark:text-red-400 rounded-lg p-4 border border-red-500/20 text-sm flex items-start gap-2">
                   <Zap className="w-4 h-4 mt-0.5 shrink-0" />
                   <div>
                     <div className="font-bold mb-1">Warning Detected</div>
@@ -275,13 +275,13 @@ export default function StoryIntelligenceView() {
             {storyAnalysis && (storyAnalysis.fatigue_warning || storyAnalysis.repetition_warning) ? (
               <div className="space-y-3">
                 {storyAnalysis.fatigue_warning && (
-                  <div className="bg-amber-500/10 text-amber-400 rounded-lg p-4 border border-amber-500/20 text-sm">
+                  <div className="bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-lg p-4 border border-amber-500/20 text-sm">
                     <span className="font-bold block mb-1">Story Fatigue:</span>
                     {storyAnalysis.fatigue_warning}
                   </div>
                 )}
                 {storyAnalysis.repetition_warning && (
-                  <div className="bg-amber-500/10 text-amber-400 rounded-lg p-4 border border-amber-500/20 text-sm">
+                  <div className="bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-lg p-4 border border-amber-500/20 text-sm">
                     <span className="font-bold block mb-1">Global Repetition:</span>
                     {storyAnalysis.repetition_warning}
                   </div>
@@ -301,7 +301,7 @@ export default function StoryIntelligenceView() {
                       <div key={stat.id} className="bg-surface-900 rounded-lg p-3 border border-surface-800 text-sm">
                         <div className="font-bold text-surface-300 mb-1">{ch?.title || 'Unknown Chapter'}</div>
                         {stat.scene_density && <div className="mb-1"><span className="text-surface-500">Density:</span> {stat.scene_density}</div>}
-                        {stat.repetition_warnings && <div className="text-amber-400"><span className="text-surface-500">Warning:</span> {stat.repetition_warnings}</div>}
+                        {stat.repetition_warnings && <div className="text-amber-600 dark:text-amber-400"><span className="text-surface-500">Warning:</span> {stat.repetition_warnings}</div>}
                       </div>
                     )
                   })}
