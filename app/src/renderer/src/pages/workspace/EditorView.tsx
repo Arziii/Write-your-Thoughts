@@ -126,7 +126,7 @@ export default function EditorView() {
         </div>
 
         <div className="flex items-center gap-3 text-xs" style={{ color: 'hsl(var(--surface-500))', fontWeight: 500 }}>
-          <span>{formatWordCount(wordCount)} words</span>
+          <span>{formatWordCount(wordCount)}</span>
         </div>
 
         {/* AI panel toggle (when AI panel hidden) */}

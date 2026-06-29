@@ -389,27 +389,37 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   // Phase 3: reload all entities from local SQLite into the React store.
   refreshFromDb: async (userId: string) => {
     try {
-      const [books, characters, locations, notes, codex, wiki, organizations, worldRules] = await Promise.all([
-        window.api.books.getAll(userId),
-        window.api.characters?.getAll ? window.api.characters.getAll(userId) : Promise.resolve([]),
-        window.api.locations?.getAll ? window.api.locations.getAll(userId) : Promise.resolve([]),
-        window.api.notes?.getAll ? window.api.notes.getAll(userId) : Promise.resolve([]),
-        window.api.codex?.getAll ? window.api.codex.getAll(userId) : Promise.resolve([]),
-        window.api.wiki?.getAll ? window.api.wiki.getAll(userId) : Promise.resolve([]),
-        window.api.organizations?.getAll ? window.api.organizations.getAll(userId) : Promise.resolve([]),
-        window.api.worldRules?.getAll ? window.api.worldRules.getAll(userId) : Promise.resolve([]),
-      ])
+      const state = get()
+      const bId = state.currentBook?.id
 
-      set({
-        books: (books as any[]) ?? [],
-        characters: (characters as any[]) ?? [],
-        locations: (locations as any[]) ?? [],
-        notes: (notes as any[]) ?? [],
-        codex: (codex as any[]) ?? [],
-        wiki: (wiki as any[]) ?? [],
-        organizations: (organizations as any[]) ?? [],
-        worldRules: (worldRules as any[]) ?? [],
-      })
+      const books = await window.api.books.getAll(userId)
+      set({ books: (books as any[]) ?? [] })
+
+      if (bId) {
+        const [chapters, characters, locations, notes, codex, wiki, organizations, worldRules, timelineEvents] = await Promise.all([
+          window.api.chapters.getByBook(bId),
+          window.api.characters?.getByBook ? window.api.characters.getByBook(bId) : Promise.resolve([]),
+          window.api.locations?.getByBook ? window.api.locations.getByBook(bId) : Promise.resolve([]),
+          window.api.notes?.getByBook ? window.api.notes.getByBook(bId) : Promise.resolve([]),
+          window.api.codex?.getByBook ? window.api.codex.getByBook(bId) : Promise.resolve([]),
+          window.api.wiki?.getByBook ? window.api.wiki.getByBook(bId) : Promise.resolve([]),
+          window.api.organizations?.getByBook ? window.api.organizations.getByBook(bId) : Promise.resolve([]),
+          window.api.worldRules?.getByBook ? window.api.worldRules.getByBook(bId) : Promise.resolve([]),
+          window.api.timelineEvents?.getByBook ? window.api.timelineEvents.getByBook(bId) : Promise.resolve([]),
+        ])
+
+        set({
+          chapters: (chapters as any[]) ?? [],
+          characters: (characters as any[]) ?? [],
+          locations: (locations as any[]) ?? [],
+          notes: (notes as any[]) ?? [],
+          codex: (codex as any[]) ?? [],
+          wiki: (wiki as any[]) ?? [],
+          organizations: (organizations as any[]) ?? [],
+          worldRules: (worldRules as any[]) ?? [],
+          timelineEvents: (timelineEvents as any[]) ?? [],
+        })
+      }
       console.log('[Store] Refreshed from local DB after cloud pull.')
     } catch (e) {
       console.error('[Store] refreshFromDb failed:', e)
