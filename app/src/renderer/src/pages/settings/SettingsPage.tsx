@@ -276,7 +276,7 @@ export default function SettingsPage() {
                 type="password"
                 value={currentProviderSettings.apiKey || ''}
                 onChange={(e) => updateProviderSetting('apiKey', e.target.value)}
-                placeholder={`Your ${aiProvider} API key...`}
+                placeholder={(!currentProviderSettings.apiKey && aiApiKey) ? '••••••••••••••••••••••••••••••••••••••••••••••••' : `Your ${aiProvider} API key...`}
                 className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 text-sm focus:outline-none focus:border-accent-500 transition-all font-mono"
               />
               <p className="text-[11px] text-surface-600 mt-1">Your API key is securely synced to your cloud account.</p>

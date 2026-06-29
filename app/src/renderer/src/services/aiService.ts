@@ -804,4 +804,22 @@ function buildSystemPrompt(mode: string, stylePrompt?: string, storyContext?: st
 
   return `${base}\n\n${modeInstructions[mode] || modeInstructions.grammar}\n\nRespond ONLY with JSON in this exact format: {"polished": "<improved text>", "explanation": "<brief explanation of changes made>"}`
 }
-
+
+async function callAIForJSON<T>(options: {
+  content: string;
+  provider: AIProvider;
+  apiKey?: string;
+  providerSettings?: any;
+  systemPrompt: string;
+  fallback: T;
+}): Promise<T> {
+  try {
+    const providerSpecificSettings = options.providerSettings ? options.providerSettings[options.provider as string] : undefined;
+    const activeSettings = { apiKey: options.apiKey, ...providerSpecificSettings };
+    const ai = ProviderFactory.create(options.provider, activeSettings);
+    return await ai.generateJSON(options.systemPrompt, options.content);
+  } catch (error) {
+    console.error('Error in callAIForJSON:', error);
+    throw error;
+  }
+}
