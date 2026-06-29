@@ -1,7 +1,7 @@
 # Write Your Thoughts (Beta v1)
 
 <p align="center">
-  <img src="assets/logo-placeholder.png" alt="Write Your Thoughts Logo" width="200" height="200" />
+  <img src="assets/Logo.png" alt="Write Your Thoughts Logo" width="200" height="200" />
 </p>
 
 <p align="center">
