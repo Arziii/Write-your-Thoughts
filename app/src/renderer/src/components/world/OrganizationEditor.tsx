@@ -20,7 +20,7 @@ interface OrganizationEditorProps {
 }
 
 export default function OrganizationEditor({ entityId, onWordCountChange }: OrganizationEditorProps) {
-  const { organizations, markTabDirty, updateOrganization, drafts, setDraft, clearDraft } = useWorkspaceStore()
+  const { organizations, markTabDirty, updateOrganization, drafts, setDraft, clearDraft, setSelectedText } = useWorkspaceStore()
   const { addToast } = useToastStore()
   const { settings } = useUserStore()
   const saveStatusRef = useRef<'saved' | 'saving' | 'unsaved'>('saved')
@@ -99,6 +99,15 @@ export default function OrganizationEditor({ entityId, onWordCountChange }: Orga
       autosave(html, title)
       if (onWordCountChange) {
         onWordCountChange(editor.storage.characterCount.words())
+      }
+    },
+    onSelectionUpdate: ({ editor }) => {
+      const { from, to } = editor.state.selection
+      if (from !== to) {
+        const text = editor.state.doc.textBetween(from, to, ' ')
+        setSelectedText(text)
+      } else {
+        setSelectedText('')
       }
     },
   })

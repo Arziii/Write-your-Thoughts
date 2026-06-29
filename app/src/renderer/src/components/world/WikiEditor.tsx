@@ -20,7 +20,7 @@ interface WikiEditorProps {
 }
 
 export default function WikiEditor({ entityId, onWordCountChange }: WikiEditorProps) {
-  const { wiki, markTabDirty, updateWiki, drafts, setDraft, clearDraft } = useWorkspaceStore()
+  const { wiki, markTabDirty, updateWiki, drafts, setDraft, clearDraft, setSelectedText } = useWorkspaceStore()
   const { addToast } = useToastStore()
   const { settings } = useUserStore()
   const saveStatusRef = useRef<'saved' | 'saving' | 'unsaved'>('saved')
@@ -99,6 +99,15 @@ export default function WikiEditor({ entityId, onWordCountChange }: WikiEditorPr
       autosave(html, title)
       if (onWordCountChange) {
         onWordCountChange(editor.storage.characterCount.words())
+      }
+    },
+    onSelectionUpdate: ({ editor }) => {
+      const { from, to } = editor.state.selection
+      if (from !== to) {
+        const text = editor.state.doc.textBetween(from, to, ' ')
+        setSelectedText(text)
+      } else {
+        setSelectedText('')
       }
     },
   })

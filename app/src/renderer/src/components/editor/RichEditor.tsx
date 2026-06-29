@@ -24,7 +24,7 @@ interface RichEditorProps {
 }
 
 export default function RichEditor({ chapterId, initialContent, onContentChange }: RichEditorProps) {
-  const { markTabDirty, updateChapter, activeChapter } = useWorkspaceStore()
+  const { markTabDirty, updateChapter, activeChapter, setSelectedText } = useWorkspaceStore()
   const { settings, user } = useUserStore()
   const { addToast } = useToastStore()
   const saveStatusRef = useRef<'saved' | 'saving' | 'unsaved'>('saved')
@@ -129,6 +129,15 @@ export default function RichEditor({ chapterId, initialContent, onContentChange 
             snapshotType: 'auto'
           }).catch(e => console.error('Failed to save background snapshot', e))
         }
+      }
+    },
+    onSelectionUpdate: ({ editor }) => {
+      const { from, to } = editor.state.selection
+      if (from !== to) {
+        const text = editor.state.doc.textBetween(from, to, ' ')
+        setSelectedText(text)
+      } else {
+        setSelectedText('')
       }
     },
   })

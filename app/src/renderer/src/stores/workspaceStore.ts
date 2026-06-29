@@ -104,6 +104,10 @@ interface WorkspaceStore {
   focusMode: boolean
   setFocusMode: (mode: boolean) => void
 
+  // AI Context Selection
+  selectedText: string
+  setSelectedText: (text: string) => void
+
   // In-memory drafts: unsaved form data keyed by entityId.
   // Survives tab switching because it lives in the store, not component state.
   drafts: Record<string, Record<string, any>>
@@ -361,6 +365,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   // Focus mode
   focusMode: false,
   setFocusMode: (focusMode) => set({ focusMode }),
+
+  // AI Context Selection
+  selectedText: '',
+  setSelectedText: (selectedText) => set({ selectedText }),
 
   // In-memory drafts
   drafts: {},
