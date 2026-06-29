@@ -69,9 +69,9 @@ html, body, #root {
 }
 
 body {
-  font-family: 'Charm', cursive;
-  font-size: 1.15rem;
-  font-weight: 700;
+  @apply font-sans;
+  font-size: 1rem;
+  font-weight: 400;
   background: hsl(var(--surface-950));
   color: hsl(var(--surface-50));
   -webkit-font-smoothing: antialiased;

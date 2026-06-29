@@ -35,7 +35,7 @@ export default function SidebarTimeline() {
       const result = await aiService.analyzeTimelineEvents({
         content: allText,
         provider: settings.ai_provider as any,
-        apiKey: settings.ai_api_key,
+        apiKey: settings?.ai_api_key, providerSettings: settings?.ai_settings,
         storyContext: currentBook.story_context || '',
         startDate: overrideStartDate || timelineSettings?.start_date_string
       })

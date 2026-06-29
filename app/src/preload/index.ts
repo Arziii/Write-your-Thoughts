@@ -109,7 +109,7 @@ const api = {
   },
 
   export: {
-    book: (bookId: string, format: string, authorName?: string) => ipcRenderer.invoke('export:book', { bookId, format, authorName }),
+    book: (bookId: string, authorName: string | undefined, options: any) => ipcRenderer.invoke('export:book', { bookId, authorName, ...options }),
   },
 
   entities: {

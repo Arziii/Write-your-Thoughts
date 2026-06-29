@@ -24,8 +24,8 @@ const modeDescriptions: Record<AIMode, string> = {
 }
 
 export default function AIPanel() {
-  const { activeChapter, updateChapter, characters, locations, timelineEvents, toggleAIPanel, panelState } = useWorkspaceStore()
-  const { settings } = useUserStore()
+  const { activeChapter, currentBook, tabs, activeTabId, updateChapter, characters, locations, timelineEvents, toggleAIPanel, panelState, selectedText } = useWorkspaceStore()
+  const { settings, user } = useUserStore()
   const { addToast } = useToastStore()
   const { verseTimelineEvents } = useStoryBibleStore()
 
@@ -77,16 +77,21 @@ export default function AIPanel() {
       }
 
       // Save version before polishing
-      await window.api.chapters.saveVersion({
-        chapterId: activeChapter.id,
-        content: activeChapter.content,
-        source: 'manual',
-      })
+      if (user) {
+        await window.api.chapters.saveVersion({
+          chapterId: activeChapter.id,
+          userId: user.id,
+          content: activeChapter.content,
+          wordCount: activeChapter.word_count || 0,
+          snapshotType: 'auto',
+          milestoneName: 'Pre-AI Polish'
+        })
+      }
 
       const result = await aiService.polishText({
         content: activeChapter.content,
         provider: settings.ai_provider || 'openai',
-        apiKey: settings.ai_api_key,
+        apiKey: settings?.ai_api_key, providerSettings: settings?.ai_settings,
         mode,
         stylePrompt: settings.ai_style_prompt,
         preserveFormatting: settings.preserve_formatting ?? true,
@@ -105,16 +110,19 @@ export default function AIPanel() {
   }
 
   const handleAccept = async () => {
-    if (!polishResult || !activeChapter) return
+    if (!polishResult || !activeChapter || !user) return
     try {
+      const wc = polishResult.polishedContent.replace(/<[^>]*>/g, '').trim().split(/\s+/).filter(Boolean).length
       // Save AI output as new version
       await window.api.chapters.saveVersion({
         chapterId: activeChapter.id,
+        userId: user.id,
         content: polishResult.polishedContent,
-        source: 'ai_polish',
+        wordCount: wc,
+        snapshotType: 'auto',
+        milestoneName: 'AI Polish Result'
       })
       // Save to chapter
-      const wc = polishResult.polishedContent.replace(/<[^>]*>/g, '').trim().split(/\s+/).filter(Boolean).length
       await window.api.chapters.save({
         id: activeChapter.id,
         content: polishResult.polishedContent,
@@ -150,26 +158,49 @@ export default function AIPanel() {
 
     try {
       let storyContext = ''
+      
+      if (currentBook) {
+        storyContext += `Current Book: ${currentBook.title}\n`
+      }
+
+      const activeTab = tabs.find(t => t.id === activeTabId)
+      if (activeTab) {
+        const docType = activeTab.type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+        storyContext += `Current Editor: ${activeTab.type === 'chapter' ? 'Story Editor' : 'Worldbuilding Editor'}\n`
+        storyContext += `Current Document: ${activeTab.title}\n`
+        storyContext += `Document Type: ${docType}\n`
+      }
+      
+      if (selectedText && selectedText.trim().length > 0) {
+        storyContext += `Selected Text: "${selectedText.trim()}"\n`
+      }
+      
       const lockedIds = panelState.lockedEntities || []
+      let relatedDocsAdded = false
       
       const matchedCharacters = characters.filter(c => lockedIds.includes(c.id))
       if (matchedCharacters.length > 0) {
-        storyContext += 'CHARACTERS:\n' + matchedCharacters.map(c => `- ${c.name} (Age: ${c.age}, Gender: ${c.gender}): ${c.appearance}. ${c.personality}. Goals: ${c.goals}`).join('\n') + '\n\n'
+        if (!relatedDocsAdded) { storyContext += '\nRelated Documents:\n'; relatedDocsAdded = true }
+        storyContext += '• Characters:\n' + matchedCharacters.map(c => `  - ${c.name} (Age: ${c.age}, Gender: ${c.gender}): ${c.appearance}. ${c.personality}. Goals: ${c.goals}`).join('\n') + '\n'
       }
 
       const matchedLocations = locations.filter(l => lockedIds.includes(l.id))
       if (matchedLocations.length > 0) {
-        storyContext += 'LOCATIONS:\n' + matchedLocations.map(l => `- ${l.name}: ${l.description}. Culture: ${l.culture}`).join('\n') + '\n\n'
+        if (!relatedDocsAdded) { storyContext += '\nRelated Documents:\n'; relatedDocsAdded = true }
+        storyContext += '• Locations:\n' + matchedLocations.map(l => `  - ${l.name}: ${l.description}. Culture: ${l.culture}`).join('\n') + '\n'
       }
 
       if (verseTimelineEvents.length > 0) {
-        storyContext += 'VERSE TIMELINE RECORD (Global World Events):\n' + [...verseTimelineEvents].sort((a,b) => (a.sort_order||0)-(b.sort_order||0)).map(e => `- ${e.event_date ? `[${e.event_date}] ` : ''}${e.title}: ${e.description}`).join('\n') + '\n\n'
+        if (!relatedDocsAdded) { storyContext += '\nRelated Documents:\n'; relatedDocsAdded = true }
+        storyContext += '• Global World Events:\n' + [...verseTimelineEvents].sort((a,b) => (a.sort_order||0)-(b.sort_order||0)).map(e => `  - ${e.event_date ? `[${e.event_date}] ` : ''}${e.title}: ${e.description}`).join('\n') + '\n'
       }
 
+      const recentMessages = newMessages.slice(-20)
+
       const response = await aiService.brainstorm({
-        messages: newMessages,
+        messages: recentMessages,
         provider: settings.ai_provider || 'openai',
-        apiKey: settings.ai_api_key,
+        apiKey: settings?.ai_api_key, providerSettings: settings?.ai_settings,
         storyContext: storyContext.trim(),
       })
 
@@ -389,31 +420,29 @@ export default function AIPanel() {
             <div className="flex-1 overflow-y-auto space-y-4 mb-3 pr-1">
               {brainstormMessages.length === 0 ? (
                 <div className="text-center text-surface-500 text-xs mt-10">
-                  Ask AI for ideas, plot points, or character concepts.
+                  Ask Story Intelligence for ideas, plot points, or character concepts.
                 </div>
               ) : (
                 brainstormMessages.map((msg, idx) => (
-                  <div key={idx} className={cn("p-2.5 rounded-lg text-sm whitespace-pre-wrap relative group", msg.role === 'user' ? "bg-accent-900/30 text-surface-200 ml-4" : "bg-surface-800 text-surface-300 mr-4")}>
+                  <div key={idx} className={cn("p-2.5 rounded-lg text-sm whitespace-pre-wrap relative group select-text", msg.role === 'user' ? "bg-accent-900/30 text-surface-200 ml-4" : "bg-surface-800 text-surface-300 mr-4")}>
                     {msg.content}
-                    {msg.role === 'user' && (
-                      <div className="absolute -bottom-3 right-2 hidden group-hover:flex items-center gap-1 bg-surface-800 border border-surface-700 rounded-md p-1 shadow-sm">
-                        <button 
-                          onClick={() => handleCopy(msg.content)} 
-                          className="p-1 hover:bg-surface-700 rounded text-surface-400 hover:text-surface-200"
-                          title="Copy"
-                        >
-                          <Copy className="w-3 h-3" />
-                        </button>
-                        <button 
-                          onClick={() => handleBrainstorm(msg.content)} 
-                          className="p-1 hover:bg-surface-700 rounded text-surface-400 hover:text-surface-200"
-                          title="Resend"
-                          disabled={isBrainstorming}
-                        >
-                          <RefreshCcw className="w-3 h-3" />
-                        </button>
-                      </div>
-                    )}
+                    <div className="absolute -bottom-3 right-2 hidden group-hover:flex items-center gap-1 bg-surface-800 border border-surface-700 rounded-md p-1 shadow-sm">
+                      <button 
+                        onClick={() => handleCopy(msg.content)} 
+                        className="p-1 hover:bg-surface-700 rounded text-surface-400 hover:text-surface-200"
+                        title="Copy"
+                      >
+                        <Copy className="w-3 h-3" />
+                      </button>
+                      <button 
+                        onClick={() => handleBrainstorm(msg.content)} 
+                        className="p-1 hover:bg-surface-700 rounded text-surface-400 hover:text-surface-200"
+                        title={msg.role === 'user' ? "Resend" : "Send again"}
+                        disabled={isBrainstorming}
+                      >
+                        <RefreshCcw className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
@@ -427,7 +456,7 @@ export default function AIPanel() {
               <textarea
                 value={brainstormInput}
                 onChange={(e) => setBrainstormInput(e.target.value)}
-                placeholder="Ask something..."
+                placeholder="Ask Story Intelligence..."
                 className="w-full bg-surface-800 border border-surface-700 rounded-lg p-2.5 text-sm text-surface-200 focus:outline-none focus:border-accent-500 resize-none h-20"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {

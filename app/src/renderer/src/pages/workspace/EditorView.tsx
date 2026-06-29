@@ -17,10 +17,11 @@ import CommentSidebar from '../../components/editor/CommentSidebar'
 import EmotionPanel from '../../components/editor/EmotionPanel'
 import ContinuityPanel from '../../components/editor/ContinuityPanel'
 import StyleIntelligencePanel from '../../components/editor/StyleIntelligencePanel'
+import WorldbuildingAnalyzerPanel from '../../components/editor/WorldbuildingAnalyzerPanel'
 import StoryIntelligenceView from '../../components/world/StoryIntelligenceView'
 import GlobalRelationshipManager from '../../components/world/GlobalRelationshipManager'
 import type { Chapter } from '../../types'
-import { BookOpen, PanelLeft, Sparkles, Heart, Shield, MessageSquare, Feather } from 'lucide-react'
+import { BookOpen, PanelLeft, Sparkles, Heart, Shield, MessageSquare, Feather, Microscope } from 'lucide-react'
 
 export default function EditorView() {
   const { chapterId } = useParams()
@@ -43,28 +44,39 @@ export default function EditorView() {
   const [isEmotionPanelOpen, setIsEmotionPanelOpen] = useState(false)
   const [isContinuityPanelOpen, setIsContinuityPanelOpen] = useState(false)
   const [isStylePanelOpen, setIsStylePanelOpen] = useState(false)
+  const [isWorldbuildingAnalyzerOpen, setIsWorldbuildingAnalyzerOpen] = useState(false)
 
-  const togglePanel = (panel: 'comments' | 'emotion' | 'continuity' | 'style') => {
+  const togglePanel = (panel: 'comments' | 'emotion' | 'continuity' | 'style' | 'worldbuilding') => {
     if (panel === 'comments') {
       setIsCommentSidebarOpen(!isCommentSidebarOpen)
       setIsEmotionPanelOpen(false)
       setIsContinuityPanelOpen(false)
       setIsStylePanelOpen(false)
+      setIsWorldbuildingAnalyzerOpen(false)
     } else if (panel === 'emotion') {
       setIsEmotionPanelOpen(!isEmotionPanelOpen)
       setIsCommentSidebarOpen(false)
       setIsContinuityPanelOpen(false)
       setIsStylePanelOpen(false)
+      setIsWorldbuildingAnalyzerOpen(false)
     } else if (panel === 'continuity') {
       setIsContinuityPanelOpen(!isContinuityPanelOpen)
       setIsCommentSidebarOpen(false)
       setIsEmotionPanelOpen(false)
       setIsStylePanelOpen(false)
+      setIsWorldbuildingAnalyzerOpen(false)
     } else if (panel === 'style') {
       setIsStylePanelOpen(!isStylePanelOpen)
       setIsCommentSidebarOpen(false)
       setIsEmotionPanelOpen(false)
       setIsContinuityPanelOpen(false)
+      setIsWorldbuildingAnalyzerOpen(false)
+    } else if (panel === 'worldbuilding') {
+      setIsWorldbuildingAnalyzerOpen(!isWorldbuildingAnalyzerOpen)
+      setIsCommentSidebarOpen(false)
+      setIsEmotionPanelOpen(false)
+      setIsContinuityPanelOpen(false)
+      setIsStylePanelOpen(false)
     }
   }
 
@@ -126,7 +138,7 @@ export default function EditorView() {
         </div>
 
         <div className="flex items-center gap-3 text-xs" style={{ color: 'hsl(var(--surface-500))', fontWeight: 500 }}>
-          <span>{formatWordCount(wordCount)} words</span>
+          <span>{formatWordCount(wordCount)}</span>
         </div>
 
         {/* AI panel toggle (when AI panel hidden) */}
@@ -201,6 +213,11 @@ export default function EditorView() {
         {activeTab.type === 'chapter' && activeChapter && isStylePanelOpen && (
           <StyleIntelligencePanel chapterId={activeChapter.id} />
         )}
+
+        {/* Worldbuilding Analyzer Panel */}
+        {activeTab.type === 'chapter' && activeChapter && isWorldbuildingAnalyzerOpen && (
+          <WorldbuildingAnalyzerPanel chapterId={activeChapter.id} />
+        )}
         
         {/* Right Vertical Tool Sidebar */}
         {activeTab && (
@@ -241,6 +258,14 @@ export default function EditorView() {
               disabled={activeTab.type !== 'chapter'}
             >
               <Feather className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => activeTab.type === 'chapter' && togglePanel('worldbuilding')}
+              className={`p-2 rounded-lg transition-colors ${activeTab.type !== 'chapter' ? 'opacity-30 cursor-not-allowed text-surface-500' : isWorldbuildingAnalyzerOpen ? 'bg-surface-950 text-accent-600 shadow-sm' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-850'}`}
+              title={activeTab.type === 'chapter' ? "Worldbuilding Analyzer" : "Worldbuilding Analyzer (Chapters only)"}
+              disabled={activeTab.type !== 'chapter'}
+            >
+              <Microscope className="w-4 h-4" />
             </button>
           </div>
         )}

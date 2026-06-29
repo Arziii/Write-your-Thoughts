@@ -1,9 +1,11 @@
-import type { AIPolishResult, AIProvider } from '../types'
+import type { AIPolishResult, AIProvider, ProviderSettings } from '../types'
+import { ProviderFactory } from './ai/ProviderFactory'
 
 interface AIPolishOptions {
   content: string
   provider: AIProvider
-  apiKey: string
+  apiKey?: string
+  providerSettings?: any
   mode?: 'grammar' | 'balanced' | 'strong' | 'expand' | 'shorten' | 'describe' | 'custom'
   stylePrompt?: string
   preserveFormatting?: boolean
@@ -17,7 +19,16 @@ interface AIContinuityOptions {
   content: string
   storyContext?: string
   provider: AIProvider
-  apiKey: string
+  apiKey?: string
+  providerSettings?: any
+}
+
+interface AIWorldbuildingOptions {
+  content: string
+  storyContext?: string
+  provider: AIProvider
+  apiKey?: string
+  providerSettings?: any
 }
 
 export const aiService = {
@@ -29,16 +40,77 @@ export const aiService = {
 
     const systemPrompt = buildSystemPrompt(mode, stylePrompt, storyContext, preserveFormatting, options.customInstruction)
 
-    switch (provider) {
-      case 'openai':
-        return polishWithOpenAI(textToProcess, content, systemPrompt, apiKey)
-      case 'gemini':
-        return polishWithGemini(textToProcess, content, systemPrompt, apiKey)
-      case 'claude':
-        return polishWithClaude(textToProcess, content, systemPrompt, apiKey)
-      default:
-        throw new Error(`Unknown AI provider: ${provider}`)
+    const providerSpecificSettings = options.providerSettings ? options.providerSettings[provider as string] : undefined;
+    const activeSettings = { apiKey: options.apiKey, ...providerSpecificSettings };
+    const ai = ProviderFactory.create(provider as AIProvider, activeSettings)
+    
+    try {
+      const result = await ai.generateJSON(systemPrompt, `Please polish this text:\n\n${textToProcess}`)
+      return {
+        polishedContent: result.polished,
+        explanation: result.explanation,
+        provider: provider as AIProvider,
+      }
+    } catch (e: any) {
+      throw new Error(`AI returned an error: ${e.message}`)
     }
+  },
+
+  async analyzeWorldbuilding(options: AIWorldbuildingOptions): Promise<string> {
+    const { content, storyContext, provider, apiKey } = options
+    if (!content.trim()) throw new Error('No content to analyze')
+
+    let systemPrompt = `You are the Worldbuilding Analyzer for Write Your Thoughts.
+Your purpose is NOT to rewrite the user's work.
+Your job is to critically analyze worldbuilding documents and provide constructive feedback like a professional fantasy/sci-fi editor.
+
+Your goal is to improve consistency, logic, realism (when applicable), narrative strength, and internal coherence.
+
+ANALYSIS OBJECTIVES
+Carefully inspect the document for:
+1. Contradictions (statements that conflict with established lore)
+2. Logical Flaws (impossible cause/effect, broken economies)
+3. Rule Consistency (when rules exist, verify they are obeyed)
+4. Timeline Issues (impossible chronology)
+5. Power Balance (overpowered abilities)
+6. Worldbuilding Gaps (unanswered questions)
+7. Organization Analysis (hierarchy, purpose)
+8. Cultural Consistency (religion, traditions)
+9. Economy (trade, scarcity)
+10. Geography (cities, trade routes)
+11. Technology (consistent tech levels)
+12. Magic System (limitations, costs)
+13. Narrative Opportunities
+14. Missing Definitions
+
+OUTPUT FORMAT
+Always organize feedback into sections.
+## Overall Assessment
+## Critical Issues
+## Warnings
+## Suggestions
+## Questions
+## Strengths
+
+RULES
+Never invent lore.
+Never assume missing information is incorrect. If uncertain, mark as "Possible inconsistency."
+Do not rewrite the user's work unless specifically requested.
+Focus on helping the author build a believable and internally consistent world.`
+
+    if (storyContext && storyContext.trim().length > 0) {
+      systemPrompt += `\n\nSTORY CONTEXT (Use this to spot inconsistencies!):\n${storyContext.trim()}`
+    }
+
+
+
+    const messages: AIBrainstormMessage[] = [{ role: 'user', content }]
+
+    const providerSpecificSettings = options.providerSettings ? options.providerSettings[provider as string] : undefined;
+    const activeSettings = { apiKey: options.apiKey, ...providerSpecificSettings };
+    const ai = ProviderFactory.create(provider as AIProvider, activeSettings)
+    const response = await ai.generateText(systemPrompt, messages)
+    return response.content
   },
 
   async analyzeContinuity(options: AIContinuityOptions): Promise<{ events: any[], warnings: any[] }> {
@@ -63,7 +135,7 @@ STORY CONTEXT (Use this to spot inconsistencies!):
 ${storyContext || 'No context provided.'}
 `
 
-    return callAIForJSON({ content, provider, apiKey, systemPrompt, fallback: { events: [], warnings: [] } })
+    return callAIForJSON({ content, provider, apiKey, providerSettings: (options as any).providerSettings, systemPrompt, fallback: { events: [], warnings: [] } })
   },
 
   async analyzeVoice(options: AIContinuityOptions): Promise<{
@@ -92,10 +164,10 @@ Return the data STRICTLY as a JSON object:
 STORY CONTEXT:
 ${storyContext || 'No context provided.'}`
 
-    return callAIForJSON({ content, provider, apiKey, systemPrompt, fallback: {
-      vocabulary: '', sentence_length: '', formality: '', personality: '',
-      mood: '', emotional_state: '', patterns: [], samples: []
-    }})
+    const providerSpecificSettings = options.providerSettings ? options.providerSettings[provider as string] : undefined;
+    const activeSettings = { apiKey: options.apiKey, ...providerSpecificSettings };
+    const ai = ProviderFactory.create(provider as AIProvider, activeSettings)
+    return await ai.generateJSON(systemPrompt, content)
   },
 
   async analyzeEmotion(options: AIContinuityOptions): Promise<{
@@ -126,7 +198,8 @@ Identify up to 5 key scenes or turning points in the chapter.
 STORY CONTEXT:
 ${storyContext || 'No context provided.'}`
 
-    return callAIForJSON({ content, provider, apiKey, systemPrompt, fallback: {
+    return callAIForJSON({
+      content, provider, apiKey, providerSettings: (options as any).providerSettings, systemPrompt, fallback: {
       primary_emotion: '', secondary_emotion: '', intensity: 5, scenes: []
     }})
   },
@@ -152,7 +225,8 @@ Return the data STRICTLY as a JSON object:
 STORY CONTEXT:
 ${storyContext || 'No context provided.'}`
 
-    return callAIForJSON({ content, provider, apiKey, systemPrompt, fallback: {
+    return callAIForJSON({
+      content, provider, apiKey, providerSettings: (options as any).providerSettings, systemPrompt, fallback: {
       sentence_length: 'Medium', dialogue_ratio: 'Moderate', vocabulary: 'Moderate', tone: 'Neutral', prose_density: 'Balanced'
     }})
   },
@@ -193,7 +267,8 @@ Return the data STRICTLY as a JSON object:
 STORY CONTEXT:
 ${storyContext || 'No context provided.'}`
 
-    return callAIForJSON({ content, provider, apiKey, systemPrompt, fallback: {
+    return callAIForJSON({
+      content, provider, apiKey, providerSettings: (options as any).providerSettings, systemPrompt, fallback: {
       sentence_length: 'Medium', dialogue_ratio: 'Moderate', vocabulary: 'Moderate', tone: 'Neutral', prose_density: 'Balanced', warning: ''
     }})
   },
@@ -247,7 +322,8 @@ Return the data STRICTLY as a JSON object:
 STORY CONTEXT:
 ${storyContext || 'No context provided.'}`
 
-    return callAIForJSON({ content, provider, apiKey, systemPrompt, fallback: {
+    return callAIForJSON({
+      content, provider, apiKey, providerSettings: (options as any).providerSettings, systemPrompt, fallback: {
       relationship_type: currentType, trust_level: currentTrust, affection_level: currentAffection,
       history_update: history, current_state_update: currentState, events: []
     }})
@@ -256,32 +332,331 @@ ${storyContext || 'No context provided.'}`
   async brainstorm(options: AIBrainstormOptions): Promise<string> {
     const { messages, provider, apiKey, storyContext } = options
 
-    let systemPrompt = `You are a creative brainstorming assistant for an author. Help them develop their story, characters, plot, and writing ideas.
-    
-MASTER DIRECTIVES:
-- The author's thoughts and intentions are sacred.
-- AI exists to clarify and enhance, never to replace.`
-    if (storyContext && storyContext.trim().length > 0) {
-      systemPrompt += `\n\nSTORY CONTEXT:\n${storyContext.trim()}`
+    const systemPrompt = `You are Story Intelligence, the built-in AI assistant for Write Your Thoughts.
+
+Your purpose is to collaborate with authors as a co-writer, worldbuilding consultant, continuity editor, and creative assistant.
+
+You understand the current writing project through the workspace context supplied by the application.
+
+Your objective is to help the author create richer stories while maintaining consistency, logic, and creativity.
+
+Never take control of the author's story.
+
+Always collaborate.
+
+--------------------------------------------------
+
+WORKSPACE AWARENESS
+--------------------------------------------------
+
+The application may provide structured workspace context before each user message.
+
+Possible context includes:
+
+• Current Book
+• Current Editor
+• Current Document
+• Current Selection
+• Cursor Position
+• Conversation Summary
+• Related Documents
+• Search Results
+• Retrieved Lore
+• Project Metadata
+
+Treat this information as the project's source of truth.
+
+Never ask the user to paste information that already exists within the provided workspace.
+
+If required information is unavailable, politely ask only for the missing information.
+
+--------------------------------------------------
+
+TOKEN OPTIMIZATION
+--------------------------------------------------
+
+Assume the application intentionally provides only the information relevant to the current request.
+
+Do NOT ask for unrelated files.
+
+Do NOT request the entire project.
+
+Do NOT summarize documents unless requested.
+
+Use only the supplied workspace context.
+
+If additional context would genuinely improve the answer, specify exactly what is needed.
+
+Example:
+
+Good:
+"I need the World Rules related to resurrection."
+
+Bad:
+"I need your entire world."
+
+Avoid repeating project information already provided.
+
+Avoid restating the workspace context back to the user.
+
+Keep responses concise unless the user requests detailed output.
+
+--------------------------------------------------
+
+YOUR RESPONSIBILITIES
+--------------------------------------------------
+
+Determine the user's intent automatically.
+
+You may:
+
+• Answer questions
+• Explain lore
+• Brainstorm ideas
+• Improve writing
+• Rewrite text
+• Expand content
+• Create organizations
+• Create locations
+• Create governments
+• Create religions
+• Create cultures
+• Create races
+• Create history
+• Create timelines
+• Create world rules
+• Build political systems
+• Build economies
+• Build magic systems
+• Analyze continuity
+• Detect contradictions
+• Connect existing lore
+• Suggest improvements
+
+Do not force a specific workflow.
+
+Adapt naturally.
+
+--------------------------------------------------
+
+PROJECT MEMORY
+--------------------------------------------------
+
+Treat the supplied workspace context as your temporary project memory.
+
+Understand references such as:
+
+"them"
+
+"that kingdom"
+
+"this organization"
+
+"the empire"
+
+"the previous chapter"
+
+"our religion"
+
+Use the workspace context to infer what the user means.
+
+Only ask for clarification when multiple interpretations are equally likely.
+
+--------------------------------------------------
+
+WHEN WRITING
+--------------------------------------------------
+
+When creating new content:
+
+Respect existing lore.
+
+Match the current writing style.
+
+Avoid contradictions.
+
+Connect new content naturally with existing worldbuilding.
+
+When multiple creative directions are possible, offer 2–5 options.
+
+Explain briefly why each option fits.
+
+--------------------------------------------------
+
+WHEN EDITING
+--------------------------------------------------
+
+When improving text:
+
+Preserve the author's voice.
+
+Improve clarity.
+
+Improve flow.
+
+Improve immersion.
+
+Do not unnecessarily rewrite entire sections.
+
+Only modify what the user requests.
+
+--------------------------------------------------
+
+WHEN ANALYZING
+--------------------------------------------------
+
+When analyzing documents, check for:
+
+• Contradictions
+• Timeline issues
+• Logical inconsistencies
+• Missing explanations
+• Worldbuilding gaps
+• Power imbalance
+• Political realism
+• Economic realism
+• Cultural consistency
+• Technology consistency
+• Magic consistency
+• Naming consistency
+• Organizational structure
+
+If issues exist, explain:
+
+Issue
+
+Reason
+
+Impact
+
+Recommendation
+
+Do not invent problems.
+
+If no issues are found, say so.
+
+--------------------------------------------------
+
+WHEN CONNECTING LORE
+--------------------------------------------------
+
+If related workspace documents are available:
+
+Compare them.
+
+Connect them.
+
+Reference them naturally.
+
+Highlight relationships.
+
+Point out conflicts.
+
+Identify opportunities to strengthen the world.
+
+Never fabricate project information.
+
+--------------------------------------------------
+
+PROACTIVE ASSISTANCE
+--------------------------------------------------
+
+When appropriate, suggest improvements such as:
+
+Missing leader
+
+Undefined government
+
+Weak motivation
+
+Missing timeline
+
+Incomplete religion
+
+Undefined economy
+
+Missing rival
+
+Missing consequences
+
+Keep suggestions brief and actionable.
+
+--------------------------------------------------
+
+COMMUNICATION STYLE
+--------------------------------------------------
+
+Be conversational.
+
+Be collaborative.
+
+Be concise.
+
+Avoid repetitive explanations.
+
+Avoid unnecessary apologies.
+
+Avoid overly generic advice.
+
+Focus on helping the author move forward.
+
+--------------------------------------------------
+
+PRIORITY OF CONTEXT
+--------------------------------------------------
+
+Use information in this order:
+
+1. Current User Request
+
+2. Current Workspace Context
+
+3. Related Retrieved Documents
+
+4. Conversation Summary
+
+Never assume information outside the provided context.
+
+--------------------------------------------------
+
+FINAL GOAL
+--------------------------------------------------
+
+Behave like an experienced co-author that understands the user's project.
+
+Help authors think, create, organize, analyze, and improve their worlds while remaining efficient with context and token usage.
+
+The application is responsible for deciding what context is provided.
+
+Your responsibility is to make the best possible use of that context without requesting unnecessary information.
+
+IMPORTANT FORMATTING RULE:
+Provide all output in plain text. Do NOT use markdown formatting like **bold** or *italics*. Format your text in clean, proper sentences.`
+
+    const finalMessages = [...messages]
+    if (storyContext && storyContext.trim().length > 0 && finalMessages.length > 0) {
+      const lastMessage = finalMessages[finalMessages.length - 1]
+      if (lastMessage.role === 'user') {
+        finalMessages[finalMessages.length - 1] = {
+          ...lastMessage,
+          content: `=== WORKSPACE CONTEXT ===\n${storyContext.trim()}\n=== END CONTEXT ===\n\nUser:\n${lastMessage.content}`
+        }
+      }
     }
 
-    switch (provider) {
-      case 'openai':
-        return brainstormWithOpenAI(messages, systemPrompt, apiKey)
-      case 'gemini':
-        return brainstormWithGemini(messages, systemPrompt, apiKey)
-      case 'claude':
-        return brainstormWithClaude(messages, systemPrompt, apiKey)
-      default:
-        throw new Error(`Unknown AI provider: ${provider}`)
-    }
+    const providerSpecificSettings = options.providerSettings ? options.providerSettings[provider as string] : undefined;
+    const activeSettings = { apiKey: options.apiKey, ...providerSpecificSettings };
+    const ai = ProviderFactory.create(provider as AIProvider, activeSettings)
+    const response = await ai.generateText(systemPrompt, finalMessages)
+    return response.content
   },
 
   async analyzeTimelineEvents(options: {
     content: string
     storyContext?: string
     provider: AIProvider
-    apiKey: string
+    apiKey?: string
+    providerSettings?: any
     startDate?: string
   }): Promise<{ events: any[] }> {
     const { content, storyContext, provider, apiKey, startDate } = options
@@ -303,7 +678,7 @@ ${startDate ? `CRITICAL: The author has set the "First Day" (Day 1) of the story
 Track the passing of time across the story carefully. If a chapter spans 3 days, generate 3 event objects for that chapter (one for each day), and increment story_day appropriately for each. If the next chapter starts "a week later", increment story_day by 7.`
 
     return callAIForJSON({
-      content, provider, apiKey, systemPrompt,
+      content, provider, apiKey, providerSettings: (options as any).providerSettings, systemPrompt,
       fallback: { events: [] }
     })
   },
@@ -314,7 +689,8 @@ Track the passing of time across the story carefully. If a chapter spans 3 days,
     content: string
     storyContext?: string
     provider: AIProvider
-    apiKey: string
+    apiKey?: string
+    providerSettings?: any
   }): Promise<{
     pacing_status: string
     conflict_density: string
@@ -337,7 +713,7 @@ STORY CONTEXT:
 ${storyContext || 'None'}`
 
     return callAIForJSON({
-      content, provider, apiKey, systemPrompt,
+      content, provider, apiKey, providerSettings: (options as any).providerSettings, systemPrompt,
       fallback: {
         pacing_status: 'Neutral', conflict_density: 'Moderate',
         emotional_flow_status: 'Neutral', emotion_warning: '',
@@ -351,7 +727,8 @@ ${storyContext || 'None'}`
     characterName: string
     storyContext?: string
     provider: AIProvider
-    apiKey: string
+    apiKey?: string
+    providerSettings?: any
   }): Promise<{
     arc_status: string
     emotional_change: string
@@ -367,7 +744,7 @@ STORY CONTEXT:
 ${storyContext || 'None'}`
 
     return callAIForJSON({
-      content, provider, apiKey, systemPrompt,
+      content, provider, apiKey, providerSettings: (options as any).providerSettings, systemPrompt,
       fallback: { arc_status: 'No data', emotional_change: 'No data' }
     })
   },
@@ -375,7 +752,8 @@ ${storyContext || 'None'}`
   async analyzeChapterStatistics(options: {
     content: string
     provider: AIProvider
-    apiKey: string
+    apiKey?: string
+    providerSettings?: any
   }): Promise<{
     repetition_warnings: string
     scene_density: string
@@ -387,7 +765,7 @@ Return a JSON object with EXACTLY these keys:
 - "scene_density": string (E.g. "Exposition density is too high", "Good balance of action and dialogue")`
 
     return callAIForJSON({
-      content, provider, apiKey, systemPrompt,
+      content, provider, apiKey, providerSettings: (options as any).providerSettings, systemPrompt,
       fallback: { repetition_warnings: '', scene_density: 'Normal' }
     })
   }
@@ -426,308 +804,4 @@ function buildSystemPrompt(mode: string, stylePrompt?: string, storyContext?: st
 
   return `${base}\n\n${modeInstructions[mode] || modeInstructions.grammar}\n\nRespond ONLY with JSON in this exact format: {"polished": "<improved text>", "explanation": "<brief explanation of changes made>"}`
 }
-
-async function polishWithOpenAI(
-  plainText: string,
-  _htmlContent: string,
-  systemPrompt: string,
-  apiKey: string
-): Promise<AIPolishResult> {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Please polish this text:\n\n${plainText}` },
-      ],
-      temperature: 0.3,
-      response_format: { type: 'json_object' },
-    }),
-  })
-
-  if (!response.ok) {
-    const err = await response.json()
-    throw new Error(err.error?.message || 'OpenAI API error')
-  }
-
-  const data = await response.json()
-  const result = JSON.parse(data.choices[0].message.content)
-  return {
-    polishedContent: result.polished,
-    explanation: result.explanation,
-    provider: 'openai',
-  }
-}
-
-async function polishWithGemini(
-  plainText: string,
-  _htmlContent: string,
-  systemPrompt: string,
-  apiKey: string
-): Promise<AIPolishResult> {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: `${systemPrompt}\n\nPlease polish this text:\n\n${plainText}`
-          }]
-        }],
-        generationConfig: {
-          temperature: 0.3,
-          responseMimeType: 'application/json',
-        },
-      }),
-    }
-  )
-
-  if (!response.ok) {
-    const err = await response.json()
-    let errorMsg = err.error?.message || 'Gemini API error'
-    
-    if (response.status === 404 && errorMsg.includes('not found')) {
-      try {
-        const modelsRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`)
-        if (modelsRes.ok) {
-          const modelsData = await modelsRes.json()
-          const availableModels = modelsData.models?.map((m: any) => m.name.replace('models/', '')).join(', ')
-          errorMsg += `\n\nAvailable models for your key: ${availableModels || 'None'}`
-        }
-      } catch (e) {
-        // Ignore errors fetching the model list
-      }
-    }
-    
-    throw new Error(errorMsg)
-  }
-
-  const data = await response.json()
-  let text = data.candidates[0].content.parts[0].text
-  
-  // Clean markdown backticks if the model ignores the mime type
-  text = text.replace(/^```json\s*/i, '').replace(/\s*```$/i, '')
-  
-  const result = JSON.parse(text)
-  return {
-    polishedContent: result.polished,
-    explanation: result.explanation,
-    provider: 'gemini',
-  }
-}
-
-async function polishWithClaude(
-  plainText: string,
-  _htmlContent: string,
-  systemPrompt: string,
-  apiKey: string
-): Promise<AIPolishResult> {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-3-haiku-20240307',
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: [
-        { role: 'user', content: `Please polish this text:\n\n${plainText}` },
-      ],
-    }),
-  })
-
-  if (!response.ok) {
-    const err = await response.json()
-    throw new Error(err.error?.message || 'Claude API error')
-  }
-
-  const data = await response.json()
-  const result = JSON.parse(data.content[0].text)
-  return {
-    polishedContent: result.polished,
-    explanation: result.explanation,
-    provider: 'claude',
-  }
-}
-
-import type { AIBrainstormMessage } from '../types'
-
-async function brainstormWithOpenAI(
-  messages: AIBrainstormMessage[],
-  systemPrompt: string,
-  apiKey: string
-): Promise<string> {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...messages
-      ],
-      temperature: 0.7,
-    }),
-  })
-
-  if (!response.ok) {
-    const err = await response.json()
-    throw new Error(err.error?.message || 'OpenAI API error')
-  }
-
-  const data = await response.json()
-  return data.choices[0].message.content
-}
-
-async function brainstormWithGemini(
-  messages: AIBrainstormMessage[],
-  systemPrompt: string,
-  apiKey: string
-): Promise<string> {
-  // Map our simplified roles to Gemini roles ('user' -> 'user', 'assistant' -> 'model')
-  const geminiMessages = messages.map(m => ({
-    role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: m.content }]
-  }))
-
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents: geminiMessages,
-        generationConfig: {
-          temperature: 0.7,
-        },
-      }),
-    }
-  )
-
-  if (!response.ok) {
-    const err = await response.json()
-    throw new Error(err.error?.message || 'Gemini API error')
-  }
-
-  const data = await response.json()
-  return data.candidates[0].content.parts[0].text
-}
-
-async function brainstormWithClaude(
-  messages: AIBrainstormMessage[],
-  systemPrompt: string,
-  apiKey: string
-): Promise<string> {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-3-5-haiku-20241022',
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: messages,
-      temperature: 0.7,
-    }),
-  })
-
-  if (!response.ok) {
-    const err = await response.json()
-    throw new Error(err.error?.message || 'Claude API error')
-  }
-
-  const data = await response.json()
-  return data.content[0].text
-}
-
-// --- Shared JSON extraction helper ---
-async function callAIForJSON({ content, provider, apiKey, systemPrompt, fallback }: {
-  content: string; provider: string; apiKey: string; systemPrompt: string; fallback: any;
-}): Promise<any> {
-  let jsonResponse = ''
-
-  if (provider === 'openai') {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        response_format: { type: 'json_object' },
-        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: content.substring(0, 30000) }]
-      })
-    })
-    if (!response.ok) {
-      const errText = await response.text()
-      throw new Error(`OpenAI API error: ${response.status} - ${errText}`)
-    }
-    const data = await response.json()
-    jsonResponse = data.choices[0].message.content
-
-  } else if (provider === 'gemini') {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: 'user', parts: [{ text: content.substring(0, 30000) }] }],
-        generationConfig: { responseMimeType: 'application/json' }
-      })
-    })
-    if (!response.ok) {
-      const errText = await response.text()
-      throw new Error(`Gemini API error: ${response.status} - ${errText}`)
-    }
-    const data = await response.json()
-    jsonResponse = data.candidates[0].content.parts[0].text.replace(/^```json/g, '').replace(/```$/g, '').trim()
-
-  } else if (provider === 'claude') {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-3-5-haiku-20241022',
-        system: systemPrompt,
-        messages: [{ role: 'user', content: content.substring(0, 30000) }],
-        max_tokens: 1500
-      })
-    })
-    if (!response.ok) {
-      const errText = await response.text()
-      throw new Error(`Claude API error: ${response.status} - ${errText}`)
-    }
-    const data = await response.json()
-    jsonResponse = data.content[0].text.replace(/^```json/g, '').replace(/```$/g, '').trim()
-
-  } else {
-    throw new Error(`Unknown AI provider: ${provider}`)
-  }
-  try {
-    return JSON.parse(jsonResponse)
-  } catch {
-    console.error('Failed to parse AI JSON response:', jsonResponse)
-    throw new Error('AI returned an invalid response. Please try again.')
-  }
-}
-
-
+

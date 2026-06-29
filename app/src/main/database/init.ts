@@ -114,6 +114,7 @@ function createTables(): void {
       line_spacing REAL DEFAULT 1.8,
       ai_provider TEXT DEFAULT 'openai',
       ai_api_key TEXT,
+      ai_settings TEXT DEFAULT '{}',
       ai_style_prompt TEXT DEFAULT '',
       preserve_formatting INTEGER DEFAULT 0,
       autosave_interval INTEGER DEFAULT 3000,
@@ -160,9 +161,11 @@ function createTables(): void {
     CREATE TABLE IF NOT EXISTS chapter_versions (
       id TEXT PRIMARY KEY,
       chapter_id TEXT NOT NULL,
-      version_number INTEGER NOT NULL,
+      user_id TEXT NOT NULL DEFAULT '',
       content TEXT NOT NULL,
-      source TEXT NOT NULL,
+      word_count INTEGER DEFAULT 0,
+      snapshot_type TEXT DEFAULT 'auto',
+      milestone_name TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (chapter_id) REFERENCES chapters(id) ON DELETE CASCADE
     )
@@ -676,6 +679,12 @@ function createTables(): void {
 
   // Migrations for existing databases
   try {
+    database.run(`ALTER TABLE settings ADD COLUMN ai_settings TEXT DEFAULT '{}'`)
+  } catch (e) {
+    // Column might already exist
+  }
+
+  try {
     database.run(`ALTER TABLE settings ADD COLUMN ai_style_prompt TEXT DEFAULT ''`)
   } catch (e) {
     // Column might already exist
@@ -750,18 +759,36 @@ function createTables(): void {
     )
   `)
 
-  // Phase 5: Version History
-  database.run(`
-    CREATE TABLE IF NOT EXISTS chapter_versions (
-      id TEXT PRIMARY KEY,
-      chapter_id TEXT NOT NULL,
-      user_id TEXT NOT NULL,
-      content TEXT NOT NULL,
-      word_count INTEGER DEFAULT 0,
-      snapshot_type TEXT DEFAULT 'auto',
-      milestone_name TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (chapter_id) REFERENCES chapters(id) ON DELETE CASCADE
-    )
-  `)
+  // Migrate chapter_versions table for existing databases
+  try {
+    database.run(`ALTER TABLE chapter_versions ADD COLUMN user_id TEXT NOT NULL DEFAULT ''`)
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Migration error adding user_id to chapter_versions:', e)
+    }
+  }
+  
+  try {
+    database.run(`ALTER TABLE chapter_versions ADD COLUMN word_count INTEGER DEFAULT 0`)
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Migration error adding word_count to chapter_versions:', e)
+    }
+  }
+
+  try {
+    database.run(`ALTER TABLE chapter_versions ADD COLUMN snapshot_type TEXT DEFAULT 'auto'`)
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Migration error adding snapshot_type to chapter_versions:', e)
+    }
+  }
+
+  try {
+    database.run(`ALTER TABLE chapter_versions ADD COLUMN milestone_name TEXT`)
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Migration error adding milestone_name to chapter_versions:', e)
+    }
+  }
 }

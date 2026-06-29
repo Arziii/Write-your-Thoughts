@@ -7,11 +7,11 @@ import SearchModal from '../components/ui/SearchModal'
 import { cn } from '../utils'
 
 export default function AppLayout() {
-  const { panelState, focusMode } = useWorkspaceStore()
+  const { panelState, focusMode, currentBook } = useWorkspaceStore()
   const location = useLocation()
   
   // AI Panel should only be accessible when actively writing in a book
-  const isEditorRoute = location.pathname.startsWith('/book')
+  const isEditorRoute = currentBook !== null
 
   return (
     <div className="flex flex-col h-full bg-surface-950 overflow-hidden">

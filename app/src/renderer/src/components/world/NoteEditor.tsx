@@ -20,7 +20,7 @@ interface NoteEditorProps {
 }
 
 export default function NoteEditor({ entityId, onWordCountChange }: NoteEditorProps) {
-  const { notes, markTabDirty, updateNote, drafts, setDraft, clearDraft } = useWorkspaceStore()
+  const { notes, markTabDirty, updateNote, drafts, setDraft, clearDraft, setSelectedText } = useWorkspaceStore()
   const { addToast } = useToastStore()
   const { settings } = useUserStore()
   const saveStatusRef = useRef<'saved' | 'saving' | 'unsaved'>('saved')
@@ -100,6 +100,15 @@ export default function NoteEditor({ entityId, onWordCountChange }: NoteEditorPr
       autosave(html, title)
       if (onWordCountChange) {
         onWordCountChange(editor.storage.characterCount.words())
+      }
+    },
+    onSelectionUpdate: ({ editor }) => {
+      const { from, to } = editor.state.selection
+      if (from !== to) {
+        const text = editor.state.doc.textBetween(from, to, ' ')
+        setSelectedText(text)
+      } else {
+        setSelectedText('')
       }
     },
   })

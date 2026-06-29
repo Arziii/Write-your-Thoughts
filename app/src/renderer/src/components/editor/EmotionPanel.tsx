@@ -76,7 +76,7 @@ export default function EmotionPanel({ chapterId }: { chapterId: string }) {
         content: allContent,
         storyContext: storyBible?.premise,
         provider: settings.ai_provider as any,
-        apiKey: settings.ai_api_key
+        apiKey: settings?.ai_api_key, providerSettings: settings?.ai_settings
       })
 
       // Guard against empty fallback data

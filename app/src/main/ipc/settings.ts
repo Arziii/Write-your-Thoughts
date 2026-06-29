@@ -1,17 +1,31 @@
 import { IpcMain } from 'electron'
 import { dbRun, dbGet } from '../database/init'
+import { v4 as uuidv4 } from 'uuid'
 
 export function registerSettingsHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('settings:get', async (_event, userId: string) => {
-    return dbGet('SELECT * FROM settings WHERE user_id = ?', [userId])
+    const row = dbGet('SELECT * FROM settings WHERE user_id = ?', [userId])
+    if (row && typeof row.ai_settings === 'string') {
+      try {
+        row.ai_settings = JSON.parse(row.ai_settings)
+      } catch (e) {
+        row.ai_settings = {}
+      }
+    }
+    return row
   })
 
   ipcMain.handle('settings:update', async (_event, data: {
     userId: string; theme?: string; accentColor?: string; editorFont?: string
     fontSize?: number; lineSpacing?: number; aiProvider?: string; aiApiKey?: string
-    aiStylePrompt?: string; preserveFormatting?: boolean
+    aiSettings?: string; aiStylePrompt?: string; preserveFormatting?: boolean
     autosaveInterval?: number
   }) => {
+    const existing = dbGet('SELECT id FROM settings WHERE user_id = ?', [data.userId])
+    if (!existing) {
+      dbRun('INSERT INTO settings (id, user_id, created_at) VALUES (?, ?, datetime("now"))', [uuidv4(), data.userId])
+    }
+
     const updates: string[] = []
     const params: unknown[] = []
 
@@ -22,6 +36,7 @@ export function registerSettingsHandlers(ipcMain: IpcMain): void {
     if (data.lineSpacing !== undefined) { updates.push('line_spacing = ?'); params.push(data.lineSpacing) }
     if (data.aiProvider !== undefined) { updates.push('ai_provider = ?'); params.push(data.aiProvider) }
     if (data.aiApiKey !== undefined) { updates.push('ai_api_key = ?'); params.push(data.aiApiKey) }
+    if (data.aiSettings !== undefined) { updates.push('ai_settings = ?'); params.push(data.aiSettings) }
     if (data.aiStylePrompt !== undefined) { updates.push('ai_style_prompt = ?'); params.push(data.aiStylePrompt) }
     if (data.preserveFormatting !== undefined) { updates.push('preserve_formatting = ?'); params.push(data.preserveFormatting ? 1 : 0) }
     if (data.autosaveInterval !== undefined) { updates.push('autosave_interval = ?'); params.push(data.autosaveInterval) }
@@ -31,6 +46,14 @@ export function registerSettingsHandlers(ipcMain: IpcMain): void {
       dbRun(`UPDATE settings SET ${updates.join(', ')} WHERE user_id = ?`, params)
     }
 
-    return dbGet('SELECT * FROM settings WHERE user_id = ?', [data.userId])
+    const row = dbGet('SELECT * FROM settings WHERE user_id = ?', [data.userId])
+    if (row && typeof row.ai_settings === 'string') {
+      try {
+        row.ai_settings = JSON.parse(row.ai_settings)
+      } catch (e) {
+        row.ai_settings = {}
+      }
+    }
+    return row
   })
 }

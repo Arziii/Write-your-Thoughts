@@ -20,7 +20,7 @@ interface CodexEditorProps {
 }
 
 export default function CodexEditor({ entityId, onWordCountChange }: CodexEditorProps) {
-  const { codex, markTabDirty, updateCodex, drafts, setDraft, clearDraft } = useWorkspaceStore()
+  const { codex, markTabDirty, updateCodex, drafts, setDraft, clearDraft, setSelectedText } = useWorkspaceStore()
   const { addToast } = useToastStore()
   const { settings } = useUserStore()
   const saveStatusRef = useRef<'saved' | 'saving' | 'unsaved'>('saved')
@@ -99,6 +99,15 @@ export default function CodexEditor({ entityId, onWordCountChange }: CodexEditor
       autosave(html, title)
       if (onWordCountChange) {
         onWordCountChange(editor.storage.characterCount.words())
+      }
+    },
+    onSelectionUpdate: ({ editor }) => {
+      const { from, to } = editor.state.selection
+      if (from !== to) {
+        const text = editor.state.doc.textBetween(from, to, ' ')
+        setSelectedText(text)
+      } else {
+        setSelectedText('')
       }
     },
   })

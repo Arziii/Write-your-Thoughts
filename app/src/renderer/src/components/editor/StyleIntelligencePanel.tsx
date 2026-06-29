@@ -76,7 +76,7 @@ export default function StyleIntelligencePanel({ chapterId }: { chapterId: strin
         content: allContent,
         storyContext: storyBible?.premise,
         provider: settings.ai_provider as any,
-        apiKey: settings.ai_api_key
+        apiKey: settings?.ai_api_key, providerSettings: settings?.ai_settings
       })
 
       const newBaseline = await window.api.styleProfiles.upsert({
@@ -110,7 +110,7 @@ export default function StyleIntelligencePanel({ chapterId }: { chapterId: strin
         baseline: baseline || undefined,
         storyContext: storyBible?.premise,
         provider: settings.ai_provider as any,
-        apiKey: settings.ai_api_key
+        apiKey: settings?.ai_api_key, providerSettings: settings?.ai_settings
       })
 
       const newMetrics = await window.api.chapterMetrics.upsert({

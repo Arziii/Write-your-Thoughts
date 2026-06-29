@@ -30,13 +30,19 @@ function App() {
         const hashParams = new URLSearchParams(url.split('#')[1])
         const accessToken = hashParams.get('access_token')
         const refreshToken = hashParams.get('refresh_token')
+        const type = hashParams.get('type')
         
         if (accessToken && refreshToken) {
           console.log('[DeepLink] Setting session from deep link...')
           const { error } = await authService.setSession(accessToken, refreshToken)
           if (error) throw error
           addToast('Successfully authenticated!', 'success')
-          navigate('/')
+          
+          if (type === 'recovery') {
+            navigate('/reset-password')
+          } else {
+            navigate('/')
+          }
         } else if (url.includes('auth/reset-password')) {
            navigate('/reset-password' + (url.split('#')[1] ? '#' + url.split('#')[1] : ''))
         }
@@ -97,6 +103,10 @@ function App() {
             // ── Settings sync ────────────────────────────────────────────
             const result = await syncService.fetchCloudSettings()
             if (result.success && result.settings) {
+              const localSettings: any = await window.api.settings.get(session.user.id)
+              const mergedAiApiKey = result.settings.ai_api_key || localSettings?.ai_api_key
+              const mergedAiStylePrompt = result.settings.ai_style_prompt || localSettings?.ai_style_prompt
+              
               const updated = await window.api.settings.update({
                 userId: session.user.id,
                 theme: result.settings.theme,
@@ -105,12 +115,16 @@ function App() {
                 fontSize: result.settings.font_size,
                 lineSpacing: result.settings.line_spacing,
                 aiProvider: result.settings.ai_provider,
-                aiApiKey: result.settings.ai_api_key,
-                aiStylePrompt: result.settings.ai_style_prompt,
+                aiApiKey: mergedAiApiKey,
+                aiStylePrompt: mergedAiStylePrompt,
                 preserveFormatting: result.settings.preserve_formatting === 1,
                 autosaveInterval: result.settings.autosave_interval
               })
               setSettings(updated as never)
+
+              if (!result.settings.ai_api_key && mergedAiApiKey) {
+                syncService.syncSettingsToCloud(updated as any).catch(e => console.error('Cloud sync failed', e))
+              }
             }
           } catch (e) {
             console.error('Failed to sync on boot', e)
@@ -144,14 +158,7 @@ function App() {
             
             const result: any = await window.api.settings.get(u.id)
             if (result) {
-              setSettings({
-                theme: result.theme || 'light',
-                aiProvider: result.ai_provider,
-                aiApiKey: result.ai_api_key,
-                aiStylePrompt: result.ai_style_prompt,
-                preserveFormatting: result.preserve_formatting === 1,
-                autosaveInterval: result.autosave_interval
-              } as never)
+              setSettings(result as never)
             }
 
             const { syncService } = await import('./services/syncService')
@@ -183,15 +190,28 @@ function App() {
             // Fetch cloud settings
             const res = await syncService.fetchCloudSettings()
             if (res.success && res.settings) {
-              const updated: any = await window.api.settings.update({ userId: u.id, ...res.settings })
-              setSettings({
-                theme: updated.theme || 'light',
-                aiProvider: updated.ai_provider,
-                aiApiKey: updated.ai_api_key,
-                aiStylePrompt: updated.ai_style_prompt,
-                preserveFormatting: updated.preserve_formatting === 1,
-                autosaveInterval: updated.autosave_interval
-              } as never)
+              const localSettings: any = await window.api.settings.get(u.id)
+              const mergedAiApiKey = res.settings.ai_api_key || localSettings?.ai_api_key
+              const mergedAiStylePrompt = res.settings.ai_style_prompt || localSettings?.ai_style_prompt
+
+              const updated: any = await window.api.settings.update({
+                userId: u.id,
+                theme: res.settings.theme,
+                accentColor: res.settings.accent_color,
+                editorFont: res.settings.editor_font,
+                fontSize: res.settings.font_size,
+                lineSpacing: res.settings.line_spacing,
+                aiProvider: res.settings.ai_provider,
+                aiApiKey: mergedAiApiKey,
+                aiStylePrompt: mergedAiStylePrompt,
+                preserveFormatting: res.settings.preserve_formatting === 1,
+                autosaveInterval: res.settings.autosave_interval
+              })
+              setSettings(updated as never)
+
+              if (!res.settings.ai_api_key && mergedAiApiKey) {
+                syncService.syncSettingsToCloud(updated as any).catch(e => console.error('Cloud sync failed', e))
+              }
             }
           } finally {
             // This instantly unmounts the LoginPage and reveals the perfectly loaded Dashboard!
@@ -239,7 +259,7 @@ function App() {
         <Route path="/register" element={user ? <Navigate to="/" replace /> : <RegisterPage />} />
         <Route path="/verify-email" element={user ? <Navigate to="/" replace /> : <VerifyEmailPage />} />
         <Route path="/forgot-password" element={user ? <Navigate to="/" replace /> : <ForgotPasswordPage />} />
-        <Route path="/reset-password" element={user ? <Navigate to="/" replace /> : <ResetPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         {/* Protected routes */}
         <Route element={user ? <AppLayout /> : <Navigate to="/login" replace />}>
