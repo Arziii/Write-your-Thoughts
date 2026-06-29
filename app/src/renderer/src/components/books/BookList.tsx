@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, BookOpen, MoreHorizontal, Pencil, Trash2, Loader2, Cloud } from 'lucide-react'
+import { Plus, BookOpen, MoreHorizontal, Pencil, Trash2, Loader2, Cloud, FileDown } from 'lucide-react'
 import { useUserStore } from '../../stores/userStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useToastStore } from '../../stores/toastStore'
 import { cn, formatDate } from '../../utils'
 import { syncService } from '../../services/syncService'
 import Modal from '../ui/Modal'
+import ExportModal from '../export/ExportModal'
 import type { Book } from '../../types'
 
 export default function BookList() {
@@ -18,6 +19,7 @@ export default function BookList() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [editBook, setEditBook] = useState<Book | null>(null)
   const [deleteBook, setDeleteBook] = useState<Book | null>(null)
+  const [exportBook, setExportBook] = useState<Book | null>(null)
   const [title, setTitle] = useState('')
   const [authorName, setAuthorName] = useState('')
   const [genre, setGenre] = useState('')
@@ -192,6 +194,14 @@ export default function BookList() {
                     <Cloud style={{ width: 14, height: 14 }} /> Publish to Cloud
                   </button>
                   <button
+                    onClick={() => { setExportBook(b); setContextMenu(null) }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 16px', fontSize: 13, fontWeight: 500, color: '#3d5c3a', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#e8f0e5'}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+                  >
+                    <FileDown style={{ width: 14, height: 14 }} /> Export Book
+                  </button>
+                  <button
                     onClick={() => { setDeleteBook(b); setContextMenu(null) }}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 16px', fontSize: 13, fontWeight: 500, color: '#ef4444', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
                     onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#fff0f0'}
@@ -216,6 +226,14 @@ export default function BookList() {
           onSubmit={handleCreate} onCancel={() => setIsCreateOpen(false)} submitLabel="Create Book" isLoading={isLoading}
         />
       </Modal>
+
+      {exportBook && (
+        <ExportModal
+          book={exportBook}
+          isOpen={!!exportBook}
+          onClose={() => setExportBook(null)}
+        />
+      )}
 
       <Modal isOpen={!!editBook} onClose={() => setEditBook(null)} title="Edit Book">
         <BookForm

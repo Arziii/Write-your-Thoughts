@@ -7,7 +7,7 @@ interface ModalProps {
   onClose: () => void
   title: string
   children: React.ReactNode
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl' | 'full'
   className?: string
 }
 
@@ -28,6 +28,12 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', c
     sm: 'max-w-sm',
     md: 'max-w-md',
     lg: 'max-w-lg',
+    xl: 'max-w-xl',
+    '2xl': 'max-w-2xl',
+    '3xl': 'max-w-3xl',
+    '4xl': 'max-w-4xl',
+    '5xl': 'max-w-5xl',
+    full: 'max-w-[95vw] h-[95vh] flex flex-col',
   }
 
   return (
@@ -47,7 +53,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', c
         )}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-surface-700">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-surface-700 shrink-0">
           <h2 className="text-base font-semibold text-surface-100">{title}</h2>
           <button
             onClick={onClose}
@@ -58,7 +64,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', c
         </div>
 
         {/* Body */}
-        <div className="p-5">
+        <div className="p-5 flex-1 min-h-0 flex flex-col">
           {children}
         </div>
       </div>

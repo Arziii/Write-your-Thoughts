@@ -4,7 +4,7 @@ import { useUserStore } from '../../stores/userStore'
 import { useToastStore } from '../../stores/toastStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { Settings, Key, Palette, Bot, Loader2, ArrowLeft, Download, Book, Puzzle, Cloud, UploadCloud, DownloadCloud, User } from 'lucide-react'
-import ExportModal from '../../components/books/ExportModal'
+import ExportModal from '../../components/export/ExportModal'
 import { authService } from '../../services/authService'
 import { useEffect } from 'react'
 
@@ -404,9 +404,7 @@ export default function SettingsPage() {
         <ExportModal
           isOpen={isExportOpen}
           onClose={() => setIsExportOpen(false)}
-          bookId={selectedBookId}
-          bookTitle={books.find(b => b.id === selectedBookId)?.title || ''}
-          initialAuthorName={books.find(b => b.id === selectedBookId)?.authorName || ''}
+          book={books.find(b => b.id === selectedBookId)!}
         />
       )}
     </div>

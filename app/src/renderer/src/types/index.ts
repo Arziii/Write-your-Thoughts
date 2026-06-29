@@ -438,6 +438,17 @@ export interface ChapterStatistics {
   updated_at: string
 }
 
+// ── Export Settings ──────────────────────────────────────────────────
+
+export interface ExportOptions {
+  format: 'epub' | 'pdf' | 'docx' | 'md'
+  includeToc: boolean
+  fontFamily: string
+  fontSize: number
+  lineSpacing: number
+  margin: number
+}
+
 // ── Tab type ───────────────────────────────────────────────────────
 
 export type TabType = 'chapter' | 'character' | 'location' | 'note' | 'timeline' | 'codex' | 'wiki' | 'organization' | 'world_rule' | 'story_intelligence' | 'relationship_manager' | 'verse_timeline'

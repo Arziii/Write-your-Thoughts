@@ -6,8 +6,43 @@ import TurndownService from 'turndown'
 import HTMLtoDOCX from 'html-to-docx'
 import Epub from 'epub-gen-memory'
 
+function cleanManuscriptHTML(html: string, chapterTitle: string): string {
+  if (!html) return ''
+  
+  let cleaned = html
+  
+  // Remove leading empty paragraphs
+  cleaned = cleaned.replace(/^(<p>(\s|&nbsp;|<br>)*<\/p>\s*)+/gi, '')
+  
+  // Detect and remove duplicated headings at the beginning of the text
+  const firstBlockMatch = cleaned.match(/^(<(h[1-6]|p|div)[^>]*>)(.*?)(<\/\2>)/i)
+  if (firstBlockMatch) {
+    const innerText = firstBlockMatch[3].replace(/<[^>]+>/g, '').trim()
+    const normalizedInner = innerText.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const normalizedTitle = chapterTitle.toLowerCase().replace(/[^a-z0-9]/g, '')
+    
+    // Check if it's a generic chapter title (e.g. "chapter 1", "part one") or matches the actual title
+    const isGenericChapter = /^(chapter|part|prologue|epilogue)[0-9a-z]*$/i.test(normalizedInner)
+    const isMatch = normalizedInner === normalizedTitle || isGenericChapter || normalizedTitle.includes(normalizedInner) || normalizedInner.includes(normalizedTitle)
+    
+    // Strip if it looks like a duplicated header and is short
+    if (innerText.length > 0 && innerText.length < 100 && isMatch) {
+      cleaned = cleaned.substring(firstBlockMatch[0].length)
+    }
+  }
+  
+  // Merge consecutive empty paragraphs into a single empty space or remove them
+  cleaned = cleaned.replace(/(<p>(\s|&nbsp;|<br>)*<\/p>\s*){2,}/gi, '')
+  
+  // Convert scene breaks (***, ---, #) into proper ornaments
+  const breakRegex = /<p[^>]*>\s*(<[^>]*>)*\s*(\* \* \*|\*\*\*|---|#)\s*(<\/[^>]*>)*\s*<\/p>/gi
+  cleaned = cleaned.replace(breakRegex, '<div class="scene-break">* * *</div>')
+  
+  return cleaned.trim()
+}
+
 export function registerExportHandlers(ipcMain: IpcMain): void {
-  ipcMain.handle('export:book', async (event, data: { bookId: string; format: string; authorName?: string }) => {
+  ipcMain.handle('export:book', async (event, data: { bookId: string; format: string; authorName?: string; includeToc?: boolean; fontFamily?: string; fontSize?: number; lineSpacing?: number; margin?: number }) => {
     try {
       const book = dbGet('SELECT * FROM books WHERE id = ?', [data.bookId])
       if (!book) throw new Error('Book not found')
@@ -16,6 +51,12 @@ export function registerExportHandlers(ipcMain: IpcMain): void {
       
       const authorName = data.authorName?.trim() || (book.author_name as string) || 'Unknown Author'
       const title = (book.title as string) || 'Untitled'
+      
+      const includeToc = data.includeToc ?? false
+      const fontFamily = data.fontFamily || 'Times New Roman'
+      const fontSize = data.fontSize || 12
+      const lineSpacing = data.lineSpacing || 1.5
+      const margin = data.margin || 1
 
       const defaultPath = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${data.format}`
       
@@ -41,10 +82,24 @@ export function registerExportHandlers(ipcMain: IpcMain): void {
       htmlContent += `<h1 style="font-size: 42pt; font-weight: normal; margin-bottom: 1em; line-height: 1.2;">${title}</h1>`
       htmlContent += `<p style="font-size: 16pt; font-style: italic;">${authorName}</p>`
       htmlContent += `</div>`
+
+      if (includeToc && data.format !== 'epub') {
+        htmlContent += `<div style="page-break-after: always;">`
+        htmlContent += `<h2>Table of Contents</h2>`
+        htmlContent += `<ul>`
+        chapters.forEach((chap: any, index: number) => {
+          htmlContent += `<li><a href="#chapter-${index}">${chap.title}</a></li>`
+        })
+        htmlContent += `</ul>`
+        htmlContent += `</div>`
+      }
+
       chapters.forEach((chap: any, index: number) => {
+        const cleanedContent = cleanManuscriptHTML(chap.content, chap.title)
+        
         htmlContent += `<div class="chapter-container">`
-        htmlContent += `<h1>${chap.title}</h1>`
-        htmlContent += chap.content
+        htmlContent += `<h1 id="chapter-${index}">${chap.title}</h1>`
+        htmlContent += cleanedContent
         htmlContent += `</div>`
         if (index < chapters.length - 1 && data.format !== 'epub') {
           htmlContent += `<hr class="chapter-break" />`
@@ -62,7 +117,7 @@ export function registerExportHandlers(ipcMain: IpcMain): void {
           title: title,
           creator: authorName,
           description: (book.description as string) || '',
-          font: 'Times New Roman'
+          font: fontFamily
         })
         writeFileSync(filePath, buffer)
 
@@ -80,20 +135,30 @@ export function registerExportHandlers(ipcMain: IpcMain): void {
           },
           ...chapters.map((chap: any) => ({
             title: chap.title,
-            content: chap.content
+            content: cleanManuscriptHTML(chap.content, chap.title)
           }))
         ]
+        
+        const epubCss = `
+          body { font-family: "${fontFamily}", serif; line-height: ${lineSpacing}; font-size: ${fontSize}pt; text-align: left; }
+          p { text-indent: 1.5em; margin: 0; }
+          h1, h2, h3 { text-align: center; margin-top: 2em; margin-bottom: 2em; font-weight: normal; text-transform: uppercase; }
+          p:first-of-type, h1 + p, .scene-break + p { text-indent: 0; }
+          .scene-break { text-align: center; margin: 2em 0; text-indent: 0; }
+          blockquote { margin: 1.5em 2em; font-style: italic; }
+        `
+
         const buffer = await Epub({
           title: title,
           author: authorName,
           publisher: 'Write Your Thoughts',
           description: (book.description as string) || '',
-          css: `body { font-family: "Times New Roman", serif; line-height: 1.5; }`
+          css: epubCss
         }, epubChapters)
         writeFileSync(filePath, buffer)
 
       } else if (data.format === 'pdf') {
-        await exportPDF(title, authorName, chapters, filePath)
+        await exportPDF(title, authorName, chapters, filePath, includeToc, fontFamily, fontSize, lineSpacing, margin)
       }
 
       return { success: true, filePath }
@@ -105,7 +170,7 @@ export function registerExportHandlers(ipcMain: IpcMain): void {
   })
 }
 
-async function exportPDF(title: string, authorName: string, chapters: any[], filePath: string): Promise<void> {
+async function exportPDF(title: string, authorName: string, chapters: any[], filePath: string, includeToc: boolean, fontFamily: string, fontSize: number, lineSpacing: number, margin: number): Promise<void> {
   return new Promise((resolve, reject) => {
     const win = new BrowserWindow({
       show: false,
@@ -119,12 +184,12 @@ async function exportPDF(title: string, authorName: string, chapters: any[], fil
     const css = `
       @page {
         size: A4;
-        margin: 1in 1in 1in 1.25in;
+        margin: ${margin}in ${margin}in ${margin}in ${margin + 0.25}in;
       }
       body {
-        font-family: "Times New Roman", serif;
-        font-size: 12pt;
-        line-height: 1.5;
+        font-family: "${fontFamily}", serif;
+        font-size: ${fontSize}pt;
+        line-height: ${lineSpacing};
         color: black;
         background: white;
         margin: 0;
@@ -133,19 +198,36 @@ async function exportPDF(title: string, authorName: string, chapters: any[], fil
         orphans: 2;
       }
       p {
-        text-align: left;
+        text-align: justify;
         margin: 0;
         text-indent: 0.5in;
       }
-      h1 {
-        font-family: "Times New Roman", serif;
+      p:first-of-type, h1 + p, h2 + p, .scene-break + p {
+        text-indent: 0;
+      }
+      .scene-break {
+        text-align: center;
+        margin: 2em 0;
+        text-indent: 0;
+      }
+      blockquote {
+        margin: 1.5em 2em;
+        font-style: italic;
+      }
+      h1, h2 {
+        font-family: "${fontFamily}", serif;
         font-weight: bold;
-        font-size: 18pt;
         text-align: center;
         text-transform: uppercase;
         margin-top: 0;
         margin-bottom: 2em;
         page-break-before: always;
+      }
+      h1 {
+        font-size: ${fontSize + 6}pt;
+      }
+      h2 {
+        font-size: ${fontSize + 4}pt;
       }
       /* First chapter no page break before */
       .chapter-container:first-of-type h1 {
@@ -158,7 +240,7 @@ async function exportPDF(title: string, authorName: string, chapters: any[], fil
       }
       hr::after {
         content: '* * *';
-        font-size: 12pt;
+        font-size: ${fontSize}pt;
         letter-spacing: 0.5em;
       }
       img {
@@ -199,10 +281,23 @@ async function exportPDF(title: string, authorName: string, chapters: any[], fil
         <div class="author-name">${authorName}</div>
       </div>
     `
-    chapters.forEach((chap: any) => {
+
+    if (includeToc) {
+      bodyHtml += `<div style="page-break-after: always;">`
+      bodyHtml += `<h2>Table of Contents</h2>`
+      bodyHtml += `<div style="text-align: left;">`
+      chapters.forEach((chap: any, index: number) => {
+        bodyHtml += `<p style="text-indent: 0; margin-bottom: 0.5em;"><a href="#chapter-${index}" style="text-decoration: none;">${chap.title}</a></p>`
+      })
+      bodyHtml += `</div>`
+      bodyHtml += `</div>`
+    }
+
+    chapters.forEach((chap: any, index: number) => {
+      const cleanedContent = cleanManuscriptHTML(chap.content, chap.title)
       bodyHtml += `<div class="chapter-container">`
-      bodyHtml += `<h1>${chap.title}</h1>`
-      bodyHtml += chap.content
+      bodyHtml += `<h1 id="chapter-${index}">${chap.title}</h1>`
+      bodyHtml += cleanedContent
       bodyHtml += `</div>`
     })
 
@@ -225,12 +320,12 @@ async function exportPDF(title: string, authorName: string, chapters: any[], fil
     win.webContents.on('did-finish-load', async () => {
       try {
         const headerTemplate = `
-          <div style="font-family: 'Times New Roman', serif; font-size: 9pt; width: 100%; text-align: center; margin-bottom: 20px;">
+          <div style="font-family: '${fontFamily}', serif; font-size: 9pt; width: 100%; text-align: center; margin-bottom: 20px;">
             <span class="title"></span>
           </div>
         `
         const footerTemplate = `
-          <div style="font-family: 'Times New Roman', serif; font-size: 10pt; width: 100%; text-align: center; margin-top: 20px;">
+          <div style="font-family: '${fontFamily}', serif; font-size: 10pt; width: 100%; text-align: center; margin-top: 20px;">
             <span class="pageNumber"></span>
           </div>
         `
@@ -241,10 +336,10 @@ async function exportPDF(title: string, authorName: string, chapters: any[], fil
           headerTemplate,
           footerTemplate,
           margins: {
-            top: 1,      // Handled by @page margin in CSS but printToPDF needs these to place headers
-            bottom: 1,
-            left: 1.25,
-            right: 1
+            top: margin,
+            bottom: margin,
+            left: margin + 0.25,
+            right: margin
           },
           pageSize: 'A4',
           preferCSSPageSize: true
