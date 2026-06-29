@@ -68,10 +68,28 @@ export const authService = {
         // DB was NOT replaced — apply any cloud settings on top of local data
         const result = await syncService.fetchCloudSettings()
         if (result.success && result.settings) {
-          await window.api.settings.update({
+          const s = result.settings
+          const localSettings: any = await window.api.settings.get(data.user.id)
+          const mergedAiApiKey = s.ai_api_key || localSettings?.ai_api_key
+          const mergedAiStylePrompt = s.ai_style_prompt || localSettings?.ai_style_prompt
+
+          const updated: any = await window.api.settings.update({
             userId: data.user.id,
-            ...result.settings
+            theme: s.theme,
+            accentColor: s.accent_color,
+            editorFont: s.editor_font,
+            fontSize: s.font_size,
+            lineSpacing: s.line_spacing,
+            aiProvider: s.ai_provider,
+            aiApiKey: mergedAiApiKey,
+            aiStylePrompt: mergedAiStylePrompt,
+            preserveFormatting: s.preserve_formatting === 1 || s.preserve_formatting === true,
+            autosaveInterval: s.autosave_interval
           })
+
+          if (!s.ai_api_key && mergedAiApiKey) {
+            syncService.syncSettingsToCloud(updated as any).catch(e => console.error('Cloud sync failed', e))
+          }
         }
       }
     }

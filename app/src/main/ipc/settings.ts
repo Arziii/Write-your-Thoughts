@@ -1,5 +1,6 @@
 import { IpcMain } from 'electron'
 import { dbRun, dbGet } from '../database/init'
+import { v4 as uuidv4 } from 'uuid'
 
 export function registerSettingsHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('settings:get', async (_event, userId: string) => {
@@ -12,6 +13,11 @@ export function registerSettingsHandlers(ipcMain: IpcMain): void {
     aiStylePrompt?: string; preserveFormatting?: boolean
     autosaveInterval?: number
   }) => {
+    const existing = dbGet('SELECT id FROM settings WHERE user_id = ?', [data.userId])
+    if (!existing) {
+      dbRun('INSERT INTO settings (id, user_id, created_at) VALUES (?, ?, datetime("now"))', [uuidv4(), data.userId])
+    }
+
     const updates: string[] = []
     const params: unknown[] = []
 

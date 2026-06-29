@@ -25,7 +25,7 @@ const modeDescriptions: Record<AIMode, string> = {
 
 export default function AIPanel() {
   const { activeChapter, updateChapter, characters, locations, timelineEvents, toggleAIPanel, panelState } = useWorkspaceStore()
-  const { settings } = useUserStore()
+  const { settings, user } = useUserStore()
   const { addToast } = useToastStore()
   const { verseTimelineEvents } = useStoryBibleStore()
 
@@ -77,11 +77,16 @@ export default function AIPanel() {
       }
 
       // Save version before polishing
-      await window.api.chapters.saveVersion({
-        chapterId: activeChapter.id,
-        content: activeChapter.content,
-        source: 'manual',
-      })
+      if (user) {
+        await window.api.chapters.saveVersion({
+          chapterId: activeChapter.id,
+          userId: user.id,
+          content: activeChapter.content,
+          wordCount: activeChapter.word_count || 0,
+          snapshotType: 'auto',
+          milestoneName: 'Pre-AI Polish'
+        })
+      }
 
       const result = await aiService.polishText({
         content: activeChapter.content,
@@ -105,16 +110,19 @@ export default function AIPanel() {
   }
 
   const handleAccept = async () => {
-    if (!polishResult || !activeChapter) return
+    if (!polishResult || !activeChapter || !user) return
     try {
+      const wc = polishResult.polishedContent.replace(/<[^>]*>/g, '').trim().split(/\s+/).filter(Boolean).length
       // Save AI output as new version
       await window.api.chapters.saveVersion({
         chapterId: activeChapter.id,
+        userId: user.id,
         content: polishResult.polishedContent,
-        source: 'ai_polish',
+        wordCount: wc,
+        snapshotType: 'auto',
+        milestoneName: 'AI Polish Result'
       })
       // Save to chapter
-      const wc = polishResult.polishedContent.replace(/<[^>]*>/g, '').trim().split(/\s+/).filter(Boolean).length
       await window.api.chapters.save({
         id: activeChapter.id,
         content: polishResult.polishedContent,

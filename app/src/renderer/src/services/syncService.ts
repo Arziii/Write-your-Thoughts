@@ -305,7 +305,21 @@ export const syncService = {
 
         if (task.operation === 'delete') {
           const { error } = await supabase.from(cloudTable).delete().eq('id', task.entity_id)
-          if (!error) await window.api.database.markSyncComplete(task.id)
+          if (!error) {
+            await window.api.database.markSyncComplete(task.id)
+            
+            // Clean up associated images from storage to save space
+            if (['cloud_books', 'cloud_characters', 'cloud_locations'].includes(cloudTable)) {
+              import('./storageService').then(({ deleteImage }) => {
+                const typeMap: Record<string, 'books' | 'characters' | 'locations'> = {
+                  'cloud_books': 'books',
+                  'cloud_characters': 'characters',
+                  'cloud_locations': 'locations'
+                }
+                deleteImage(typeMap[cloudTable], task.entity_id, 'unknown').catch(() => {})
+              })
+            }
+          }
           continue
         }
 

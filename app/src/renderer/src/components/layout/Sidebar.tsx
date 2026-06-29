@@ -1,13 +1,15 @@
 import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import {
   BookOpen, Home, Settings, LogOut, ChevronLeft, PanelLeft
 } from 'lucide-react'
 import { useUserStore } from '../../stores/userStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { authService } from '../../services/authService'
+import { syncService } from '../../services/syncService'
 import { useToastStore } from '../../stores/toastStore'
 import { cn } from '../../utils'
+import Modal from '../ui/Modal'
 import BookList from '../books/BookList'
 import SharedBookList from '../books/SharedBookList'
 import ChapterTree from '../chapters/ChapterTree'
@@ -46,17 +48,29 @@ export default function Sidebar() {
   } = useWorkspaceStore()
   const { addToast } = useToastStore()
   const navigate = useNavigate()
+  const location = useLocation()
   const { bookId } = useParams()
 
   const [sidebarTab, setSidebarTab] = useState<'explorer' | 'timeline'>('explorer')
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
-  const handleSignOut = async () => {
+  const handleSignOutClick = () => {
+    setShowLogoutConfirm(true)
+  }
+
+  const confirmSignOut = async () => {
+    setIsLoggingOut(true)
     try {
+      await syncService.processSyncQueue()
+      await syncService.backupDatabaseToCloud()
       await authService.signOut()
       // Hard reload to completely wipe memory and prevent state leakage
       window.location.reload()
     } catch {
       addToast('Failed to sign out', 'error')
+      setIsLoggingOut(false)
+      setShowLogoutConfirm(false)
     }
   }
 
@@ -131,7 +145,10 @@ export default function Sidebar() {
       </div>
 
       {/* ── Main content ──────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col">
+      <div 
+        className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col"
+        onClick={() => { if (location.pathname !== '/') navigate('/') }}
+      >
         {currentBook ? (
           <>
             {/* Explorer / Timeline tabs */}
@@ -369,7 +386,7 @@ export default function Sidebar() {
           </span>
           <button
             id="nav-signout"
-            onClick={handleSignOut}
+            onClick={handleSignOutClick}
             style={{ color: F.textFaint, background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, transition: 'color 0.15s', padding: 2 }}
             onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = '#ef4444'}
             onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = F.textFaint}
@@ -379,6 +396,43 @@ export default function Sidebar() {
           </button>
         </div>
       </div>
+
+      {/* Logout Confirmation Modal */}
+      <Modal
+        isOpen={showLogoutConfirm}
+        onClose={() => !isLoggingOut && setShowLogoutConfirm(false)}
+        title="Confirm Logout"
+        size="sm"
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-surface-200">
+            Are you sure you want to log out? We'll make sure all your recent changes are safely synced to the cloud first.
+          </p>
+          <div className="flex justify-end gap-3 mt-2">
+            <button
+              onClick={() => setShowLogoutConfirm(false)}
+              disabled={isLoggingOut}
+              className="px-4 py-2 text-sm font-medium text-surface-200 hover:text-white transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmSignOut}
+              disabled={isLoggingOut}
+              className="px-4 py-2 text-sm font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {isLoggingOut ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                  Syncing...
+                </>
+              ) : (
+                'Log Out'
+              )}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

@@ -68,8 +68,10 @@ export function registerDatabaseHandlers(ipcMain: IpcMain): void {
     const tableName = typeToTable[data.entityType]
     if (!tableName || !data.row || !data.row.id) return false
     
-    const keys = Object.keys(data.row).filter(k => k !== 'cloud_id') // Avoid inserting cloud_id if we don't have it locally or if we map it differently, though actually local schema has cloud_id for some.
-    // Actually, it's safer to just dynamically build the query.
+    const tableInfo = dbAll(`PRAGMA table_info(${tableName})`) as { name: string }[]
+    const validColumns = tableInfo.map(col => col.name)
+
+    const keys = Object.keys(data.row).filter(k => k !== 'cloud_id' && validColumns.includes(k)) 
     const columns = keys.join(', ')
     const placeholders = keys.map(() => '?').join(', ')
     const values = keys.map(k => data.row[k])
@@ -81,12 +83,6 @@ export function registerDatabaseHandlers(ipcMain: IpcMain): void {
 
   /**
    * Conflict-aware upsert for incoming cloud rows (Phase 3).
-   * Strategy:
-   *   - Row doesn’t exist locally → insert cleanly.
-   *   - Row exists locally and local updated_at > cloud updated_at → CONFLICT.
-   *     Create a “conflict copy” with a new ID and save the cloud version separately.
-   *     Return { conflict: true } so the caller shows a toast.
-   *   - Row exists but cloud version is newer or equal → overwrite silently.
    */
   ipcMain.handle('database:upsertCloudRow', async (_event, data: { entityType: string, row: any }) => {
     const typeToTable: Record<string, string> = {
@@ -104,6 +100,9 @@ export function registerDatabaseHandlers(ipcMain: IpcMain): void {
     if (!tableName || !data.row?.id) return { inserted: false, conflict: false }
 
     const cloudRow = data.row
+    
+    const tableInfo = dbAll(`PRAGMA table_info(${tableName})`) as { name: string }[]
+    const validColumns = tableInfo.map(col => col.name)
 
     // Check if row exists locally
     const existing = dbGet(`SELECT updated_at FROM ${tableName} WHERE id = ?`, [cloudRow.id])
@@ -120,7 +119,7 @@ export function registerDatabaseHandlers(ipcMain: IpcMain): void {
         if ('title' in conflictRow) conflictRow.title = `${conflictRow.title} [Cloud Conflict]`
         if ('name' in conflictRow) conflictRow.name = `${conflictRow.name} [Cloud Conflict]`
 
-        const conflictKeys = Object.keys(conflictRow)
+        const conflictKeys = Object.keys(conflictRow).filter(k => validColumns.includes(k))
         const conflictCols = conflictKeys.join(', ')
         const conflictPlaceholders = conflictKeys.map(() => '?').join(', ')
         const conflictValues = conflictKeys.map(k => conflictRow[k])
@@ -131,7 +130,7 @@ export function registerDatabaseHandlers(ipcMain: IpcMain): void {
     }
 
     // No conflict — safe to insert or overwrite with cloud version
-    const keys = Object.keys(cloudRow)
+    const keys = Object.keys(cloudRow).filter(k => validColumns.includes(k))
     const columns = keys.join(', ')
     const placeholders = keys.map(() => '?').join(', ')
     const values = keys.map(k => cloudRow[k])

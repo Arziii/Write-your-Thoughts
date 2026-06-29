@@ -129,10 +129,31 @@ export function registerChapterHandlers(ipcMain: IpcMain): void {
       }
     }
 
+    const colsInfo = dbAll('PRAGMA table_info(chapter_versions)') as any[]
+    const colNames = colsInfo.map(c => String(c.name).toLowerCase().trim())
+
+    const insertCols: string[] = ['id', 'chapter_id', 'user_id', 'content', 'word_count', 'snapshot_type', 'milestone_name', 'created_at']
+    const placeholders: string[] = ['?', '?', '?', '?', '?', '?', '?', '?']
+    const values: any[] = [id, data.chapterId, data.userId, data.content, data.wordCount, data.snapshotType, data.milestoneName || null, now]
+
+    // Support for legacy schemas that were never fully migrated
+    if (colNames.includes('version_number')) {
+      const maxRow = dbGet('SELECT MAX(version_number) as max_version FROM chapter_versions WHERE chapter_id = ?', [data.chapterId])
+      const nextVersion = ((maxRow?.max_version as number | null) ?? 0) + 1
+      insertCols.push('version_number')
+      placeholders.push('?')
+      values.push(nextVersion)
+    }
+
+    if (colNames.includes('source')) {
+      insertCols.push('source')
+      placeholders.push('?')
+      values.push(data.snapshotType === 'auto' ? 'ai_polish' : 'manual')
+    }
+
     dbRun(
-      `INSERT INTO chapter_versions (id, chapter_id, user_id, content, word_count, snapshot_type, milestone_name, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, data.chapterId, data.userId, data.content, data.wordCount, data.snapshotType, data.milestoneName || null, now]
+      `INSERT INTO chapter_versions (${insertCols.join(', ')}) VALUES (${placeholders.join(', ')})`,
+      values
     )
 
     // If it's a milestone, queue it for cloud sync

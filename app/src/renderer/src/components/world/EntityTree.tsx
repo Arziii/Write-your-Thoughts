@@ -133,8 +133,11 @@ export default function EntityTree({ title, items, staticItems, icon, type, onCr
                           opacity: snapshot.isDragging ? 0.9 : 1,
                         }}
                       >
-                        <button
+                        <div
                           onClick={() => openItem(item)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openItem(item); } }}
                           style={{
                             display: 'flex', alignItems: 'center', gap: 6, width: '100%',
                             padding: '6px 6px', borderRadius: 6, fontSize: 13, fontWeight: activeTabId === item.id ? 600 : 500,
@@ -174,7 +177,7 @@ export default function EntityTree({ title, items, staticItems, icon, type, onCr
                               <MoreHorizontal style={{ width: 14, height: 14 }} />
                             </button>
                           </div>
-                        </button>
+                        </div>
                       </div>
                     )}
                   </Draggable>
