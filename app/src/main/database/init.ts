@@ -114,6 +114,7 @@ function createTables(): void {
       line_spacing REAL DEFAULT 1.8,
       ai_provider TEXT DEFAULT 'openai',
       ai_api_key TEXT,
+      ai_settings TEXT DEFAULT '{}',
       ai_style_prompt TEXT DEFAULT '',
       preserve_formatting INTEGER DEFAULT 0,
       autosave_interval INTEGER DEFAULT 3000,
@@ -677,6 +678,12 @@ function createTables(): void {
   `)
 
   // Migrations for existing databases
+  try {
+    database.run(`ALTER TABLE settings ADD COLUMN ai_settings TEXT DEFAULT '{}'`)
+  } catch (e) {
+    // Column might already exist
+  }
+
   try {
     database.run(`ALTER TABLE settings ADD COLUMN ai_style_prompt TEXT DEFAULT ''`)
   } catch (e) {

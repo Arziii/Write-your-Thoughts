@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { useUserStore } from '../../stores/userStore'
 import { useToastStore } from '../../stores/toastStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
-import { Settings, Key, Palette, Bot, Loader2, ArrowLeft, Download, Book, Puzzle, Cloud, UploadCloud, DownloadCloud, User } from 'lucide-react'
+import { Settings, Key, Palette, Bot, Loader2, ArrowLeft, Download, Book, Puzzle, Cloud, UploadCloud, DownloadCloud, User, ChevronDown } from 'lucide-react'
 import ExportModal from '../../components/export/ExportModal'
 import { authService } from '../../services/authService'
 import { useEffect } from 'react'
+import { ProviderSettings, AIProvider } from '../../types'
+import { ProviderFactory } from '../../services/ai/ProviderFactory'
 
 export interface PluginInfo {
   id: string
@@ -17,31 +19,65 @@ export interface PluginInfo {
   enabled: boolean
 }
 
+const getDraft = () => {
+  const draftStr = sessionStorage.getItem('settings_draft')
+  if (draftStr) {
+    try { return JSON.parse(draftStr) } catch (e) {}
+  }
+  return null
+}
+
 export default function SettingsPage() {
   const navigate = useNavigate()
   const { user, settings, setSettings } = useUserStore()
   const { books } = useWorkspaceStore()
   const { addToast } = useToastStore()
 
-  const [theme, setTheme] = useState<'light' | 'dark'>(settings?.theme || 'light')
-  const [displayName, setDisplayName] = useState(user?.user_metadata?.display_name || '')
-  const [aiProvider, setAiProvider] = useState(settings?.ai_provider || 'openai')
-  const [aiApiKey, setAiApiKey] = useState(settings?.ai_api_key || '')
-  const [aiStylePrompt, setAiStylePrompt] = useState(settings?.ai_style_prompt || '')
-  const [preserveFormatting, setPreserveFormatting] = useState(settings?.preserve_formatting ?? true)
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
+  const [connectionStatus, setConnectionStatus] = useState<{type: 'idle' | 'success' | 'error', message: string}>({type: 'idle', message: ''})
+  const [availableModels, setAvailableModels] = useState<string[]>([])
+
+  const draft = getDraft()
+  const [theme, setTheme] = useState<'light' | 'dark'>(draft?.theme ?? settings?.theme ?? 'light')
+  const [displayName, setDisplayName] = useState(draft?.displayName ?? user?.user_metadata?.display_name ?? '')
+  const [aiProvider, setAiProvider] = useState<AIProvider>(draft?.aiProvider ?? (settings?.ai_provider as AIProvider) ?? 'openai')
+  const [aiApiKey, setAiApiKey] = useState(draft?.aiApiKey ?? settings?.ai_api_key ?? '')
+  const [aiSettingsObj, setAiSettingsObj] = useState<Record<string, ProviderSettings>>(draft?.aiSettingsObj ?? settings?.ai_settings ?? {})
+  const [aiStylePrompt, setAiStylePrompt] = useState(draft?.aiStylePrompt ?? settings?.ai_style_prompt ?? '')
+  const [preserveFormatting, setPreserveFormatting] = useState(draft?.preserveFormatting ?? settings?.preserve_formatting ?? true)
+
+  const updateProviderSetting = (key: keyof ProviderSettings, value: string | number | undefined | Record<string, string>) => {
+    setAiSettingsObj(prev => ({
+      ...prev,
+      [aiProvider]: {
+        ...prev[aiProvider],
+        [key]: value
+      }
+    }))
+  }
+
+  const currentProviderSettings = aiSettingsObj[aiProvider] || {}
 
   useEffect(() => {
+    const draft = getDraft()
     if (settings) {
-      setTheme(settings.theme || 'light')
-      setAiProvider(settings.ai_provider || 'openai')
-      setAiApiKey(settings.ai_api_key || '')
-      setAiStylePrompt(settings.ai_style_prompt || '')
-      setPreserveFormatting(settings.preserve_formatting ?? true)
+      setTheme(draft?.theme ?? settings.theme ?? 'light')
+      setAiProvider(draft?.aiProvider ?? (settings.ai_provider as AIProvider) ?? 'openai')
+      setAiApiKey(draft?.aiApiKey ?? settings.ai_api_key ?? '')
+      setAiSettingsObj(draft?.aiSettingsObj ?? settings.ai_settings ?? {})
+      setAiStylePrompt(draft?.aiStylePrompt ?? settings.ai_style_prompt ?? '')
+      setPreserveFormatting(draft?.preserveFormatting ?? settings.preserve_formatting ?? true)
     }
     if (user) {
-      setDisplayName(user.user_metadata?.display_name || '')
+      setDisplayName(draft?.displayName ?? user.user_metadata?.display_name ?? '')
     }
   }, [settings, user])
+
+  useEffect(() => {
+    const draftObj = { theme, aiProvider, aiApiKey, aiSettingsObj, aiStylePrompt, preserveFormatting, displayName }
+    sessionStorage.setItem('settings_draft', JSON.stringify(draftObj))
+  }, [theme, aiProvider, aiApiKey, aiSettingsObj, aiStylePrompt, preserveFormatting, displayName])
 
   // Note: App.tsx handles the actual document.documentElement.classList based on useUserStore.
   // We will instantly update the store when the toggle is clicked.
@@ -50,6 +86,7 @@ export default function SettingsPage() {
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [isBackingUp, setIsBackingUp] = useState(false)
   const [isRestoring, setIsRestoring] = useState(false)
+  const [isTestingConnection, setIsTestingConnection] = useState(false)
   const [selectedBookId, setSelectedBookId] = useState(books.length > 0 ? books[0].id : '')
   const [plugins, setPlugins] = useState<PluginInfo[]>([])
 
@@ -65,13 +102,16 @@ export default function SettingsPage() {
         userId: user.id,
         theme,
         aiProvider,
-        aiApiKey,
+        aiApiKey: currentProviderSettings.apiKey || aiApiKey,
+        aiSettings: JSON.stringify(aiSettingsObj),
         aiStylePrompt,
         preserveFormatting,
         editorFont: settings?.editor_font || 'Georgia',
         fontSize: settings?.font_size || 16,
         lineSpacing: settings?.line_spacing || 1.8,
       })
+      
+      sessionStorage.removeItem('settings_draft')
       setSettings(updated as never)
 
       // Update display name if changed
@@ -205,28 +245,250 @@ export default function SettingsPage() {
               <select
                 id="settings-ai-provider"
                 value={aiProvider}
-                onChange={(e) => setAiProvider(e.target.value)}
+                onChange={(e) => {
+                  setAiProvider(e.target.value as AIProvider)
+                  setConnectionStatus({type: 'idle', message: ''})
+                  setAvailableModels([])
+                }}
                 className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:border-accent-500 transition-all"
               >
-                <option value="openai">OpenAI (GPT-4o-mini)</option>
+                <option value="openai">OpenAI</option>
                 <option value="gemini">Google Gemini</option>
                 <option value="claude">Anthropic Claude</option>
+                <option value="groq">Groq</option>
+                <option value="openrouter">OpenRouter</option>
+                <option value="mistral">Mistral AI</option>
+                <option value="together">Together AI</option>
+                <option value="xai">xAI (Grok)</option>
+                <option value="ollama">Ollama (Local)</option>
+                <option value="lmstudio">LM Studio (Local)</option>
+                <option value="custom">Custom OpenAI-Compatible</option>
               </select>
             </div>
+            
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-1.5 flex items-center gap-1.5">
                 <Key className="w-3.5 h-3.5" />
-                API Key
+                API Key {['ollama', 'lmstudio'].includes(aiProvider) && '(Optional)'}
               </label>
               <input
                 id="settings-api-key"
                 type="password"
-                value={aiApiKey}
-                onChange={(e) => setAiApiKey(e.target.value)}
+                value={currentProviderSettings.apiKey || ''}
+                onChange={(e) => updateProviderSetting('apiKey', e.target.value)}
                 placeholder={`Your ${aiProvider} API key...`}
                 className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 text-sm focus:outline-none focus:border-accent-500 transition-all font-mono"
               />
               <p className="text-[11px] text-surface-600 mt-1">Your API key is securely synced to your cloud account.</p>
+            </div>
+
+            <div className="pt-2">
+              <button
+                onClick={async () => {
+                  setIsTestingConnection(true)
+                  setConnectionStatus({type: 'idle', message: ''})
+                  try {
+                    const settingsToUse = { ...currentProviderSettings, _providerId: aiProvider } as any
+                    if (!settingsToUse.apiKey && aiApiKey && !['ollama', 'lmstudio'].includes(aiProvider)) {
+                      settingsToUse.apiKey = aiApiKey
+                    }
+                    const providerInstance = ProviderFactory.create(aiProvider, settingsToUse)
+                    
+                    // Automatically test and fetch models
+                    const isConnected = await providerInstance.testConnection()
+                    if (!isConnected) throw new Error('Failed to connect.')
+
+                    const fetchedModels = await providerInstance.getAvailableModels()
+                    setAvailableModels(fetchedModels)
+                    
+                    let modelToUse = settingsToUse.model
+                    
+                    // If no explicit model override is set, automatically detect best model
+                    if (!modelToUse) {
+                      modelToUse = providerInstance.getRecommendedModel(fetchedModels)
+                      // Automatically save it
+                      updateProviderSetting('model', modelToUse)
+                    }
+
+                    if (!modelToUse) {
+                       if (fetchedModels.length === 0) {
+                          setConnectionStatus({type: 'error', message: 'No models found. Please enter a Model in Advanced Settings.'})
+                          return
+                       }
+                       modelToUse = fetchedModels[0]
+                       updateProviderSetting('model', modelToUse)
+                    }
+
+                    // Force save the key globally for fallback
+                    if (settingsToUse.apiKey && !aiApiKey) {
+                      setAiApiKey(settingsToUse.apiKey)
+                    }
+                    
+                    setConnectionStatus({
+                      type: 'success', 
+                      message: `✓ Connected successfully\nUsing: ${modelToUse}\nReady to use.`
+                    })
+                    addToast('Connection successful!', 'success')
+                  } catch (e: any) {
+                    setConnectionStatus({type: 'error', message: e.message || 'Connection failed'})
+                    addToast(e.message || 'Connection failed', 'error')
+                  } finally {
+                    setIsTestingConnection(false)
+                  }
+                }}
+                disabled={isTestingConnection}
+                className="px-4 py-2 bg-surface-700 hover:bg-surface-600 disabled:opacity-50 text-surface-100 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 border border-surface-600 w-full"
+              >
+                {isTestingConnection ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4" />}
+                {isTestingConnection ? 'Testing...' : 'Test Connection'}
+              </button>
+            </div>
+
+            {connectionStatus.type !== 'idle' && (
+              <div className={`p-4 rounded-lg text-sm whitespace-pre-wrap ${connectionStatus.type === 'success' ? 'bg-accent-500/10 text-accent-400 border border-accent-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                {connectionStatus.message}
+              </div>
+            )}
+
+            <div className="pt-2">
+              <button 
+                onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
+                className="text-xs text-surface-400 hover:text-surface-200 transition-colors uppercase tracking-wider font-semibold"
+              >
+                {isAdvancedOpen ? '▼ Hide Advanced Settings' : '▶ Show Advanced Settings'}
+              </button>
+              
+              {isAdvancedOpen && (
+                <div className="mt-4 space-y-4 p-4 border border-surface-700 rounded-lg bg-surface-900">
+                  <div>
+                    <label className="block text-xs font-medium text-surface-300 mb-1.5">Model Override</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={currentProviderSettings.model || ''}
+                        onChange={(e) => {
+                          updateProviderSetting('model', e.target.value)
+                          if (!isModelDropdownOpen) setIsModelDropdownOpen(true)
+                        }}
+                        onFocus={() => setIsModelDropdownOpen(true)}
+                        onBlur={() => setTimeout(() => setIsModelDropdownOpen(false), 200)}
+                        placeholder="Leave blank for automatic detection"
+                        className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 text-sm focus:outline-none focus:border-accent-500 transition-all pr-8"
+                      />
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                        <ChevronDown className="w-4 h-4 text-surface-400" />
+                      </div>
+                      {isModelDropdownOpen && availableModels.length > 0 && (
+                        <ul className="absolute z-50 w-full mt-1 bg-surface-700 border border-surface-600 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                          {availableModels
+                            .filter(m => m.toLowerCase().includes((currentProviderSettings.model || '').toLowerCase()))
+                            .map(model => (
+                              <li
+                                key={model}
+                                className="px-3 py-2 text-sm text-surface-100 hover:bg-accent-500 hover:text-white cursor-pointer"
+                                onClick={() => {
+                                  updateProviderSetting('model', model)
+                                  setIsModelDropdownOpen(false)
+                                }}
+                              >
+                                {model}
+                              </li>
+                            ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+
+                  {['ollama', 'lmstudio', 'custom'].includes(aiProvider) && (
+                    <div>
+                      <label className="block text-xs font-medium text-surface-300 mb-1.5">Base URL</label>
+                      <input
+                        type="text"
+                        value={currentProviderSettings.baseUrl || ''}
+                        onChange={(e) => updateProviderSetting('baseUrl', e.target.value)}
+                        placeholder={
+                          aiProvider === 'ollama' ? 'http://localhost:11434/v1' :
+                          aiProvider === 'lmstudio' ? 'http://localhost:1234/v1' :
+                          'https://api.yourprovider.com/v1'
+                        }
+                        className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 text-sm focus:outline-none focus:border-accent-500 transition-all"
+                      />
+                    </div>
+                  )}
+
+                  {aiProvider === 'openrouter' && (
+                    <>
+                      <div>
+                        <label className="block text-xs font-medium text-surface-300 mb-1.5">HTTP Referer (Optional)</label>
+                        <input
+                          type="text"
+                          value={currentProviderSettings.customHeaders?.referer || ''}
+                          onChange={(e) => updateProviderSetting('customHeaders', { ...currentProviderSettings.customHeaders, referer: e.target.value })}
+                          placeholder="https://yourwebsite.com"
+                          className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 text-sm focus:outline-none focus:border-accent-500 transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-surface-300 mb-1.5">App Name (Optional)</label>
+                        <input
+                          type="text"
+                          value={currentProviderSettings.customHeaders?.appName || ''}
+                          onChange={(e) => updateProviderSetting('customHeaders', { ...currentProviderSettings.customHeaders, appName: e.target.value })}
+                          placeholder="Write Your Thoughts"
+                          className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 text-sm focus:outline-none focus:border-accent-500 transition-all"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-surface-300 mb-1.5">Temperature</label>
+                      <input
+                        type="number"
+                        min="0" max="2" step="0.1"
+                        value={currentProviderSettings.temperature ?? ''}
+                        onChange={(e) => updateProviderSetting('temperature', e.target.value === '' ? undefined : parseFloat(e.target.value))}
+                        placeholder="0.7"
+                        className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 text-sm focus:outline-none focus:border-accent-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-surface-300 mb-1.5">Top P</label>
+                      <input
+                        type="number"
+                        min="0" max="1" step="0.05"
+                        value={currentProviderSettings.topP ?? ''}
+                        onChange={(e) => updateProviderSetting('topP', e.target.value === '' ? undefined : parseFloat(e.target.value))}
+                        placeholder="1.0"
+                        className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 text-sm focus:outline-none focus:border-accent-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-surface-300 mb-1.5">Max Tokens</label>
+                      <input
+                        type="number"
+                        min="1" step="1"
+                        value={currentProviderSettings.maxTokens ?? ''}
+                        onChange={(e) => updateProviderSetting('maxTokens', e.target.value === '' ? undefined : parseInt(e.target.value))}
+                        placeholder="Auto"
+                        className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 text-sm focus:outline-none focus:border-accent-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-surface-300 mb-1.5">Timeout (ms)</label>
+                      <input
+                        type="number"
+                        min="1000" step="1000"
+                        value={currentProviderSettings.timeout ?? ''}
+                        onChange={(e) => updateProviderSetting('timeout', e.target.value === '' ? undefined : parseInt(e.target.value))}
+                        placeholder="Auto"
+                        className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 text-sm focus:outline-none focus:border-accent-500 transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="pt-2 border-t border-surface-800">

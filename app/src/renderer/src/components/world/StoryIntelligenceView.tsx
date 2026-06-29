@@ -86,7 +86,7 @@ export default function StoryIntelligenceView() {
         content: allText,
         storyContext: contextStr,
         provider: settings.ai_provider as any,
-        apiKey: settings.ai_api_key
+        apiKey: settings?.ai_api_key, providerSettings: settings?.ai_settings
       })
 
       // Save pacing
@@ -121,7 +121,7 @@ export default function StoryIntelligenceView() {
           characterName: char.name,
           storyContext: contextStr,
           provider: settings.ai_provider as any,
-          apiKey: settings.ai_api_key
+          apiKey: settings?.ai_api_key, providerSettings: settings?.ai_settings
         })
 
         await window.api.arcAnalysis.upsert({
@@ -141,7 +141,7 @@ export default function StoryIntelligenceView() {
         const statsResult = await aiService.analyzeChapterStatistics({
           content: (lastChapter as any).title + '\n' + (lastChapter as any).content,
           provider: settings.ai_provider as any,
-          apiKey: settings.ai_api_key
+          apiKey: settings?.ai_api_key, providerSettings: settings?.ai_settings
         })
 
         await window.api.chapterStatistics.upsert({

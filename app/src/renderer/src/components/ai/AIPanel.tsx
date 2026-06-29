@@ -91,7 +91,7 @@ export default function AIPanel() {
       const result = await aiService.polishText({
         content: activeChapter.content,
         provider: settings.ai_provider || 'openai',
-        apiKey: settings.ai_api_key,
+        apiKey: settings?.ai_api_key, providerSettings: settings?.ai_settings,
         mode,
         stylePrompt: settings.ai_style_prompt,
         preserveFormatting: settings.preserve_formatting ?? true,
@@ -200,7 +200,7 @@ export default function AIPanel() {
       const response = await aiService.brainstorm({
         messages: recentMessages,
         provider: settings.ai_provider || 'openai',
-        apiKey: settings.ai_api_key,
+        apiKey: settings?.ai_api_key, providerSettings: settings?.ai_settings,
         storyContext: storyContext.trim(),
       })
 

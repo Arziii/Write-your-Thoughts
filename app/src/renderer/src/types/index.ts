@@ -18,8 +18,9 @@ export interface Settings {
   editor_font: string
   font_size: number
   line_spacing: number
-  ai_provider: 'openai' | 'gemini' | 'claude'
+  ai_provider: AIProvider
   ai_api_key?: string
+  ai_settings?: Record<string, ProviderSettings>
   ai_style_prompt?: string
   preserve_formatting?: boolean
   autosave_interval: number
@@ -463,7 +464,18 @@ export interface EditorTab {
 
 // ── AI ─────────────────────────────────────────────────────────────
 
-export type AIProvider = 'openai' | 'gemini' | 'claude'
+export type AIProvider = 'openai' | 'gemini' | 'claude' | 'groq' | 'openrouter' | 'mistral' | 'together' | 'xai' | 'ollama' | 'lmstudio' | 'custom'
+
+export interface ProviderSettings {
+  apiKey?: string
+  model?: string
+  baseUrl?: string
+  customHeaders?: Record<string, string>
+  timeout?: number
+  maxTokens?: number
+  temperature?: number
+  topP?: number
+}
 export type AIMode = 'grammar' | 'balanced' | 'strong' | 'expand' | 'shorten' | 'describe' | 'custom'
 
 export interface AIPolishResult {
@@ -480,7 +492,8 @@ export interface AIBrainstormMessage {
 export interface AIBrainstormOptions {
   messages: AIBrainstormMessage[]
   provider: AIProvider
-  apiKey: string
+  apiKey?: string
+  providerSettings?: ProviderSettings
   storyContext?: string
 }
 

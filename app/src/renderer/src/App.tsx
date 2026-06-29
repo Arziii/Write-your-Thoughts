@@ -30,13 +30,19 @@ function App() {
         const hashParams = new URLSearchParams(url.split('#')[1])
         const accessToken = hashParams.get('access_token')
         const refreshToken = hashParams.get('refresh_token')
+        const type = hashParams.get('type')
         
         if (accessToken && refreshToken) {
           console.log('[DeepLink] Setting session from deep link...')
           const { error } = await authService.setSession(accessToken, refreshToken)
           if (error) throw error
           addToast('Successfully authenticated!', 'success')
-          navigate('/')
+          
+          if (type === 'recovery') {
+            navigate('/reset-password')
+          } else {
+            navigate('/')
+          }
         } else if (url.includes('auth/reset-password')) {
            navigate('/reset-password' + (url.split('#')[1] ? '#' + url.split('#')[1] : ''))
         }
@@ -253,7 +259,7 @@ function App() {
         <Route path="/register" element={user ? <Navigate to="/" replace /> : <RegisterPage />} />
         <Route path="/verify-email" element={user ? <Navigate to="/" replace /> : <VerifyEmailPage />} />
         <Route path="/forgot-password" element={user ? <Navigate to="/" replace /> : <ForgotPasswordPage />} />
-        <Route path="/reset-password" element={user ? <Navigate to="/" replace /> : <ResetPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         {/* Protected routes */}
         <Route element={user ? <AppLayout /> : <Navigate to="/login" replace />}>

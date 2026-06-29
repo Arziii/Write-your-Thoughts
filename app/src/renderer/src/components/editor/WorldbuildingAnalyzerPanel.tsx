@@ -47,7 +47,7 @@ export default function WorldbuildingAnalyzerPanel({ chapterId }: { chapterId: s
       const result = await aiService.analyzeWorldbuilding({
         content: activeChapter.content.replace(/<[^>]*>/g, ''),
         provider: settings.ai_provider || 'openai',
-        apiKey: settings.ai_api_key,
+        apiKey: settings?.ai_api_key, providerSettings: settings?.ai_settings,
         storyContext: storyContext.trim()
       })
 
