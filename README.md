@@ -34,12 +34,17 @@ Write Your Thoughts is a comprehensive workspace tailored specifically for novel
 
 ## 📸 Screenshots
 
-*(Add screenshots here)*
-
 - Dashboard View
+<img src="assets/Dashboard1.png" alt="Dashboard View" width="600" height="600" />
+
 - Rich Editor & AI Panel
+<img src="assets/Dashboard2.png" alt="Rich Editor & AI Panel" width="600" height="600" />
+
 - Worldbuilding (Characters/Locations)
+<img src="assets/Dashboard3.png" alt="Worldbuilding" width="600" height="600" />
+
 - Timeline Analyzer
+<img src="assets/Dashboard4.png" alt="Timeline Analyzer" width="600" height="600" />
 
 ## 🚀 Technology Stack
 
