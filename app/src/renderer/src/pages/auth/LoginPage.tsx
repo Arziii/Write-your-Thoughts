@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { authService } from '../../services/authService'
@@ -15,8 +15,18 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isRestoring, setIsRestoring] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [lockoutTime, setLockoutTime] = useState<number | null>(null)
   const { addToast } = useToastStore()
   const { setIsFreshLogin } = useUserStore()
+
+  // Countdown timer for lockout
+  useEffect(() => {
+    if (lockoutTime === null || lockoutTime <= 0) return
+    const timer = setInterval(() => {
+      setLockoutTime((prev) => (prev && prev > 1 ? prev - 1 : null))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [lockoutTime])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -33,10 +43,13 @@ export default function LoginPage() {
         setIsRestoring(true)
         addToast('Syncing workspace...', 'success')
       }
-    } catch (err: unknown) {
+    } catch (err: any) {
       setIsFreshLogin(false)
-      const message = err instanceof Error ? err.message : 'Failed to sign in'
+      const message = err.message || 'Failed to sign in'
       setError(message)
+      if (err.retryAfter) {
+        setLockoutTime(err.retryAfter)
+      }
       setIsLoading(false)
     }
     // Don't set isLoading(false) on success if reloading — the page will reload
@@ -150,7 +163,7 @@ export default function LoginPage() {
             <button
               id="login-submit"
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || (lockoutTime !== null && lockoutTime > 0)}
               className="w-full py-2.5 bg-accent-600 hover:bg-accent-500 disabled:bg-accent-800 disabled:opacity-60 text-white font-medium rounded-lg text-sm transition-all flex items-center justify-center gap-2 mt-6"
             >
               {isLoading ? (
@@ -158,6 +171,8 @@ export default function LoginPage() {
                   <Loader2 className="w-4 h-4 animate-spin" />
                   {isRestoring ? 'Restoring data...' : 'Signing in...'}
                 </>
+              ) : lockoutTime ? (
+                `Try again in ${lockoutTime}s`
               ) : (
                 'Sign in'
               )}

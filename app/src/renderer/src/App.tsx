@@ -226,8 +226,40 @@ function App() {
       }
     })
 
+    // Track selection changes globally for TextAreas and Inputs to support AI Polish on any page
+    let lastActiveTextArea: HTMLTextAreaElement | HTMLInputElement | null = null
+    
+    // We don't import debounce here to keep it simple, just basic throttle
+    let selTimeout: any = null
+    const handleSelectionChange = () => {
+      if (selTimeout) clearTimeout(selTimeout)
+      selTimeout = setTimeout(() => {
+        const activeEl = document.activeElement
+        if (activeEl && (activeEl.tagName === 'TEXTAREA' || (activeEl.tagName === 'INPUT' && (activeEl as HTMLInputElement).type === 'text'))) {
+          const el = activeEl as HTMLTextAreaElement
+          const text = el.value.substring(el.selectionStart || 0, el.selectionEnd || 0)
+          if (text) {
+            lastActiveTextArea = el
+            useWorkspaceStore.getState().setSelectedText(text)
+          }
+        }
+      }, 100)
+    }
+    document.addEventListener('selectionchange', handleSelectionChange)
+
+    const handleReplaceSelection = (e: any) => {
+      const { text } = e.detail
+      if (lastActiveTextArea && document.body.contains(lastActiveTextArea)) {
+        lastActiveTextArea.focus()
+        document.execCommand('insertText', false, text)
+      }
+    }
+    window.addEventListener('replace-textarea-selection', handleReplaceSelection)
+
     return () => {
       subscription.unsubscribe()
+      document.removeEventListener('selectionchange', handleSelectionChange)
+      window.removeEventListener('replace-textarea-selection', handleReplaceSelection)
     }
   }, [])
 

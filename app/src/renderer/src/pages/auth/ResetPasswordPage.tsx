@@ -36,8 +36,9 @@ export default function ResetPasswordPage() {
       const { error: updateError } = await authService.updatePassword(password)
       if (updateError) throw updateError
 
-      addToast('Password has been updated successfully.', 'success')
-      navigate('/') // Go to workspace since they are authenticated
+      await authService.signOut()
+      addToast('Password updated successfully. Please sign in with your new password.', 'success')
+      navigate('/login')
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to update password.'
       setError(message)

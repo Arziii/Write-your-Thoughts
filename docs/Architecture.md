@@ -77,4 +77,7 @@ The application is built on a **Local-First** philosophy. Users can continue wri
 
 ## Conflict Resolution
 
-In a single-user architecture, conflict resolution heavily favors the most recent write based on `updated_at` timestamps. Before any destructive overwrite from the cloud occurs, a local snapshot is captured in the version history, guaranteeing no local draft is ever permanently lost.
+In a single-user architecture, conflict resolution heavily favors the most recent write based on `updated_at` timestamps. The sync engine handles conflicts smoothly:
+1. **True Conflicts:** If the cloud version is newer than the local version AND the local version has unsynced changes in the `sync_queue`, the system generates a local `_conflict_` file so both versions survive, allowing the user to resolve it manually.
+2. **Unsynced Local Data:** If the local version is newer than the cloud version (i.e. pending offline edits), the incoming stale cloud row is safely ignored, preventing it from overwriting the user's unsynced work.
+3. **Failsafe:** Before any destructive overwrite from the cloud occurs, a local snapshot is captured in the version history, guaranteeing no local draft is ever permanently lost.

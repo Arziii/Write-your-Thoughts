@@ -30,16 +30,21 @@ Write Your Thoughts is a comprehensive workspace tailored specifically for novel
 - **Rich Text Editor**: Powerful block-style editor built on Tiptap.
 - **Cloud Synchronization**: Background sync engine resolving conflicts and preserving offline changes.
 - **AI-Assisted Editing**: Context-aware AI to brainstorm, check grammar, analyze continuity, and develop story arcs.
-- **Export Options**: Export your work to multiple formats including EPUB, DOCX, and Markdown.
+- **Export Options**: Export your work to multiple formats including EPUB, DOCX, PDF and Markdown.
 
 ## 📸 Screenshots
 
-*(Add screenshots here)*
-
 - Dashboard View
+<img src="assets/Dashboard1.png" alt="Dashboard View" width="600" height="600" />
+
 - Rich Editor & AI Panel
+<img src="assets/Dashboard2.png" alt="Rich Editor & AI Panel" width="600" height="600" />
+
 - Worldbuilding (Characters/Locations)
+<img src="assets/Dashboard3.png" alt="Worldbuilding" width="600" height="600" />
+
 - Timeline Analyzer
+<img src="assets/Dashboard4.png" alt="Timeline Analyzer" width="600" height="600" />
 
 ## 🚀 Technology Stack
 
@@ -49,7 +54,7 @@ Write Your Thoughts is a comprehensive workspace tailored specifically for novel
 - **State Management**: [Zustand](https://github.com/pmndrs/zustand)
 - **Editor Core**: [Tiptap](https://tiptap.dev/)
 - **Database/Auth**: [Supabase](https://supabase.com/) & local SQLite (`sql.js`)
-- **AI Integration**: OpenAI / Anthropic / Google Gemini support
+- **AI Integration**: OpenAI / Anthropic / Google Gemini support / Grok / Ollama / OpenRouter /Local AI
 
 ---
 
@@ -93,7 +98,7 @@ For more details, see [Folder Structure Documentation](docs/Folder-Structure.md)
 ### Step 1: Clone the repository
 
 ```bash
-git clone https://github.com/yourusername/write-your-thoughts.git
+git clone https://github.com/Arziii/write-your-thoughts.git
 cd write-your-thoughts/app
 ```
 
@@ -120,7 +125,7 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 ### Step 4: Database Setup (Supabase)
 
-Run the migration scripts located in your Supabase dashboard to set up the remote schema matching the local SQLite structure. See [Database Documentation](docs/Database.md).
+You must deploy the application's database schema to your Supabase project to enable cloud syncing and the AI features. See the [Supabase Setup & Migrations](docs/Supabase-Setup.md) guide for the exact SQL scripts to copy and paste into your Supabase SQL Editor.
 
 ### Step 5: AI Integration Setup
 

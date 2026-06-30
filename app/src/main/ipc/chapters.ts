@@ -59,7 +59,12 @@ export function registerChapterHandlers(ipcMain: IpcMain): void {
 
   ipcMain.handle('chapters:rename', async (_event, data: { id: string; title: string }) => {
     const now = new Date().toISOString()
-    dbRun('UPDATE chapters SET title = ?, updated_at = ? WHERE id = ?', [data.title, now, data.id])
+    dbRun('UPDATE chapters SET title = ?, updated_at = ?, synced = 0 WHERE id = ?', [data.title, now, data.id])
+    dbRun(
+      `INSERT INTO sync_queue (id, entity_type, entity_id, operation, status, created_at)
+       VALUES (?, 'chapter', ?, 'update', 'pending', ?)`,
+      [uuidv4(), data.id, now]
+    )
     return dbGet('SELECT * FROM chapters WHERE id = ?', [data.id])
   })
 
