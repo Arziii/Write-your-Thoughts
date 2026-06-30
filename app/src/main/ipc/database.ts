@@ -108,24 +108,35 @@ export function registerDatabaseHandlers(ipcMain: IpcMain): void {
     const existing = dbGet(`SELECT updated_at FROM ${tableName} WHERE id = ?`, [cloudRow.id])
 
     if (existing && cloudRow.updated_at && existing.updated_at) {
+      // Check if there are any pending local changes in the sync queue for this entity
+      const pendingSync = dbGet(`SELECT id FROM sync_queue WHERE entity_id = ? AND operation IN ('create', 'update')`, [cloudRow.id])
+
       const localTime = new Date(existing.updated_at as string).getTime()
       const cloudTime = new Date(cloudRow.updated_at as string).getTime()
 
-      // Conflict: local is NEWER than cloud (meaning it was edited offline on this device)
-      if (localTime > cloudTime) {
-        // Create a conflict-copy with a new ID so both survive
-        const conflictId = `${cloudRow.id}_conflict_${Date.now()}`
-        const conflictRow = { ...cloudRow, id: conflictId }
-        if ('title' in conflictRow) conflictRow.title = `${conflictRow.title} [Cloud Conflict]`
-        if ('name' in conflictRow) conflictRow.name = `${conflictRow.name} [Cloud Conflict]`
+      // Conflict: Both local and cloud have changes.
+      // If pendingSync is true, local has unsynced changes.
+      // If cloudTime > localTime, the cloud version is newer, so it's a true conflict.
+      if (pendingSync) {
+        if (cloudTime > localTime) {
+          // Create a conflict-copy with a new ID so both survive
+          const conflictId = `${cloudRow.id}_conflict_${Date.now()}`
+          const conflictRow = { ...cloudRow, id: conflictId }
+          if ('title' in conflictRow) conflictRow.title = `${conflictRow.title} [Cloud Conflict]`
+          if ('name' in conflictRow) conflictRow.name = `${conflictRow.name} [Cloud Conflict]`
 
-        const conflictKeys = Object.keys(conflictRow).filter(k => validColumns.includes(k))
-        const conflictCols = conflictKeys.join(', ')
-        const conflictPlaceholders = conflictKeys.map(() => '?').join(', ')
-        const conflictValues = conflictKeys.map(k => conflictRow[k])
-        dbRun(`INSERT OR IGNORE INTO ${tableName} (${conflictCols}) VALUES (${conflictPlaceholders})`, conflictValues)
-        // Keep the local version as-is (don’t overwrite)
-        return { inserted: true, conflict: true }
+          const conflictKeys = Object.keys(conflictRow).filter(k => validColumns.includes(k))
+          const conflictCols = conflictKeys.join(', ')
+          const conflictPlaceholders = conflictKeys.map(() => '?').join(', ')
+          const conflictValues = conflictKeys.map(k => conflictRow[k])
+          dbRun(`INSERT OR IGNORE INTO ${tableName} (${conflictCols}) VALUES (${conflictPlaceholders})`, conflictValues)
+          // Keep the local version as-is (don’t overwrite)
+          return { inserted: true, conflict: true }
+        } else {
+          // Our local version is newer (unsynced), so we should just ignore the stale cloud row.
+          // Returning early prevents the local version from being overwritten.
+          return { inserted: false, conflict: false }
+        }
       }
     }
 

@@ -5,8 +5,36 @@ import { syncService } from './syncService'
 
 export const authService = {
   async signIn(email: string, password: string) {
+    // 1. Pre-flight check for rate limiting and lockouts
+    const { data: checkData, error: checkError } = await supabase.rpc('check_login_attempt', { p_email: email })
+    
+    if (checkData) {
+      const result = checkData as any
+      if (!result.allowed) {
+        if (result.reason === 'locked') {
+          const err: any = new Error("This account has been locked for security. Please use the 'Forgot Password' link to reset your password and unlock your account.")
+          err.status = 423
+          throw err
+        } else if (result.reason === 'delay') {
+          const err: any = new Error("Too many failed attempts. Please try again later.")
+          err.status = 429
+          err.retryAfter = result.retry_after
+          throw err
+        }
+      }
+    }
+
+    // 2. Attempt the actual sign in
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw error
+    
+    if (error) {
+      // 3. If it failed (e.g. invalid credentials), record the failure to increment the counter
+      await supabase.rpc('record_failed_login', { p_email: email })
+      throw error
+    }
+
+    // 4. If login was successful, clear the failure counter
+    await supabase.rpc('clear_login_attempts', { p_email: email })
 
     let restoredFromCloud = false
 
@@ -28,22 +56,11 @@ export const authService = {
         const localBooks = (await window.api.books.getAll(data.user.id)) as any[]
         const isEmpty = !localBooks || localBooks.length === 0
 
-        let localNewestDate: Date | null = null
-        if (!isEmpty) {
-          const maxUpdatedAt = localBooks.reduce(
-            (max: string, b: any) => (b.updated_at > max ? b.updated_at : max),
-            localBooks[0].updated_at as string
-          )
-          localNewestDate = new Date(maxUpdatedAt)
-        }
-
-        // Restore if: local DB is empty  OR  cloud snapshot is newer than local data
-        const cloudIsNewer = !localNewestDate || cloudInfo.updatedAt > localNewestDate
-        if (cloudIsNewer) {
-          console.log(
-            '[Sync] Cloud backup is newer than local data — restoring automatically.',
-            { cloudUpdatedAt: cloudInfo.updatedAt, localNewest: localNewestDate }
-          )
+        // Restore ONLY if local DB is empty (e.g. fresh install or new device).
+        // If there is local data, we rely on `performInitialPull` to merge granular row changes
+        // safely without overwriting un-synced offline work.
+        if (isEmpty) {
+          console.log('[Sync] Local database is empty — restoring from cloud backup.')
           try {
             const restoreResult = await syncService.restoreDatabaseFromCloud()
             if (restoreResult.success) {
@@ -56,7 +73,7 @@ export const authService = {
             console.warn('[Sync] Auto-restore threw, keeping local data:', e)
           }
         } else {
-          console.log('[Sync] Local data is up to date — no restore needed.')
+          console.log('[Sync] Local data exists — skipping full DB restore to prevent data loss. Relying on granular sync.')
         }
       } else {
         // No cloud backup exists yet (brand new account or first-time backup pending)

@@ -303,6 +303,13 @@ export const syncService = {
           continue
         }
 
+        // Conflict copies (ending with _conflict_<timestamp>) are local-only to preserve data.
+        // Supabase expects a UUID for the 'id' column, so attempting to upsert or delete these will fail with HTTP 400.
+        if (task.entity_id.includes('_conflict_')) {
+          await window.api.database.markSyncComplete(task.id)
+          continue
+        }
+
         if (task.operation === 'delete') {
           const { error } = await supabase.from(cloudTable).delete().eq('id', task.entity_id)
           if (!error) {

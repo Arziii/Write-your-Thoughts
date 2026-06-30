@@ -33,7 +33,7 @@ export default function AIPanel() {
   const [polishResult, setPolishResult] = useState<AIPolishResult | null>(null)
   const [mode, setMode] = useState<AIMode>('grammar')
   const [customInstruction, setCustomInstruction] = useState('')
-  const [activeTab, setActiveTab] = useState<'polish' | 'history' | 'brainstorm'>('polish')
+  const [activeTabPanel, setActiveTabPanel] = useState<'polish' | 'history' | 'brainstorm'>('polish')
   const [showModeMenu, setShowModeMenu] = useState(false)
 
   // Brainstorm state
@@ -42,13 +42,17 @@ export default function AIPanel() {
   const [isBrainstorming, setIsBrainstorming] = useState(false)
   const [showClearConfirm, setShowClearConfirm] = useState(false)
 
+  const activeTab = tabs.find(t => t.id === activeTabId)
+
   const handlePolish = async () => {
-    if (!activeChapter || !settings?.ai_api_key) {
+    const textToPolish = selectedText?.trim() || activeChapter?.content;
+
+    if (!textToPolish || !settings?.ai_api_key) {
       if (!settings?.ai_api_key) {
         addToast('Set your AI API key in Settings first', 'warning')
         return
       }
-      addToast('Open a chapter to polish', 'info')
+      addToast('Select some text or open a chapter to polish', 'info')
       return
     }
 
@@ -56,18 +60,18 @@ export default function AIPanel() {
     setPolishResult(null)
 
     try {
-      // Build story context by finding matching entities in the chapter content
-      const chapterText = activeChapter.content.replace(/<[^>]*>/g, '')
+      // Build story context by finding matching entities
+      const contextText = activeChapter ? activeChapter.content.replace(/<[^>]*>/g, '') : textToPolish;
       let storyContext = ''
 
       // Include auto-matched and locked entities
       const lockedIds = panelState.lockedEntities || []
-      const matchedCharacters = characters.filter(c => lockedIds.includes(c.id) || chapterText.includes(c.name) || (c.nickname && chapterText.includes(c.nickname)))
+      const matchedCharacters = characters.filter(c => lockedIds.includes(c.id) || contextText.includes(c.name) || (c.nickname && contextText.includes(c.nickname)))
       if (matchedCharacters.length > 0) {
         storyContext += 'CHARACTERS:\n' + matchedCharacters.map(c => `- ${c.name} (Age: ${c.age}, Gender: ${c.gender}): ${c.appearance}. ${c.personality}. Goals: ${c.goals}`).join('\n') + '\n\n'
       }
 
-      const matchedLocations = locations.filter(l => lockedIds.includes(l.id) || chapterText.includes(l.name))
+      const matchedLocations = locations.filter(l => lockedIds.includes(l.id) || contextText.includes(l.name))
       if (matchedLocations.length > 0) {
         storyContext += 'LOCATIONS:\n' + matchedLocations.map(l => `- ${l.name}: ${l.description}. Culture: ${l.culture}`).join('\n') + '\n\n'
       }
@@ -76,8 +80,8 @@ export default function AIPanel() {
         storyContext += 'VERSE TIMELINE RECORD (Global World Events):\n' + [...verseTimelineEvents].sort((a,b) => (a.sort_order||0)-(b.sort_order||0)).map(e => `- ${e.event_date ? `[${e.event_date}] ` : ''}${e.title}: ${e.description}`).join('\n') + '\n\n'
       }
 
-      // Save version before polishing
-      if (user) {
+      // Save version before polishing ONLY if it's a full chapter polish
+      if (user && activeChapter && !selectedText?.trim()) {
         await window.api.chapters.saveVersion({
           chapterId: activeChapter.id,
           userId: user.id,
@@ -89,7 +93,7 @@ export default function AIPanel() {
       }
 
       const result = await aiService.polishText({
-        content: activeChapter.content,
+        content: textToPolish,
         provider: settings.ai_provider || 'openai',
         apiKey: settings?.ai_api_key, providerSettings: settings?.ai_settings,
         mode,
@@ -110,29 +114,41 @@ export default function AIPanel() {
   }
 
   const handleAccept = async () => {
-    if (!polishResult || !activeChapter || !user) return
-    try {
-      const wc = polishResult.polishedContent.replace(/<[^>]*>/g, '').trim().split(/\s+/).filter(Boolean).length
-      // Save AI output as new version
-      await window.api.chapters.saveVersion({
-        chapterId: activeChapter.id,
-        userId: user.id,
-        content: polishResult.polishedContent,
-        wordCount: wc,
-        snapshotType: 'auto',
-        milestoneName: 'AI Polish Result'
-      })
-      // Save to chapter
-      await window.api.chapters.save({
-        id: activeChapter.id,
-        content: polishResult.polishedContent,
-        wordCount: wc,
-      })
-      updateChapter({ ...activeChapter, content: polishResult.polishedContent, word_count: wc })
+    if (!polishResult || !user) return
+    
+    if (activeChapter && !selectedText?.trim()) {
+      try {
+        const wc = polishResult.polishedContent.replace(/<[^>]*>/g, '').trim().split(/\s+/).filter(Boolean).length
+        // Save AI output as new version
+        await window.api.chapters.saveVersion({
+          chapterId: activeChapter.id,
+          userId: user.id,
+          content: polishResult.polishedContent,
+          wordCount: wc,
+          snapshotType: 'auto',
+          milestoneName: 'AI Polish Result'
+        })
+        // Save to chapter
+        await window.api.chapters.save({
+          id: activeChapter.id,
+          content: polishResult.polishedContent,
+          wordCount: wc,
+        })
+        updateChapter({ ...activeChapter, content: polishResult.polishedContent, word_count: wc })
+        setPolishResult(null)
+        addToast('AI edits accepted', 'success')
+      } catch {
+        addToast('Failed to apply changes', 'error')
+      }
+    } else {
+      // It's a selection polish, dispatch event to replace it
+      window.dispatchEvent(new CustomEvent('replace-textarea-selection', { detail: { text: polishResult.polishedContent } }))
+      
+      // Also copy to clipboard as a fallback
+      navigator.clipboard.writeText(polishResult.polishedContent.replace(/<[^>]*>/g, ''))
+      
       setPolishResult(null)
-      addToast('AI edits accepted', 'success')
-    } catch {
-      addToast('Failed to apply changes', 'error')
+      addToast('AI edits applied (or copied to clipboard)', 'success')
     }
   }
 
@@ -163,7 +179,6 @@ export default function AIPanel() {
         storyContext += `Current Book: ${currentBook.title}\n`
       }
 
-      const activeTab = tabs.find(t => t.id === activeTabId)
       if (activeTab) {
         const docType = activeTab.type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
         storyContext += `Current Editor: ${activeTab.type === 'chapter' ? 'Story Editor' : 'Worldbuilding Editor'}\n`
@@ -245,10 +260,10 @@ export default function AIPanel() {
           <button
             key={id}
             id={`ai-tab-${id}`}
-            onClick={() => setActiveTab(id as 'polish' | 'history' | 'brainstorm')}
+            onClick={() => setActiveTabPanel(id as 'polish' | 'history' | 'brainstorm')}
             className={cn(
               'flex items-center justify-center gap-1.5 flex-1 py-2 text-xs font-medium transition-colors',
-              activeTab === id
+              activeTabPanel === id
                 ? 'text-accent-400 border-b-2 border-accent-500'
                 : 'text-surface-500 hover:text-surface-300'
             )}
@@ -261,18 +276,23 @@ export default function AIPanel() {
 
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        {activeTab === 'polish' ? (
+        {activeTabPanel === 'polish' ? (
           <>
-            {/* Chapter info */}
-            {activeChapter ? (
+            {/* Context info */}
+            {activeTab ? (
               <div className="glass-card rounded-lg p-3">
                 <p className="text-xs text-surface-400 mb-0.5">Editing</p>
-                <p className="text-sm text-surface-200 font-medium truncate">{activeChapter.title}</p>
-                <p className="text-xs text-surface-500 mt-0.5">{activeChapter.word_count} words</p>
+                <p className="text-sm text-surface-200 font-medium truncate">{activeTab.title}</p>
+                {activeChapter && <p className="text-xs text-surface-500 mt-0.5">{activeChapter.word_count} words</p>}
+                {selectedText && (
+                  <div className="mt-2 text-[10px] bg-accent-500/10 dark:bg-accent-900/30 text-accent-700 dark:text-accent-400 px-1.5 py-1 rounded border border-accent-500/20 truncate">
+                    Targeting Selection ({selectedText.trim().split(/\s+/).filter(Boolean).length} words)
+                  </div>
+                )}
               </div>
             ) : (
               <div className="glass-card rounded-lg p-3 text-center">
-                <p className="text-xs text-surface-500">Open a chapter to use AI features.</p>
+                <p className="text-xs text-surface-500">Open a document to use AI features.</p>
               </div>
             )}
 
@@ -326,7 +346,7 @@ export default function AIPanel() {
             <button
               id="ai-polish-btn"
               onClick={handlePolish}
-              disabled={isPolishing || !activeChapter}
+              disabled={isPolishing || (!activeChapter && !selectedText?.trim())}
               className="w-full py-2.5 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2"
             >
               {isPolishing ? (
@@ -399,7 +419,7 @@ export default function AIPanel() {
               </div>
             )}
           </>
-        ) : activeTab === 'history' ? (
+        ) : activeTabPanel === 'history' ? (
           <VersionHistory />
         ) : (
           <div className="flex flex-col h-full overflow-hidden">
