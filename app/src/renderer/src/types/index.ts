@@ -452,7 +452,7 @@ export interface ExportOptions {
 
 // ── Tab type ───────────────────────────────────────────────────────
 
-export type TabType = 'chapter' | 'character' | 'location' | 'note' | 'timeline' | 'codex' | 'wiki' | 'organization' | 'world_rule' | 'story_intelligence' | 'relationship_manager' | 'verse_timeline'
+export type TabType = 'chapter' | 'character' | 'location' | 'maps' | 'note' | 'timeline' | 'codex' | 'wiki' | 'organization' | 'world_rule' | 'story_intelligence' | 'relationship_manager' | 'verse_timeline'
 
 export interface EditorTab {
   id: string          // Unique ID for the tab (usually the entity ID)

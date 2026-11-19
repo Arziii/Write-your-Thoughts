@@ -20,11 +20,15 @@ interface VersionHistoryModalProps {
   isOpen: boolean
   onClose: () => void
   onRestore: (html: string, wordCount: number) => void
+  onBeforeRestore: () => Promise<boolean>
+  onCreateMilestone: (name: string) => Promise<void>
 }
 
-export default function VersionHistoryModal({ chapterId, isOpen, onClose, onRestore }: VersionHistoryModalProps) {
+export default function VersionHistoryModal({ chapterId, isOpen, onClose, onRestore, onBeforeRestore, onCreateMilestone }: VersionHistoryModalProps) {
   const [versions, setVersions] = useState<Version[]>([])
   const [loading, setLoading] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [milestoneName, setMilestoneName] = useState<string | null>(null)
   const [selectedVersion, setSelectedVersion] = useState<Version | null>(null)
   const { addToast } = useToastStore()
   const { user } = useUserStore()
@@ -53,6 +57,7 @@ export default function VersionHistoryModal({ chapterId, isOpen, onClose, onRest
     if (!window.confirm('Are you sure you want to restore this version? This will overwrite your current progress.')) return
 
     try {
+      if (!await onBeforeRestore()) return
       const result = await window.api.chapters.restoreVersion({
         chapterId,
         versionId: selectedVersion.id,
@@ -68,6 +73,22 @@ export default function VersionHistoryModal({ chapterId, isOpen, onClose, onRest
     }
   }
 
+  const createMilestone = async (event: React.FormEvent) => {
+    event.preventDefault()
+    const name = milestoneName?.trim()
+    if (!name) return
+    setCreating(true)
+    try {
+      await onCreateMilestone(name)
+      setMilestoneName(null)
+      await loadVersions()
+    } catch {
+      addToast('Failed to save milestone', 'error')
+    } finally {
+      setCreating(false)
+    }
+  }
+
   if (!isOpen) return null
 
   return (
@@ -79,10 +100,28 @@ export default function VersionHistoryModal({ chapterId, isOpen, onClose, onRest
             <Clock className="w-5 h-5 text-accent-400" />
             Version History
           </h2>
-          <button onClick={onClose} className="p-2 text-surface-400 hover:text-surface-100 hover:bg-surface-800 rounded-lg transition-colors">
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button type="button" disabled={!user || creating} onClick={() => setMilestoneName('')}
+              className="rounded-lg border border-surface-700 px-3 py-1.5 text-xs hover:bg-surface-800 disabled:opacity-50">
+              {creating ? 'Saving…' : 'Create Milestone'}
+            </button>
+            <button onClick={onClose} aria-label="Close version history" className="p-2 text-surface-400 hover:text-surface-100 hover:bg-surface-800 rounded-lg transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
+
+        {milestoneName !== null && (
+          <form onSubmit={createMilestone} className="flex flex-wrap items-end gap-2 border-b border-surface-800 px-6 py-3">
+            <label className="flex flex-col gap-1 text-xs text-surface-400">
+              Milestone name
+              <input autoFocus required maxLength={100} value={milestoneName} onChange={event => setMilestoneName(event.target.value)}
+                className="rounded border border-surface-700 bg-surface-950 px-2 py-1.5 text-sm text-surface-100" />
+            </label>
+            <button type="submit" disabled={creating || !milestoneName.trim()} className="rounded bg-accent-600 px-3 py-1.5 text-sm text-white disabled:opacity-50">Save milestone</button>
+            <button type="button" disabled={creating} onClick={() => setMilestoneName(null)} className="px-3 py-1.5 text-sm text-surface-300">Cancel</button>
+          </form>
+        )}
 
         <div className="flex flex-1 overflow-hidden">
           {/* Sidebar - List of versions */}

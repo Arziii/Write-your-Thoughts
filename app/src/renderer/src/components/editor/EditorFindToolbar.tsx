@@ -1,17 +1,42 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { Editor } from '@tiptap/react'
 import { Search, X, ChevronUp, ChevronDown } from 'lucide-react'
+import { createSearchPattern } from '../../../../shared/manuscriptSearch'
+import { useWorkspaceStore } from '../../stores/workspaceStore'
 
 interface EditorFindToolbarProps {
   editor: Editor | null
+  chapterId?: string
 }
 
-export default function EditorFindToolbar({ editor }: EditorFindToolbarProps) {
+function scrollToCurrent(editor: Editor | null) {
+  requestAnimationFrame(() => {
+    if (!editor || editor.isDestroyed) return
+    editor.view.dom.querySelector('.search-result-current')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+    })
+  })
+}
+
+export default function EditorFindToolbar({ editor, chapterId }: EditorFindToolbarProps) {
+  const searchTarget = useWorkspaceStore(state => chapterId ? state.searchTarget : null)
+  const clearSearchTarget = useWorkspaceStore(state => state.clearSearchTarget)
   const [isOpen, setIsOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [resultCount, setResultCount] = useState(0)
   const [currentIndex, setCurrentIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!editor || searchTarget?.type !== 'chapter' || searchTarget.chapterId !== chapterId) return
+    setSearchTerm(searchTarget.query)
+    setIsOpen(true)
+    editor.commands.resetIndex()
+    scrollToCurrent(editor)
+    clearSearchTarget(searchTarget)
+  }, [editor, chapterId, searchTarget, clearSearchTarget])
 
   useEffect(() => {
     if (!editor) return
@@ -42,7 +67,7 @@ export default function EditorFindToolbar({ editor }: EditorFindToolbarProps) {
         e.preventDefault()
         setIsOpen(true)
       }
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === 'Escape' && isOpen && !document.querySelector('dialog[open]')) {
         setIsOpen(false)
         editor?.commands.focus()
       }
@@ -56,44 +81,35 @@ export default function EditorFindToolbar({ editor }: EditorFindToolbarProps) {
       inputRef.current.focus()
       inputRef.current.select()
     } else if (!isOpen && editor) {
-      // @ts-ignore - Commands from extension
       editor.commands.setSearchTerm('')
     }
   }, [isOpen, editor])
 
   useEffect(() => {
     if (editor && isOpen) {
-      // @ts-ignore - Commands from extension
-      editor.commands.setSearchTerm(searchTerm)
-      scrollToCurrent()
+      const query = searchTerm.trim()
+      // The chapter extension accepts the same escaped pattern as manuscript search.
+      const term = chapterId ? (query ? createSearchPattern(query).source : '') : searchTerm
+      editor.chain().resetIndex().setSearchTerm(term).run()
+      scrollToCurrent(editor)
     }
-  }, [searchTerm, editor, isOpen])
+  }, [searchTerm, editor, isOpen, chapterId])
 
   if (!isOpen) return null
-
-  const scrollToCurrent = () => {
-    setTimeout(() => {
-      const el = document.querySelector('.search-result-current')
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      }
-    }, 10)
-  }
+  const headerSlot = document.getElementById('editor-find-slot')
 
   const handleNext = () => {
-    // @ts-ignore
     editor?.commands.nextSearchResult()
-    scrollToCurrent()
+    scrollToCurrent(editor)
   }
 
   const handlePrev = () => {
-    // @ts-ignore
     editor?.commands.previousSearchResult()
-    scrollToCurrent()
+    scrollToCurrent(editor)
   }
 
-  return (
-    <div className="absolute top-4 right-8 z-50 flex items-center bg-surface-800 border border-surface-700 rounded-md shadow-lg p-1 animate-fade-in">
+  const toolbar = (
+    <div className={`flex items-center bg-surface-800 border border-surface-700 rounded-md px-1 animate-fade-in ${headerSlot ? '' : 'absolute top-4 right-8 z-50 shadow-lg'}`}>
       <Search className="w-4 h-4 text-surface-400 ml-2 mr-1" />
       <input
         ref={inputRef}
@@ -107,7 +123,7 @@ export default function EditorFindToolbar({ editor }: EditorFindToolbarProps) {
           }
         }}
         placeholder="Find..."
-        className="bg-transparent text-sm text-surface-100 placeholder-surface-500 border-none focus:outline-none focus:ring-0 w-40 px-2"
+        className="bg-transparent text-sm text-surface-100 placeholder-surface-500 border-none focus:outline-none focus:ring-0 w-40 min-w-16 shrink px-2"
       />
       {searchTerm && (
         <span className="text-xs text-surface-400 whitespace-nowrap pr-2 select-none">
@@ -127,4 +143,5 @@ export default function EditorFindToolbar({ editor }: EditorFindToolbarProps) {
       </div>
     </div>
   )
+  return headerSlot ? createPortal(toolbar, headerSlot) : toolbar
 }

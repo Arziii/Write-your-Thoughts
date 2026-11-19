@@ -1,12 +1,19 @@
 import { useState, useEffect } from 'react'
-import { Feather, RefreshCw, AlertTriangle, Sparkles } from 'lucide-react'
+import { Feather, AlertTriangle } from 'lucide-react'
 import { useStoryBibleStore } from '../../stores/storyBibleStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useUserStore } from '../../stores/userStore'
 import { useToastStore } from '../../stores/toastStore'
 import { aiService } from '../../services/aiService'
+import { cn } from '../../utils'
+import { EditorToolPanel, PanelAnalyzeButton, PanelEmptyState, panelCard } from './EditorToolPanel'
 
-export default function StyleIntelligencePanel({ chapterId }: { chapterId: string }) {
+const styleMetrics = [
+  ['sentence_length', 'Sentence length'], ['dialogue_ratio', 'Dialogue ratio'], ['vocabulary', 'Vocabulary'],
+  ['tone', 'Tone'], ['prose_density', 'Prose density'],
+] as const
+
+export default function StyleIntelligencePanel({ chapterId, onClose }: { chapterId: string; onClose: () => void }) {
   const { 
     styleProfiles, setStyleProfiles, updateStyleProfile,
     chapterMetrics, setChapterMetrics, updateChapterMetric,
@@ -127,113 +134,48 @@ export default function StyleIntelligencePanel({ chapterId }: { chapterId: strin
   }
 
   return (
-    <>
-      <div className="flex flex-col h-full bg-surface-900 border-l border-surface-800 animate-in slide-in-from-right-8 duration-200" style={{ width: '320px' }}>
-        <div className="p-4 border-b border-surface-800 flex items-center gap-2 text-surface-100">
-          <Feather className="w-5 h-5 text-accent-400" />
-          <h2 className="font-bold">Style Intelligence</h2>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4 space-y-8">
-          
-          {/* Chapter Metrics Section */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-sm">Chapter Metrics</h3>
-              <button
-                onClick={handleAnalyzeChapter}
-                disabled={isAnalyzingChapter}
-                className="bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-2 transition-colors"
-              >
-                {isAnalyzingChapter ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-                {isAnalyzingChapter ? 'Analyzing...' : 'Analyze'}
-              </button>
+    <EditorToolPanel id="style-panel" title="Style Intelligence" icon={Feather} onClose={onClose}
+      action={<PanelAnalyzeButton busy={isAnalyzingChapter} onClick={() => void handleAnalyzeChapter()} />}>
+      <section className="space-y-2.5" aria-label="Chapter metrics">
+        <h4 className="text-sm font-semibold">Chapter metrics</h4>
+        {metrics?.warning && (
+          <div className={cn(panelCard, 'flex items-start gap-2.5 border-l-2 border-l-warning-500')}>
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-500" aria-hidden="true" />
+            <div className="min-w-0 text-sm">
+              <p className="font-semibold">Style drift detected</p>
+              <p className="mt-1 break-words text-surface-400">{metrics.warning}</p>
             </div>
-
-            {metrics?.warning && (
-              <div className="bg-orange-500/10 border border-orange-500/20 text-orange-400 p-3 rounded flex items-start gap-3">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <div className="text-sm">
-                  <p className="font-medium mb-1 text-orange-300">Style Drift Detected</p>
-                  <p>{metrics.warning}</p>
-                </div>
-              </div>
-            )}
-
-            {metrics ? (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-surface-800 p-3 rounded border border-surface-700">
-                  <span className="text-xs text-surface-400 block mb-1">Sentence Length</span>
-                  <span className="text-sm font-medium">{metrics.sentence_length}</span>
-                </div>
-                <div className="bg-surface-800 p-3 rounded border border-surface-700">
-                  <span className="text-xs text-surface-400 block mb-1">Dialogue Ratio</span>
-                  <span className="text-sm font-medium">{metrics.dialogue_ratio}</span>
-                </div>
-                <div className="bg-surface-800 p-3 rounded border border-surface-700">
-                  <span className="text-xs text-surface-400 block mb-1">Vocabulary</span>
-                  <span className="text-sm font-medium">{metrics.vocabulary}</span>
-                </div>
-                <div className="bg-surface-800 p-3 rounded border border-surface-700">
-                  <span className="text-xs text-surface-400 block mb-1">Tone</span>
-                  <span className="text-sm font-medium">{metrics.tone}</span>
-                </div>
-                <div className="bg-surface-800 p-3 rounded border border-surface-700 col-span-2">
-                  <span className="text-xs text-surface-400 block mb-1">Prose Density</span>
-                  <span className="text-sm font-medium">{metrics.prose_density}</span>
-                </div>
-              </div>
-            ) : (
-              <p className="text-xs text-surface-500 text-center py-4 border border-dashed border-surface-700 rounded">No metrics for this chapter. Run Analyze to check style.</p>
-            )}
           </div>
-
-          <div className="h-px bg-surface-800"></div>
-
-          {/* Baseline Profile Section */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-sm text-surface-300">Baseline Profile</h3>
-              <button
-                onClick={handleAnalyzeBaseline}
-                disabled={isAnalyzingBaseline}
-                className="bg-surface-700 hover:bg-surface-600 disabled:opacity-50 text-white px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-2 transition-colors"
-              >
-                {isAnalyzingBaseline ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-                {isAnalyzingBaseline ? 'Generating...' : 'Generate'}
-              </button>
-            </div>
-
-            {baseline ? (
-              <div className="space-y-2">
-                <div className="flex justify-between items-center text-sm border-b border-surface-800 pb-1">
-                  <span className="text-surface-400">Sentence Length</span>
-                  <span className="font-medium">{baseline.sentence_length}</span>
-                </div>
-                <div className="flex justify-between items-center text-sm border-b border-surface-800 pb-1">
-                  <span className="text-surface-400">Dialogue Ratio</span>
-                  <span className="font-medium">{baseline.dialogue_ratio}</span>
-                </div>
-                <div className="flex justify-between items-center text-sm border-b border-surface-800 pb-1">
-                  <span className="text-surface-400">Vocabulary</span>
-                  <span className="font-medium">{baseline.vocabulary}</span>
-                </div>
-                <div className="flex justify-between items-center text-sm border-b border-surface-800 pb-1">
-                  <span className="text-surface-400">Tone</span>
-                  <span className="font-medium">{baseline.tone}</span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-surface-400">Prose Density</span>
-                  <span className="font-medium">{baseline.prose_density}</span>
-                </div>
+        )}
+        {metrics ? (
+          <dl className="grid grid-cols-2 gap-2">
+            {styleMetrics.map(([key, label]) => (
+              <div key={key} className={cn(panelCard, 'min-w-0', key === 'prose_density' && 'col-span-2')}>
+                <dt className="text-xs text-surface-400">{label}</dt>
+                <dd className="mt-0.5 break-words text-sm font-semibold">{metrics[key]}</dd>
               </div>
-            ) : (
-              <p className="text-xs text-surface-500 text-center py-4 border border-dashed border-surface-700 rounded">No baseline established. Generate from early chapters.</p>
-            )}
-          </div>
+            ))}
+          </dl>
+        ) : <PanelEmptyState icon={Feather} title="No chapter metrics yet" description="Run AI analysis to check this chapter’s style." />}
+      </section>
 
+      <section className="space-y-2.5 border-t border-surface-800 pt-4" aria-label="Baseline profile">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h4 className="text-sm font-semibold">Baseline profile</h4>
+          <PanelAnalyzeButton secondary label={baseline ? 'Refresh baseline' : 'Generate baseline'} busyLabel="Generating…"
+            busy={isAnalyzingBaseline} onClick={() => void handleAnalyzeBaseline()} />
         </div>
-      </div>
-    </>
+        {baseline ? (
+          <dl className={cn(panelCard, 'divide-y divide-surface-800')}>
+            {styleMetrics.map(([key, label]) => (
+              <div key={key} className="flex flex-wrap justify-between gap-x-2 gap-y-0.5 py-1.5 text-xs first:pt-0 last:pb-0">
+                <dt className="text-surface-400">{label}</dt>
+                <dd className="min-w-0 break-words font-medium">{baseline[key]}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : <PanelEmptyState icon={Feather} title="No baseline profile yet" description="Generate a book-wide baseline to compare chapter style." />}
+      </section>
+    </EditorToolPanel>
   )
 }

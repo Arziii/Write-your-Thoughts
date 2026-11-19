@@ -1,5 +1,5 @@
 import { IpcMain } from 'electron'
-import { dbRun, dbGet, dbAll } from '../database/init'
+import { dbRunQueuedEdit, dbRun, dbGet, dbAll } from '../database/init'
 import { v4 as uuidv4 } from 'uuid'
 
 export function registerCharacterHandlers(ipcMain: IpcMain): void {
@@ -39,13 +39,8 @@ export function registerCharacterHandlers(ipcMain: IpcMain): void {
     }
     
     params.push(id)
-    dbRun(`UPDATE characters SET ${updates.join(', ')} WHERE id = ?`, params)
-    
-    dbRun(
-      `INSERT INTO sync_queue (id, entity_type, entity_id, operation, status, created_at) VALUES (?, 'character', ?, 'update', 'pending', ?)`,
-      [uuidv4(), id, now]
-    )
-    
+    dbRunQueuedEdit(`UPDATE characters SET ${updates.join(', ')} WHERE id = ?`, params, 'character', id, now)
+
     return dbGet('SELECT * FROM characters WHERE id = ?', [id])
   })
 

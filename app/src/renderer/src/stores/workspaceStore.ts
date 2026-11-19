@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { SearchTarget } from '../../../shared/manuscriptSearch'
 import type { 
   Book, Chapter, EditorTab, PanelState, TabType,
   Character, Location, Note, TimelineEvent, TimelineSettings, Codex, Wiki,
@@ -86,7 +87,9 @@ interface WorkspaceStore {
   setActiveTabId: (tabId: string | null) => void
   tabs: EditorTab[]
   setTabs: (tabs: EditorTab[]) => void
-  openTab: (entityId: string, type: TabType, title: string) => void
+  openTab: (entityId: string, type: TabType, title: string, searchTarget?: SearchTarget) => void
+  searchTarget: SearchTarget | null
+  clearSearchTarget: (target: SearchTarget) => void
   closeTab: (tabId: string) => void
   markTabDirty: (tabId: string, dirty: boolean) => void
 
@@ -301,6 +304,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   // Editor Tabs
   activeTabId: null,
   activeChapter: null,
+  searchTarget: null,
+  clearSearchTarget: (target) => {
+    if (get().searchTarget === target) set({ searchTarget: null })
+  },
   setActiveTabId: (tabId) => set((s) => {
     // Also sync activeChapter for backwards compat
     const isChapter = s.tabs.find(t => t.id === tabId)?.type === 'chapter'
@@ -309,11 +316,12 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   }),
   tabs: [],
   setTabs: (tabs) => set({ tabs }),
-  openTab: (entityId, type, title) => {
+  openTab: (entityId, type, title, searchTarget) => {
     const { tabs, chapters } = get()
     if (tabs.find((t) => t.id === entityId)) {
       set({ 
         activeTabId: entityId,
+        searchTarget: searchTarget ?? null,
         activeChapter: type === 'chapter' ? chapters.find(c => c.id === entityId) || null : null
       })
       return
@@ -321,6 +329,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     set({
       tabs: [...tabs, { id: entityId, entityId, type, title, isDirty: false }],
       activeTabId: entityId,
+      searchTarget: searchTarget ?? null,
       activeChapter: type === 'chapter' ? chapters.find(c => c.id === entityId) || null : null
     })
   },

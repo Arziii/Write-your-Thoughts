@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useEditorSave } from '../../hooks/useEditorSave'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { Camera, Save, Lock, Unlock, X, Loader2 } from 'lucide-react'
 import { useToastStore } from '../../stores/toastStore'
@@ -10,11 +11,10 @@ import { uploadImage, deleteImage } from '../../services/storageService'
 type TabType = 'general' | 'voice' | 'relationships'
 
 export default function CharacterManager({ entityId }: { entityId: string }) {
-  const { characters, updateCharacter, panelState, toggleEntityLock, drafts, setDraft, clearDraft } = useWorkspaceStore()
+  const { characters, updateCharacter, panelState, toggleEntityLock, drafts } = useWorkspaceStore()
   const { addToast } = useToastStore()
   
   const character = characters.find(c => c.id === entityId)
-  const [isSaving, setIsSaving] = useState(false)
   const [isUploadingImage, setIsUploadingImage] = useState(false)
   const [activeTab, setActiveTab] = useState<TabType>('general')
 
@@ -31,12 +31,23 @@ export default function CharacterManager({ entityId }: { entityId: string }) {
     }
   }, [character?.id])
 
+  const saving = useEditorSave(entityId, async (change: Record<string, unknown>) => {
+    const original = useWorkspaceStore.getState().characters.find(item => item.id === entityId)
+    const fields = ['name', 'nickname', 'age', 'gender', 'appearance', 'personality', 'goals', 'relationships', 'notes', 'image_url'] as const
+    const changed = Object.fromEntries(fields.filter(field => change[field] !== original?.[field]).map(field => [field, change[field]]))
+    if (original && !Object.keys(changed).length) return
+    const updated = await window.api.characters.update({ id: entityId, ...changed })
+    if (!updated) throw new Error('Record could not be found')
+    updateCharacter(updated)
+  })
+  const isSaving = saving.status === 'saving'
+
   if (!formData) return <div>Character not found</div>
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     // Write the updated draft back to the store so it survives tab switches
-    setDraft(entityId, { ...(drafts[entityId] ?? character ?? {}), [name]: value })
+    saving.stage({ ...(useWorkspaceStore.getState().drafts[entityId] ?? character ?? {}), [name]: value })
   }
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -47,7 +58,7 @@ export default function CharacterManager({ entityId }: { entityId: string }) {
     setIsUploadingImage(true)
     try {
       const url = await uploadImage(file, 'characters', entityId)
-      setDraft(entityId, { ...(drafts[entityId] ?? character ?? {}), image_url: url })
+      saving.stage({ ...(useWorkspaceStore.getState().drafts[entityId] ?? character ?? {}), image_url: url })
       addToast('Image uploaded', 'success')
     } catch (err: any) {
       addToast(err.message || 'Upload failed', 'error')
@@ -58,26 +69,10 @@ export default function CharacterManager({ entityId }: { entityId: string }) {
   }
 
   const handleImageDelete = async () => {
-    setDraft(entityId, { ...(drafts[entityId] ?? character ?? {}), image_url: '' })
+    saving.stage({ ...(useWorkspaceStore.getState().drafts[entityId] ?? character ?? {}), image_url: '' })
     // Best-effort delete from storage (unknown ext, try all common ones)
     await deleteImage('characters', entityId, 'unknown').catch(() => {})
     addToast('Image removed', 'success')
-  }
-
-  const handleSave = async () => {
-    if (!formData) return
-    setIsSaving(true)
-    try {
-      const updated = await window.api.characters.update(formData)
-      updateCharacter(updated as any)
-      // Clear the draft now that changes are persisted to SQLite
-      clearDraft(entityId)
-      addToast('Character saved', 'success')
-    } catch {
-      addToast('Failed to save character', 'error')
-    } finally {
-      setIsSaving(false)
-    }
   }
 
   const isDirty = !!drafts[entityId]
@@ -108,7 +103,7 @@ export default function CharacterManager({ entityId }: { entityId: string }) {
             <span className="text-sm">Memory Lock</span>
           </button>
           <button
-            onClick={handleSave}
+            onClick={() => void saving.save()}
             disabled={isSaving}
             className="flex items-center gap-2 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white px-4 py-2 rounded-md font-medium transition-colors"
           >

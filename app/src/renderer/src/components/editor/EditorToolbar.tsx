@@ -13,7 +13,9 @@ import { useUserStore } from '../../stores/userStore'
 
 interface EditorToolbarProps {
   editor: Editor | null
-  saveIndicatorRef: React.RefObject<HTMLSpanElement>
+  saveStatus: 'saved' | 'saving' | 'unsaved'
+  onSave: () => void
+  showHistory?: boolean
 }
 
 interface ToolbarButtonProps {
@@ -49,7 +51,7 @@ function Divider() {
   return <div className="w-px h-5 bg-surface-700 mx-0.5" />
 }
 
-export default function EditorToolbar({ editor, saveIndicatorRef }: EditorToolbarProps) {
+export default function EditorToolbar({ editor, saveStatus, onSave, showHistory = true }: EditorToolbarProps) {
   const { focusMode, setFocusMode } = useWorkspaceStore()
   const { user, settings, setSettings } = useUserStore()
 
@@ -279,17 +281,17 @@ export default function EditorToolbar({ editor, saveIndicatorRef }: EditorToolba
       <div className="flex-1" />
 
       {/* Version History & Milestones */}
-      <ToolbarButton
+      {showHistory && <ToolbarButton
         id="toolbar-history"
         onClick={() => window.dispatchEvent(new CustomEvent('open-version-history'))}
         title="Version History"
       >
         <History className="w-3.5 h-3.5" />
-      </ToolbarButton>
+      </ToolbarButton>}
       <ToolbarButton
-        id="toolbar-save-milestone"
-        onClick={() => window.dispatchEvent(new CustomEvent('save-milestone'))}
-        title="Save Milestone to Cloud"
+        id="toolbar-save"
+        onClick={onSave}
+        title="Save (Ctrl+S)"
       >
         <Save className="w-3.5 h-3.5" />
       </ToolbarButton>
@@ -297,7 +299,9 @@ export default function EditorToolbar({ editor, saveIndicatorRef }: EditorToolba
       <Divider />
 
       {/* Save status */}
-      <span ref={saveIndicatorRef} className="text-success-400 text-xs mr-2">Saved</span>
+      <span role="status" className={cn('text-xs mr-2', saveStatus === 'saved' ? 'text-success-400' : 'text-warning-400')}>
+        {saveStatus === 'saved' ? 'Saved locally' : saveStatus === 'saving' ? 'Saving…' : 'Unsaved'}
+      </span>
 
       {/* Focus mode */}
       <ToolbarButton

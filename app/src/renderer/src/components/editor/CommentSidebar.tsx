@@ -1,8 +1,16 @@
-import { useState, useEffect } from 'react'
-import { X, MessageSquare, Check, Trash2, Send } from 'lucide-react'
-import { useUserStore } from '../../stores/userStore'
+import { useEffect, useRef, useState } from 'react'
+import { MessageSquare, Check, Trash2, Send } from 'lucide-react'
 import { useToastStore } from '../../stores/toastStore'
-import { formatRelativeTime } from '../../utils'
+import { cn } from '../../utils'
+import { EditorToolPanel, PanelEmptyState, panelBadge, panelButton, panelCard, panelField, panelIconButton } from './EditorToolPanel'
+
+interface PanelComment {
+  id: string
+  content: string
+  quote?: string
+  resolved: boolean
+  created_at: string
+}
 
 interface CommentSidebarProps {
   chapterId: string
@@ -15,183 +23,150 @@ interface CommentSidebarProps {
 }
 
 export default function CommentSidebar({
-  chapterId, isOpen, onClose, activeCommentId, onCommentClick, onResolve, onDelete
+  chapterId, isOpen, onClose, activeCommentId, onCommentClick, onResolve, onDelete,
 }: CommentSidebarProps) {
-  const { user } = useUserStore()
-  const { addToast } = useToastStore()
-  const [comments, setComments] = useState<any[]>([])
+  const addToast = useToastStore(state => state.addToast)
+  const [comments, setComments] = useState<PanelComment[]>([])
+  const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'error'>('loading')
   const [newComment, setNewComment] = useState('')
   const [quote, setQuote] = useState('')
   const [isAdding, setIsAdding] = useState(false)
-  
-  const loadComments = async () => {
+  const [savingComment, setSavingComment] = useState(false)
+  const loadRequest = useRef(0)
+
+  async function loadComments() {
     if (!chapterId) return
-    const data = await window.api.comments.getByChapter(chapterId)
-    setComments(data as any[])
+    const request = ++loadRequest.current
+    try {
+      const data = await window.api.comments.getByChapter(chapterId)
+      if (request !== loadRequest.current) return
+      setComments(data)
+      setLoadState('loaded')
+    } catch {
+      if (request === loadRequest.current) setLoadState('error')
+    }
   }
 
   useEffect(() => {
-    if (isOpen) {
-      loadComments()
-    }
+    if (!isOpen) return
+    setLoadState('loading')
+    void loadComments()
+    return () => { loadRequest.current++ }
   }, [isOpen, chapterId])
 
-  // Expose a way to refresh comments from parent if needed
   useEffect(() => {
-    const handleRefresh = () => loadComments()
-    const handleOpen = (e: any) => {
-      if (e.detail?.action === 'add') {
-        setQuote(e.detail.quote || '')
+    let scrollTimer: ReturnType<typeof setTimeout> | undefined
+    const handleRefresh = () => { void loadComments() }
+    const handleOpen = (event: Event) => {
+      const detail = (event as CustomEvent<{ action: 'add' | 'view'; quote?: string; id?: string }>).detail
+      if (detail?.action === 'add') {
+        setQuote(detail.quote ?? '')
         setIsAdding(true)
-      } else if (e.detail?.action === 'view') {
-        const id = e.detail.id
-        if (id) {
-          onCommentClick?.(id)
-          // Scroll to the comment if it exists in the list
-          setTimeout(() => {
-            const el = document.getElementById(`comment-${id}`)
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          }, 100)
-        }
+      } else if (detail?.action === 'view' && detail.id) {
+        const id = detail.id
+        onCommentClick?.(id)
+        clearTimeout(scrollTimer)
+        scrollTimer = setTimeout(() => {
+          document.getElementById(`comment-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }, 100)
       }
     }
     window.addEventListener('refresh-comments', handleRefresh)
     window.addEventListener('open-comment-sidebar', handleOpen)
     return () => {
+      clearTimeout(scrollTimer)
       window.removeEventListener('refresh-comments', handleRefresh)
       window.removeEventListener('open-comment-sidebar', handleOpen)
     }
-  }, [chapterId])
+  }, [chapterId, onCommentClick])
 
-  const handleAddComment = async () => {
-    if (!newComment.trim() || !chapterId) return
+  async function handleAddComment() {
+    if (!newComment.trim() || !chapterId || savingComment) return
+    setSavingComment(true)
     try {
-      const created = await window.api.comments.create({
-        chapterId,
-        content: newComment.trim(),
-        quote: quote
-      })
+      const created = await window.api.comments.create({ chapterId, content: newComment.trim(), quote })
       setNewComment('')
       setIsAdding(false)
       setQuote('')
-      loadComments()
-      // Dispatch an event so the Editor can apply the mark
+      void loadComments()
       window.dispatchEvent(new CustomEvent('comment-created', { detail: { id: created.id } }))
     } catch {
       addToast('Failed to add comment', 'error')
+    } finally {
+      setSavingComment(false)
     }
   }
 
   if (!isOpen) return null
 
-  return (
-    <div className="w-80 bg-surface-900 border-l border-surface-800 flex flex-col h-full flex-shrink-0 z-10 shadow-2xl animate-fade-in">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-surface-800">
-        <h3 className="text-sm font-semibold text-surface-200 flex items-center gap-2">
-          <MessageSquare className="w-4 h-4 text-accent-500" />
-          Comments
-        </h3>
-        <button onClick={onClose} className="text-surface-500 hover:text-surface-200 transition-colors">
-          <X className="w-4 h-4" />
+  const composer = isAdding && (
+    <form className="space-y-2.5" onSubmit={event => {
+      event.preventDefault()
+      void handleAddComment()
+    }}>
+      {quote && <blockquote className="border-l-2 border-[hsl(var(--brand-green))] pl-2.5 text-xs italic text-surface-400">{quote}</blockquote>}
+      <textarea autoFocus rows={3} aria-label="New comment" className={cn(panelField, 'resize-y')}
+        placeholder="Write a comment…" value={newComment} onChange={event => setNewComment(event.target.value)} disabled={savingComment} />
+      <div className="flex flex-wrap justify-end gap-2">
+        <button type="button" className={panelButton} disabled={savingComment}
+          onClick={() => { setIsAdding(false); setNewComment(''); setQuote('') }}>Cancel</button>
+        <button type="submit" disabled={!newComment.trim() || savingComment} className={panelButton}>
+          <Send className="h-3.5 w-3.5" aria-hidden="true" /> {savingComment ? 'Adding…' : 'Add comment'}
         </button>
       </div>
+    </form>
+  )
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {comments.length === 0 ? (
-          <div className="text-center py-8 text-surface-500 text-sm">
-            <MessageSquare className="w-8 h-8 mx-auto mb-3 opacity-20" />
-            <p>No comments yet.</p>
-            <p className="text-xs mt-1">Highlight text in the editor and click "Add Comment" to start.</p>
-          </div>
-        ) : (
-          comments.map(comment => (
-            <div 
-              key={comment.id}
-              id={`comment-${comment.id}`}
-              onClick={() => onCommentClick?.(comment.id)}
-              className={`p-3 rounded-lg border transition-all cursor-pointer ${
-                activeCommentId === comment.id 
-                  ? 'bg-accent-900/20 border-accent-500/50' 
-                  : 'bg-surface-800 border-surface-700 hover:border-surface-600'
-              } ${comment.resolved ? 'opacity-60' : ''}`}
-            >
-              <div className="flex items-start justify-between mb-2 gap-2">
-                <div className="flex-1">
-                  <span className="text-[10px] text-surface-500 uppercase tracking-wider font-semibold">
-                    {new Date(comment.created_at).toLocaleDateString()}
-                  </span>
+  return (
+    <EditorToolPanel id="comments-panel" title="Comments" icon={MessageSquare} onClose={onClose} footer={composer}>
+      {loadState === 'loading' ? (
+        <p role="status" className="text-sm text-surface-400">Loading comments…</p>
+      ) : loadState === 'error' ? (
+        <PanelEmptyState icon={MessageSquare} title="Could not load comments" description="Reopen this panel to try again." />
+      ) : comments.length === 0 ? (
+        <PanelEmptyState icon={MessageSquare} title="No comments yet"
+          description="Select text in the editor and choose Add Comment to start a thread." />
+      ) : (
+        <section className="space-y-2.5" aria-label="Comment threads">
+          <h4 className="text-sm font-semibold">Threads <span className={panelBadge}>{comments.length}</span></h4>
+          <ul className="space-y-2">
+            {comments.map(comment => (
+              <li key={comment.id} id={`comment-${comment.id}`}
+                onClick={() => onCommentClick?.(comment.id)}
+                className={cn(panelCard, activeCommentId === comment.id && 'border-[hsl(var(--brand-green))]', Boolean(onCommentClick) && 'cursor-pointer')}>
+                <div className="mb-1 flex flex-wrap items-center justify-between gap-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <time dateTime={comment.created_at} className="text-xs text-surface-400">
+                      {new Date(comment.created_at).toLocaleDateString()}
+                    </time>
+                    {comment.resolved && <span className={panelBadge}>Resolved</span>}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {!comment.resolved && onResolve && (
+                      <button type="button" onClick={event => { event.stopPropagation(); onResolve(comment.id) }}
+                        aria-label="Resolve comment" title="Resolve comment" className={`${panelIconButton} hover:text-success-500`}>
+                        <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                    )}
+                    {onDelete && (
+                      <button type="button" onClick={event => { event.stopPropagation(); onDelete(comment.id) }}
+                        aria-label="Delete comment" title="Delete comment" className={`${panelIconButton} hover:text-danger-500`}>
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  {!comment.resolved && (
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); onResolve?.(comment.id) }}
-                      className="text-surface-500 hover:text-success-400 p-1 transition-colors"
-                      title="Resolve"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); onDelete?.(comment.id) }}
-                    className="text-surface-500 hover:text-danger-400 p-1 transition-colors"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-              
-              {comment.quote && (
-                <div className="pl-2 border-l-2 border-surface-600 mb-2">
-                  <p className="text-xs text-surface-400 italic line-clamp-2">"{comment.quote}"</p>
-                </div>
-              )}
-              
-              <p className="text-sm text-surface-200">{comment.content}</p>
-              
-              {comment.resolved && (
-                <div className="mt-2 text-[10px] text-success-500 font-medium flex items-center gap-1">
-                  <Check className="w-3 h-3" /> Resolved
-                </div>
-              )}
-            </div>
-          ))
-        )}
-      </div>
-
-      {isAdding && (
-        <div className="p-4 border-t border-surface-800 bg-surface-900 animate-fade-in">
-          {quote && (
-            <div className="pl-2 border-l-2 border-accent-500 mb-3">
-              <p className="text-[11px] text-surface-400 italic line-clamp-2">"{quote}"</p>
-            </div>
-          )}
-          <textarea
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Write a comment..."
-            className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 text-sm focus:outline-none focus:border-accent-500 transition-all resize-none mb-2"
-            rows={3}
-            autoFocus
-          />
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={() => { setIsAdding(false); setNewComment(''); setQuote('') }}
-              className="flex-1 py-1.5 text-xs text-surface-400 hover:text-surface-200 transition-colors"
-            >
-              Cancel
-            </button>
-            <button 
-              onClick={handleAddComment}
-              disabled={!newComment.trim()}
-              className="flex-1 py-1.5 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white rounded-md text-xs font-medium transition-colors flex items-center justify-center gap-1.5"
-            >
-              <Send className="w-3 h-3" />
-              Add
-            </button>
-          </div>
-        </div>
+                {comment.quote && (
+                  <blockquote className="mb-2 whitespace-pre-wrap break-words border-l-2 border-[hsl(var(--brand-green))] pl-2.5 text-xs italic text-surface-400">
+                    {comment.quote}
+                  </blockquote>
+                )}
+                <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{comment.content}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
-    </div>
+    </EditorToolPanel>
   )
 }

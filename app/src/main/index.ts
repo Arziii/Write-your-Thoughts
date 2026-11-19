@@ -7,6 +7,10 @@ import electronUpdaterPkg from 'electron-updater'
 const { autoUpdater } = electronUpdaterPkg
 
 let mainWindow: BrowserWindow | null = null
+let closeHandlerReady = false
+let closeApproved = false
+let closeRequest: ReturnType<typeof setTimeout> | undefined
+let closeSequence = 0
 
 // Deep linking setup
 const PROTOCOL = 'wyt'
@@ -48,10 +52,13 @@ app.on('open-url', (event, url) => {
 })
 
 function createWindow(): void {
+  closeHandlerReady = false
+  closeApproved = false
   const iconPath = join(__dirname, '../../build/icon.ico')
   console.log('[Main] Icon path:', iconPath)
 
   mainWindow = new BrowserWindow({
+    title: 'Write Your Thoughts',
     width: 1400,
     height: 900,
     minWidth: 900,
@@ -69,6 +76,17 @@ function createWindow(): void {
       nodeIntegration: false,
       webSecurity: false, // Allow loading local WASM in dev
     },
+  })
+
+  mainWindow.show()
+  mainWindow.focus()
+
+  mainWindow.on('close', event => {
+    if (!closeHandlerReady || closeApproved || !mainWindow) return
+    event.preventDefault()
+    if (closeRequest) return
+    closeRequest = setTimeout(() => { closeRequest = undefined }, 10_000)
+    mainWindow.webContents.send('window:prepare-close', ++closeSequence)
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -131,6 +149,18 @@ app.whenReady().then(async () => {
     }
   })
   ipcMain.on('window:close', () => mainWindow?.close())
+  ipcMain.on('window:save-handler-ready', event => {
+    if (event.sender === mainWindow?.webContents) closeHandlerReady = true
+  })
+  ipcMain.on('window:prepared-close', (event, requestId: number, saved: boolean) => {
+    if (event.sender !== mainWindow?.webContents || !closeRequest || requestId !== closeSequence) return
+    clearTimeout(closeRequest)
+    closeRequest = undefined
+    if (saved === true) {
+      closeApproved = true
+      mainWindow?.close()
+    }
+  })
 
   createWindow()
 

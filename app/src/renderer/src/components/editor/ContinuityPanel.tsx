@@ -1,12 +1,64 @@
 import { useState, useEffect } from 'react'
+import type { FormEvent } from 'react'
 import { useStoryBibleStore } from '../../stores/storyBibleStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useUserStore } from '../../stores/userStore'
-import { Plus, Trash2, Shield, AlertTriangle, CheckCircle, RefreshCw, Sparkles } from 'lucide-react'
+import { Plus, Trash2, Shield, AlertTriangle, BookOpen, CheckCircle, ChevronDown } from 'lucide-react'
 import { useToastStore } from '../../stores/toastStore'
 import { aiService } from '../../services/aiService'
+import type { ContinuityWarning } from '../../types'
+import { cn } from '../../utils'
+import { EditorToolPanel, PanelAnalyzeButton, PanelEmptyState, panelButton, panelCard, panelField, panelIconButton } from './EditorToolPanel'
 
-export default function ContinuityPanel({ chapterId }: { chapterId: string }) {
+
+function EntryComposer({ label, placeholder, onAdd }: {
+  label: string
+  placeholder: string
+  onAdd: (description: string) => Promise<void>
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [value, setValue] = useState('')
+  const [saving, setSaving] = useState(false)
+  const addToast = useToastStore(state => state.addToast)
+
+  if (!expanded) {
+    return (
+      <button type="button" className={panelButton} onClick={() => setExpanded(true)}>
+        <Plus className="h-3.5 w-3.5" aria-hidden="true" /> {label}
+      </button>
+    )
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    if (!value.trim() || saving) return
+    setSaving(true)
+    try {
+      await onAdd(value.trim())
+      setValue('')
+      setExpanded(false)
+    } catch {
+      addToast(`${label} failed. Try again.`, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className={cn(panelCard, "w-full")}>
+      <textarea autoFocus rows={2} aria-label={label} value={value} placeholder={placeholder} disabled={saving}
+        onChange={event => setValue(event.target.value)}
+        className={cn(panelField, "resize-y")} />
+      <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
+        <button type="button" className="px-2 text-xs text-surface-400 hover:text-surface-100" disabled={saving}
+          onClick={() => { setValue(''); setExpanded(false) }}>Cancel</button>
+        <button type="submit" className={panelButton} disabled={saving || !value.trim()}>{saving ? 'Adding…' : label}</button>
+      </div>
+    </form>
+  )
+}
+
+export default function ContinuityPanel({ chapterId, onClose }: { chapterId: string; onClose: () => void }) {
   const { 
     continuityEvents, setContinuityEvents, addContinuityEvent, removeContinuityEvent,
     continuityWarnings, setContinuityWarnings, addContinuityWarning, resolveContinuityWarning, removeContinuityWarning,
@@ -18,22 +70,27 @@ export default function ContinuityPanel({ chapterId }: { chapterId: string }) {
   const { addToast } = useToastStore()
 
   const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [newEventDesc, setNewEventDesc] = useState('')
-  const [newWarningDesc, setNewWarningDesc] = useState('')
+  const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'error'>('loading')
 
   useEffect(() => {
+    let cancelled = false
     const loadData = async () => {
       try {
-        const events = await window.api.continuityEvents.getByChapter(chapterId)
+        const [events, warnings] = await Promise.all([
+          window.api.continuityEvents.getByChapter(chapterId),
+          window.api.continuityWarnings.getByChapter(chapterId),
+        ])
+        if (cancelled) return
         setContinuityEvents(chapterId, events)
-
-        const warnings = await window.api.continuityWarnings.getByChapter(chapterId)
         setContinuityWarnings(chapterId, warnings)
+        setLoadState('loaded')
       } catch (e) {
         console.error('Failed to load continuity data', e)
+        if (!cancelled) setLoadState('error')
       }
     }
-    loadData()
+    void loadData()
+    return () => { cancelled = true }
   }, [chapterId])
 
   const activeChapter = chapters.find(c => c.id === chapterId)
@@ -97,19 +154,9 @@ export default function ContinuityPanel({ chapterId }: { chapterId: string }) {
     }
   }
 
-  const handleAddEvent = async () => {
-    if (!newEventDesc.trim()) return
-    try {
-      const added = await window.api.continuityEvents.create({
-        chapter_id: chapterId,
-        description: newEventDesc,
-        event_type: 'General'
-      })
-      addContinuityEvent(added)
-      setNewEventDesc('')
-    } catch {
-      addToast('Failed to add event', 'error')
-    }
+  const handleAddEvent = async (description: string) => {
+    const added = await window.api.continuityEvents.create({ chapter_id: chapterId, description, event_type: 'General' })
+    addContinuityEvent(added)
   }
 
   const handleDeleteEvent = async (id: string) => {
@@ -121,19 +168,9 @@ export default function ContinuityPanel({ chapterId }: { chapterId: string }) {
     }
   }
 
-  const handleAddWarning = async () => {
-    if (!newWarningDesc.trim()) return
-    try {
-      const added = await window.api.continuityWarnings.create({
-        chapter_id: chapterId,
-        warning_description: newWarningDesc,
-        severity: 'Medium'
-      })
-      addContinuityWarning(added)
-      setNewWarningDesc('')
-    } catch {
-      addToast('Failed to add warning', 'error')
-    }
+  const handleAddWarning = async (warning_description: string) => {
+    const added = await window.api.continuityWarnings.create({ chapter_id: chapterId, warning_description, severity: 'Medium' })
+    addContinuityWarning(added)
   }
 
   const handleResolveWarning = async (id: string) => {
@@ -155,117 +192,128 @@ export default function ContinuityPanel({ chapterId }: { chapterId: string }) {
     }
   }
 
-  const eventsList = continuityEvents[chapterId] || []
-  const warningsList = continuityWarnings[chapterId] || []
+  const events = continuityEvents[chapterId] ?? []
+  const warnings = continuityWarnings[chapterId] ?? []
+  const openWarnings = warnings.filter(warning => !warning.resolved)
+  const resolvedWarnings = warnings.filter(warning => warning.resolved)
+  const loaded = loadState === 'loaded'
+
+  function renderWarning(warning: ContinuityWarning) {
+    const critical = /^(critical|high)$/i.test(warning.severity)
+    return (
+      <li key={warning.id} className={cn(
+        panelCard,
+        !warning.resolved && (critical ? 'border-l-2 border-l-danger-500' : 'border-l-2 border-l-warning-500')
+      )}>
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-1">
+          <span className={cn(
+            'rounded-full px-2 py-0.5 text-xs font-medium',
+            warning.resolved ? 'bg-[hsl(var(--brand-green-bg))] text-[hsl(var(--brand-green))]'
+              : critical ? 'bg-danger-500/10 text-surface-200' : 'bg-warning-500/10 text-surface-200'
+          )}>
+            {warning.resolved ? 'Resolved' : warning.severity}
+          </span>
+          <div className="flex items-center gap-1">
+            {!warning.resolved && (
+              <button type="button" onClick={() => void handleResolveWarning(warning.id)} className={`${panelIconButton} hover:text-success-500`}
+                aria-label="Resolve warning" title="Resolve warning">
+                <CheckCircle className="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
+            <button type="button" onClick={() => void handleDeleteWarning(warning.id)} className={`${panelIconButton} hover:text-danger-500`}
+              aria-label="Delete warning" title="Delete warning">
+              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+        <p className={cn('whitespace-pre-wrap break-words text-sm leading-relaxed', warning.resolved ? 'text-surface-400' : 'text-surface-200')}>
+          {warning.warning_description}
+        </p>
+      </li>
+    )
+  }
 
   return (
-    <div className="flex flex-col h-full bg-surface-900 border-l border-surface-800 animate-in slide-in-from-right-8 duration-200" style={{ width: '340px' }}>
-      <div className="p-4 border-b border-surface-800 flex items-center justify-between text-surface-100">
-        <div className="flex items-center gap-2">
-          <Shield className="w-5 h-5 text-accent-400" />
-          <h3 className="font-semibold text-sm">Continuity Engine</h3>
-        </div>
-        <button 
-          onClick={handleAnalyzeContinuity}
-          disabled={isAnalyzing}
-          className="bg-accent-600 hover:bg-accent-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-2 transition-colors"
-        >
-          {isAnalyzing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-          AI Analyze
-        </button>
-      </div>
-      
-      <div className="flex-1 overflow-y-auto p-4 space-y-8">
-        
-        {/* Warnings */}
-        <div className="space-y-4">
-          <h4 className="text-xs font-semibold text-red-400 uppercase tracking-wider flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4" /> Continuity Warnings
-          </h4>
-          
-          <div className="flex gap-2 mb-2">
-            <input 
-              value={newWarningDesc}
-              onChange={e => setNewWarningDesc(e.target.value)}
-              placeholder="Add manual warning..."
-              className="flex-1 bg-surface-800 border border-surface-700 rounded p-2 text-sm text-surface-200 focus:outline-none focus:border-red-500"
-              onKeyDown={e => e.key === 'Enter' && handleAddWarning()}
-            />
-            <button onClick={handleAddWarning} className="bg-surface-700 hover:bg-surface-600 text-surface-200 rounded px-3 transition-colors">
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
+    <EditorToolPanel id="continuity-panel" title="Continuity Engine" icon={Shield} onClose={onClose}
+      action={<PanelAnalyzeButton busy={isAnalyzing} disabled={!loaded} onClick={() => void handleAnalyzeContinuity()} />}>
+      {loadState === 'loading' && <p role="status" className="text-sm text-surface-400">Loading continuity records…</p>}
+      {loadState === 'error' && <p role="alert" className="rounded-lg border border-danger-500/30 p-3 text-sm">Continuity records could not be loaded. Reopen the panel to try again.</p>}
 
-          <div className="space-y-2">
-            {warningsList.map(warning => (
-              <div key={warning.id} className={`border rounded p-3 group relative transition-colors ${warning.resolved ? 'bg-surface-900/50 border-surface-800 opacity-60' : 'bg-red-950/30 border-red-900/50'}`}>
-                <div className="pr-12">
-                  <span className={`text-xs px-1.5 py-0.5 rounded-sm font-medium mr-2 ${warning.severity === 'Critical' ? 'bg-red-900/80 text-red-200' : 'bg-orange-900/80 text-orange-200'}`}>
-                    {warning.severity}
-                  </span>
-                  <span className={`text-sm ${warning.resolved ? 'text-surface-500 line-through' : 'text-surface-200'}`}>
-                    {warning.warning_description}
-                  </span>
-                </div>
-                
-                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {!warning.resolved && (
-                    <button onClick={() => handleResolveWarning(warning.id)} title="Resolve" className="p-1.5 text-surface-400 hover:text-green-400 bg-surface-800 rounded">
-                      <CheckCircle className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                  <button onClick={() => handleDeleteWarning(warning.id)} title="Delete" className="p-1.5 text-surface-400 hover:text-red-400 bg-surface-800 rounded">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+      {loaded && (
+        <>
+          <dl className="grid grid-cols-2 gap-2">
+            <div className="rounded-lg border border-surface-800 bg-[hsl(var(--studio-paper))] px-2.5 py-2">
+              <dt className="text-xs text-surface-400">Open warnings</dt>
+              <dd className="mt-0.5 flex items-center gap-1.5 text-lg font-semibold tabular-nums">
+                <AlertTriangle className={cn('h-3.5 w-3.5', openWarnings.length ? 'text-warning-500' : 'text-surface-500')} aria-hidden="true" />
+                {openWarnings.length}
+              </dd>
+            </div>
+            <div className="rounded-lg border border-surface-800 bg-[hsl(var(--studio-paper))] px-2.5 py-2">
+              <dt className="text-xs text-surface-400">Canon events</dt>
+              <dd className="mt-0.5 flex items-center gap-1.5 text-lg font-semibold tabular-nums">
+                <BookOpen className="h-3.5 w-3.5 text-[hsl(var(--brand-green))]" aria-hidden="true" />
+                {events.length}
+              </dd>
+            </div>
+          </dl>
+
+          <section aria-label="Continuity warnings" className="space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-sm font-semibold">Warnings</h4>
+              <EntryComposer label="Add warning" placeholder="What needs checking?" onAdd={handleAddWarning} />
+            </div>
+
+            {openWarnings.length > 0 ? (
+              <ul className="space-y-2">{openWarnings.map(renderWarning)}</ul>
+            ) : (
+              <div className="flex items-center gap-2 rounded-lg border border-[hsl(var(--brand-green)/0.25)] bg-[hsl(var(--brand-green-bg))] px-3 py-2.5 text-sm text-[hsl(var(--brand-green))]">
+                <CheckCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>No open warnings</span>
               </div>
-            ))}
-            {warningsList.length === 0 && (
-              <p className="text-xs text-surface-500 text-center py-4 bg-surface-800/50 rounded border border-dashed border-surface-700">No warnings detected.</p>
             )}
-          </div>
-        </div>
 
-        {/* Events */}
-        <div className="space-y-4">
-          <h4 className="text-xs font-semibold text-surface-400 uppercase tracking-wider">Canon Events</h4>
-          
-          <div className="flex gap-2 mb-2">
-            <input 
-              value={newEventDesc}
-              onChange={e => setNewEventDesc(e.target.value)}
-              placeholder="Add canon event..."
-              className="flex-1 bg-surface-800 border border-surface-700 rounded p-2 text-sm text-surface-200 focus:outline-none focus:border-accent-500"
-              onKeyDown={e => e.key === 'Enter' && handleAddEvent()}
-            />
-            <button onClick={handleAddEvent} className="bg-surface-700 hover:bg-surface-600 text-surface-200 rounded px-3 transition-colors">
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="space-y-2">
-            {eventsList.map(event => (
-              <div key={event.id} className="bg-surface-800 border border-surface-700 rounded p-3 group relative">
-                <span className="text-xs px-1.5 py-0.5 bg-surface-700 text-surface-300 rounded-sm font-medium mr-2">
-                  {event.event_type}
-                </span>
-                <span className="text-sm text-surface-200">{event.description}</span>
-                
-                <button 
-                  onClick={() => handleDeleteEvent(event.id)}
-                  className="absolute top-3 right-3 text-surface-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
-            {eventsList.length === 0 && (
-              <p className="text-xs text-surface-500 text-center py-4 bg-surface-800/50 rounded border border-dashed border-surface-700">No events logged.</p>
+            {resolvedWarnings.length > 0 && (
+              <details className="rounded-lg border border-surface-800 bg-[hsl(var(--studio-header))] px-2.5 py-2">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-xs font-medium text-surface-400 [&::-webkit-details-marker]:hidden">
+                  Resolved warnings ({resolvedWarnings.length})
+                  <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                </summary>
+                <ul className="mt-2 space-y-2">{resolvedWarnings.map(renderWarning)}</ul>
+              </details>
             )}
-          </div>
-        </div>
+          </section>
 
-      </div>
-    </div>
+          <section aria-label="Canon events" className="space-y-2.5 border-t border-surface-800 pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-sm font-semibold">Canon events</h4>
+              <EntryComposer label="Add event" placeholder="What became canon in this chapter?" onAdd={handleAddEvent} />
+            </div>
+
+            {events.length > 0 ? (
+              <ol className="ml-1.5 space-y-2.5 border-l border-surface-700 pl-3">
+                {events.map(event => (
+                  <li key={event.id} className="relative rounded-lg border border-surface-800 bg-[hsl(var(--studio-paper))] p-3">
+                    <span className="absolute -left-[1.04rem] top-4 h-2 w-2 rounded-full bg-[hsl(var(--brand-green))]" aria-hidden="true" />
+                    <div className="mb-1 flex flex-wrap items-center justify-between gap-1">
+                      <span className="max-w-full break-words rounded-full bg-[hsl(var(--brand-green-bg))] px-2 py-0.5 text-xs font-medium text-[hsl(var(--brand-green))]">
+                        {event.event_type}
+                      </span>
+                      <button type="button" onClick={() => void handleDeleteEvent(event.id)} className={`${panelIconButton} hover:text-danger-500`}
+                        aria-label="Delete event" title="Delete event">
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                    </div>
+                    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-surface-200">{event.description}</p>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <PanelEmptyState icon={BookOpen} title="No canon events logged" />
+            )}
+          </section>
+        </>
+      )}
+    </EditorToolPanel>
   )
 }

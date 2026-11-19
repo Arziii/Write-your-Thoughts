@@ -1,31 +1,74 @@
 import { supabase } from './supabase'
+import { useUserStore } from '../stores/userStore'
+import { recordCloudSync, refreshPendingSync, useCloudSyncStore } from '../stores/cloudSyncStore'
 
-// ── Debounced backup scheduler ──────────────────────────────────────────────
-// Module-level timer: multiple rapid writes collapse into one upload.
-let _backupTimer: ReturnType<typeof setTimeout> | null = null
+const SYNC_INTERVAL = 60_000
+const BACKUP_INTERVAL = 24 * 60 * 60_000
+const BACKUP_IDLE = 5 * 60_000
+let inFlight: Promise<{ success: boolean; error?: string }> | undefined
 
-/**
- * Schedule a cloud backup that fires `delayMs` after the LAST call.
- * Safe to call on every keystroke / save — uploads only happen once the
- * user stops writing for `delayMs` milliseconds.
- */
-export function scheduleSyncBackup(delayMs = 15_000): void {
-  if (_backupTimer) clearTimeout(_backupTimer)
-  _backupTimer = setTimeout(async () => {
-    _backupTimer = null
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user) {
-        await syncService.processSyncQueue()
-        // We still trigger the full db backup occasionally, but the primary sync is granular
-        await syncService.backupDatabaseToCloud()
-      }
-    } catch (e) {
-      console.error('[Sync] Scheduled backup failed:', e)
-    }
-  }, delayMs)
+export function scheduleCloudSync(changedAt = Date.now(), userId = useUserStore.getState().user?.id) {
+  if (!userId || !Number.isFinite(changedAt)) return
+  try {
+    const key = 'wyt-db-last-change-' + userId
+    if (changedAt > (Number(localStorage.getItem(key)) || 0)) localStorage.setItem(key, String(changedAt))
+  } catch (error) {
+    console.error('[Sync] Could not record backup schedule', error)
+  }
 }
 
+export async function syncNow(immediate = true): Promise<{ success: boolean; error?: string }> {
+  if (!navigator.onLine || window.api.isMock) return { success: false, error: 'Offline' }
+  if (inFlight) {
+    const running = inFlight
+    const result = await running
+    return immediate ? syncNow(false) : result
+  }
+  const userId = useUserStore.getState().user?.id
+  inFlight = syncService.processSyncQueue().catch(() => ({ success: false, error: 'Sync failed' })).then(async result => {
+    if (useUserStore.getState().user?.id !== userId) return result
+    useCloudSyncStore.setState({ failed: !result.success })
+    await refreshPendingSync()
+    return result
+  }).finally(() => {
+    inFlight = undefined
+    useCloudSyncStore.setState({ syncing: false })
+  })
+  return inFlight
+}
+
+export function startCloudSyncScheduler() {
+  if (window.api.isMock) return
+  let running = false
+  async function tick() {
+    if (running || !navigator.onLine) return
+    running = true
+    try {
+      await syncNow(false)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.user) return
+      const key = `wyt-db-last-backup-${session.user.id}`
+      const lastBackup = Number(localStorage.getItem(key)) || 0
+      const lastChange = Number(localStorage.getItem('wyt-db-last-change-' + session.user.id)) || 0
+      const now = Date.now()
+      if (lastChange > lastBackup && now - lastChange >= BACKUP_IDLE && now - lastBackup >= BACKUP_INTERVAL &&
+          await window.api.database.canAutoBackup(session.user.id)) {
+        await syncService.backupDatabaseToCloud()
+      }
+    } catch (error) {
+      console.error('[Sync] Scheduled sync failed', error)
+    } finally {
+      running = false
+    }
+  }
+  const timer = setInterval(() => { void tick() }, SYNC_INTERVAL)
+  const reconnect = () => { void tick() }
+  window.addEventListener('online', reconnect)
+  return () => {
+    clearInterval(timer)
+    window.removeEventListener('online', reconnect)
+  }
+}
 // ── Main service ────────────────────────────────────────────────────────────
 
 export const syncService = {
@@ -228,6 +271,7 @@ export const syncService = {
     if (!userData.user) return { success: false, error: 'Not logged in' }
 
     try {
+      const snapshotTime = Date.now()
       const buffer = await window.api.database.getBuffer()
       // Create a Blob from the Uint8Array buffer
       const blob = new Blob([buffer], { type: 'application/x-sqlite3' })
@@ -240,6 +284,10 @@ export const syncService = {
         })
 
       if (error) throw error
+      localStorage.setItem('wyt-db-last-backup-' + userData.user.id, String(snapshotTime))
+      if (useUserStore.getState().user?.id === userData.user.id) {
+        useCloudSyncStore.setState({ lastBackup: snapshotTime })
+      }
       return { success: true }
     } catch (e: any) {
       console.error('Failed to backup database:', e)
@@ -276,16 +324,33 @@ export const syncService = {
     const userData = { user: session?.user }
     if (!userData.user) return { success: false, error: 'Not logged in' }
 
+    const completed: string[] = []
+    let uploaded = false
     try {
       const pendingTasks: any[] = await window.api.database.getPendingSync()
       if (!pendingTasks || pendingTasks.length === 0) return { success: true }
+      useCloudSyncStore.setState({ syncing: true })
 
-      console.log(`[Sync] Processing ${pendingTasks.length} queued tasks...`)
-
+      const newestChange = pendingTasks.reduce((newest, task) => Math.max(newest, Date.parse(task.created_at) || 0), 0)
+      scheduleCloudSync(newestChange, userData.user.id)
+      const groups = new Map<string, { task: typeof pendingTasks[number]; ids: string[] }>()
       for (const task of pendingTasks) {
+        const key = JSON.stringify([task.entity_type, task.entity_id])
+        const group = groups.get(key)
+        if (group) {
+          group.task = task
+          group.ids.push(task.id)
+        } else {
+          groups.set(key, { task, ids: [task.id] })
+        }
+      }
+      let failed = false
+
+      for (const { task, ids } of groups.values()) {
         const typeToTable: Record<string, string> = {
           'book': 'cloud_books',
           'chapter': 'cloud_chapters',
+          'chapter_version': 'cloud_chapter_versions',
           'character': 'cloud_characters',
           'location': 'cloud_locations',
           'note': 'cloud_notes',
@@ -299,21 +364,22 @@ export const syncService = {
         const cloudTable = typeToTable[task.entity_type]
         if (!cloudTable) {
           // Unknown entity type, remove from queue
-          await window.api.database.markSyncComplete(task.id)
+          completed.push(...ids)
           continue
         }
 
         // Conflict copies (ending with _conflict_<timestamp>) are local-only to preserve data.
         // Supabase expects a UUID for the 'id' column, so attempting to upsert or delete these will fail with HTTP 400.
         if (task.entity_id.includes('_conflict_')) {
-          await window.api.database.markSyncComplete(task.id)
+          completed.push(...ids)
           continue
         }
 
         if (task.operation === 'delete') {
           const { error } = await supabase.from(cloudTable).delete().eq('id', task.entity_id)
           if (!error) {
-            await window.api.database.markSyncComplete(task.id)
+            uploaded = true
+            completed.push(...ids)
             
             // Clean up associated images from storage to save space
             if (['cloud_books', 'cloud_characters', 'cloud_locations'].includes(cloudTable)) {
@@ -326,7 +392,7 @@ export const syncService = {
                 deleteImage(typeMap[cloudTable], task.entity_id, 'unknown').catch(() => {})
               })
             }
-          }
+          } else failed = true
           continue
         }
 
@@ -335,13 +401,17 @@ export const syncService = {
         
         if (!localRow) {
           // Row was deleted locally before we could sync it, mark complete
-          await window.api.database.markSyncComplete(task.id)
+          completed.push(...ids)
           continue
         }
 
         const cloudRow = { ...localRow }
         // Strip legacy columns that might be lingering in old SQLite databases
         if ('lexical_json' in cloudRow) delete cloudRow.lexical_json
+        if (task.entity_type === 'chapter_version') {
+          delete cloudRow.version_number
+          delete cloudRow.source
+        }
         
         // Map user_id to owner_id for books
         if (cloudTable === 'cloud_books' && cloudRow.user_id) {
@@ -358,17 +428,23 @@ export const syncService = {
 
         const { error } = await supabase.from(cloudTable).upsert(cloudRow)
         if (!error) {
-          await window.api.database.markSyncComplete(task.id)
+          uploaded = true
+          completed.push(...ids)
         } else {
+          failed = true
           console.error(`[Sync] Error upserting to ${cloudTable}:`, JSON.stringify(error, null, 2))
         }
       }
       
-      console.log(`[Sync] Queue processing complete.`)
-      return { success: true }
+      if (uploaded && !failed && useUserStore.getState().user?.id === userData.user.id) {
+        recordCloudSync(userData.user.id, Date.now())
+      }
+      return failed ? { success: false, error: 'Some changes are still queued' } : { success: true }
     } catch (e: any) {
       console.error('[Sync] Failed to process sync queue:', e)
       return { success: false, error: e.message }
+    } finally {
+      if (completed.length) await window.api.database.markSyncBatchComplete(completed)
     }
   },
 

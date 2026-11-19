@@ -1,16 +1,13 @@
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
-import { formatWordCount } from '../../utils'
+import { cn, formatWordCount } from '../../utils'
 import EditorTabs from '../../components/editor/EditorTabs'
 import RichEditor from '../../components/editor/RichEditor'
 import CharacterManager from '../../components/world/CharacterManager'
 import LocationManager from '../../components/world/LocationManager'
-import NoteEditor from '../../components/world/NoteEditor'
-import CodexEditor from '../../components/world/CodexEditor'
-import WikiEditor from '../../components/world/WikiEditor'
-import OrganizationEditor from '../../components/world/OrganizationEditor'
-import WorldRuleEditor from '../../components/world/WorldRuleEditor'
+import BookMaps from '../../components/world/BookMaps'
+import ReferencePageEditor from '../../components/world/ReferencePageEditor'
+import { isReferenceKind } from '../../../../shared/referencePages'
 import CalendarView from '../../components/world/CalendarView'
 import VerseTimelineView from '../../components/world/VerseTimelineView'
 import CommentSidebar from '../../components/editor/CommentSidebar'
@@ -20,14 +17,22 @@ import StyleIntelligencePanel from '../../components/editor/StyleIntelligencePan
 import WorldbuildingAnalyzerPanel from '../../components/editor/WorldbuildingAnalyzerPanel'
 import StoryIntelligenceView from '../../components/world/StoryIntelligenceView'
 import GlobalRelationshipManager from '../../components/world/GlobalRelationshipManager'
-import type { Chapter } from '../../types'
 import { BookOpen, PanelLeft, Sparkles, Heart, Shield, MessageSquare, Feather, Microscope } from 'lucide-react'
 
+const editorTools = [
+  { id: 'comments', title: 'Comments', icon: MessageSquare },
+  { id: 'emotion', title: 'Emotional Intelligence', icon: Heart },
+  { id: 'continuity', title: 'Continuity Engine', icon: Shield },
+  { id: 'style', title: 'Style Intelligence', icon: Feather },
+  { id: 'worldbuilding', title: 'Worldbuilding Analyzer', icon: Microscope },
+] as const
+
+type EditorTool = typeof editorTools[number]['id']
+
 export default function EditorView() {
-  const { chapterId } = useParams()
-  const { 
-    activeTabId, activeChapter, tabs, chapters, 
-    currentBook, toggleSidebar, toggleAIPanel, panelState 
+  const {
+    activeTabId, activeChapter, tabs,
+    currentBook, toggleSidebar, toggleAIPanel, panelState
   } = useWorkspaceStore()
   const [wordCount, setWordCount] = useState(activeChapter?.word_count ?? 0)
 
@@ -40,53 +45,18 @@ export default function EditorView() {
     }
   }, [activeTabId, activeChapter?.id])
 
-  const [isCommentSidebarOpen, setIsCommentSidebarOpen] = useState(false)
-  const [isEmotionPanelOpen, setIsEmotionPanelOpen] = useState(false)
-  const [isContinuityPanelOpen, setIsContinuityPanelOpen] = useState(false)
-  const [isStylePanelOpen, setIsStylePanelOpen] = useState(false)
-  const [isWorldbuildingAnalyzerOpen, setIsWorldbuildingAnalyzerOpen] = useState(false)
-
-  const togglePanel = (panel: 'comments' | 'emotion' | 'continuity' | 'style' | 'worldbuilding') => {
-    if (panel === 'comments') {
-      setIsCommentSidebarOpen(!isCommentSidebarOpen)
-      setIsEmotionPanelOpen(false)
-      setIsContinuityPanelOpen(false)
-      setIsStylePanelOpen(false)
-      setIsWorldbuildingAnalyzerOpen(false)
-    } else if (panel === 'emotion') {
-      setIsEmotionPanelOpen(!isEmotionPanelOpen)
-      setIsCommentSidebarOpen(false)
-      setIsContinuityPanelOpen(false)
-      setIsStylePanelOpen(false)
-      setIsWorldbuildingAnalyzerOpen(false)
-    } else if (panel === 'continuity') {
-      setIsContinuityPanelOpen(!isContinuityPanelOpen)
-      setIsCommentSidebarOpen(false)
-      setIsEmotionPanelOpen(false)
-      setIsStylePanelOpen(false)
-      setIsWorldbuildingAnalyzerOpen(false)
-    } else if (panel === 'style') {
-      setIsStylePanelOpen(!isStylePanelOpen)
-      setIsCommentSidebarOpen(false)
-      setIsEmotionPanelOpen(false)
-      setIsContinuityPanelOpen(false)
-      setIsWorldbuildingAnalyzerOpen(false)
-    } else if (panel === 'worldbuilding') {
-      setIsWorldbuildingAnalyzerOpen(!isWorldbuildingAnalyzerOpen)
-      setIsCommentSidebarOpen(false)
-      setIsEmotionPanelOpen(false)
-      setIsContinuityPanelOpen(false)
-      setIsStylePanelOpen(false)
-    }
-  }
+  const [openPanel, setOpenPanel] = useState<EditorTool | null>(null)
 
   useEffect(() => {
-    const handleOpenSidebar = (e: Event) => {
-      togglePanel('comments')
-    }
-    window.addEventListener('open-comment-sidebar', handleOpenSidebar)
-    return () => window.removeEventListener('open-comment-sidebar', handleOpenSidebar)
-  }, [isCommentSidebarOpen])
+    const openComments = () => setOpenPanel('comments')
+    window.addEventListener('open-comment-sidebar', openComments)
+    return () => window.removeEventListener('open-comment-sidebar', openComments)
+  }, [])
+
+  function closePanel() {
+    if (openPanel) document.getElementById(`editor-toggle-${openPanel}`)?.focus()
+    setOpenPanel(null)
+  }
 
   if (!activeTabId) {
     return (
@@ -102,6 +72,8 @@ export default function EditorView() {
 
   const activeTab = tabs.find(t => t.id === activeTabId)
   if (!activeTab) return null
+  const isMaps = activeTab.type === 'maps'
+  const commentSubjectId = activeTab.type === 'chapter' && activeChapter ? activeChapter.id : activeTab.entityId || activeTab.id
 
   return (
     <div className="flex flex-col h-full" style={{ fontFamily: "'DM Sans', sans-serif" }}>
@@ -109,11 +81,13 @@ export default function EditorView() {
       <EditorTabs />
 
       {/* Chapter header */}
-      <div 
-        className="flex items-center gap-4 px-4 py-2 flex-shrink-0"
+      <div
+        className={`flex shrink-0 items-center gap-3 px-4 ${activeTab.type === 'chapter' ? 'studio-chapter-header py-3 md:px-6' : 'py-2'}`}
         style={{
-          background: 'hsl(var(--surface-950))',
-          borderBottom: '1px solid hsl(var(--surface-800))',
+          ...(activeTab.type !== 'chapter' && {
+            background: 'hsl(var(--surface-950))',
+            borderBottom: '1px solid hsl(var(--surface-800))',
+          }),
         }}
       >
         {/* Sidebar toggle (when sidebar hidden) */}
@@ -130,19 +104,24 @@ export default function EditorView() {
           </button>
         )}
 
-        <div className="flex-1">
-          <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 16, fontWeight: 700, color: 'hsl(var(--surface-50))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div className="min-w-0 flex-1">
+          {currentBook && <p className="mb-0.5 truncate text-xs font-medium text-surface-400">{currentBook.title}</p>}
+          <h2 title={activeTab.title} className={`truncate font-bold leading-tight text-surface-50 ${activeTab.type === 'chapter' ? 'text-xl md:text-2xl' : 'text-base'}`}
+            style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>
             {activeTab.title}
           </h2>
-          <p style={{ fontSize: 11, color: 'hsl(var(--surface-500))' }}>{currentBook?.title}</p>
         </div>
 
-        <div className="flex items-center gap-3 text-xs" style={{ color: 'hsl(var(--surface-500))', fontWeight: 500 }}>
-          <span>{formatWordCount(wordCount)}</span>
-        </div>
+        <div id="editor-find-slot" className="min-w-0 empty:hidden" />
+
+        {!isMaps && (
+          <span className="shrink-0 whitespace-nowrap rounded-md bg-[hsl(var(--brand-green-bg))] px-2.5 py-1 text-xs font-medium tabular-nums text-[hsl(var(--brand-green))]">
+            {formatWordCount(wordCount)}
+          </span>
+        )}
 
         {/* AI panel toggle (when AI panel hidden) */}
-        {!panelState.aiPanelOpen && (
+        {!panelState.aiPanelOpen && !isMaps && (
           <button
             id="editor-toggle-ai"
             onClick={toggleAIPanel}
@@ -169,23 +148,20 @@ export default function EditorView() {
           )}
           {activeTab.type === 'character' && <CharacterManager key={`char-${activeTab.entityId}`} entityId={activeTab.entityId} />}
           {activeTab.type === 'location' && <LocationManager key={`loc-${activeTab.entityId}`} entityId={activeTab.entityId} />}
-          {activeTab.type === 'note' && <NoteEditor key={`note-${activeTab.entityId}`} entityId={activeTab.entityId} onWordCountChange={setWordCount} />}
-          {activeTab.type === 'codex' && <CodexEditor key={`codex-${activeTab.entityId}`} entityId={activeTab.entityId} onWordCountChange={setWordCount} />}
-          {activeTab.type === 'wiki' && <WikiEditor key={`wiki-${activeTab.entityId}`} entityId={activeTab.entityId} onWordCountChange={setWordCount} />}
-          {activeTab.type === 'organization' && <OrganizationEditor key={`org-${activeTab.entityId}`} entityId={activeTab.entityId} onWordCountChange={setWordCount} />}
-          {activeTab.type === 'world_rule' && <WorldRuleEditor key={`rule-${activeTab.entityId}`} entityId={activeTab.entityId} onWordCountChange={setWordCount} />}
+          {isMaps && currentBook && <BookMaps key={currentBook.id} bookId={currentBook.id} />}
+          {isReferenceKind(activeTab.type) && (
+            <ReferencePageEditor key={`${activeTab.type}-${activeTab.entityId}`}
+              kind={activeTab.type} entityId={activeTab.entityId} onWordCountChange={setWordCount} />
+          )}
           {activeTab.type === 'timeline' && <CalendarView key={`calendar-${activeTab.entityId}`} />}
           {activeTab.type === 'story_intelligence' && <StoryIntelligenceView key={`story_intel-${activeTab.entityId}`} />}
           {activeTab.type === 'relationship_manager' && <GlobalRelationshipManager key={`rel_mgr-${activeTab.id}`} />}
           {activeTab.type === 'verse_timeline' && <VerseTimelineView key={`verse_timeline-${activeTab.id}`} />}
         </div>
         
-        {/* Comments Sidebar */}
-        {activeTab && (
-          <CommentSidebar
-            chapterId={activeTab.type === 'chapter' && activeChapter ? activeChapter.id : activeTab.entityId || activeTab.id}
-            isOpen={isCommentSidebarOpen}
-            onClose={() => setIsCommentSidebarOpen(false)}
+        {!isMaps && (
+          <CommentSidebar key={commentSubjectId} chapterId={commentSubjectId}
+            isOpen={openPanel === 'comments'} onClose={closePanel}
             onResolve={async (id) => {
               await window.api.comments.resolve(id)
               window.dispatchEvent(new CustomEvent('refresh-comments'))
@@ -199,75 +175,36 @@ export default function EditorView() {
           />
         )}
 
-        {/* Emotional Intelligence Panel */}
-        {activeTab.type === 'chapter' && activeChapter && isEmotionPanelOpen && (
-          <EmotionPanel chapterId={activeChapter.id} />
+        {activeTab.type === 'chapter' && activeChapter && (
+          <>
+            {openPanel === 'emotion' && <EmotionPanel key={activeChapter.id} chapterId={activeChapter.id} onClose={closePanel} />}
+            {openPanel === 'continuity' && <ContinuityPanel key={activeChapter.id} chapterId={activeChapter.id} onClose={closePanel} />}
+            {openPanel === 'style' && <StyleIntelligencePanel key={activeChapter.id} chapterId={activeChapter.id} onClose={closePanel} />}
+            {openPanel === 'worldbuilding' && <WorldbuildingAnalyzerPanel key={activeChapter.id} chapterId={activeChapter.id} onClose={closePanel} />}
+          </>
         )}
 
-        {/* Continuity Panel */}
-        {activeTab.type === 'chapter' && activeChapter && isContinuityPanelOpen && (
-          <ContinuityPanel chapterId={activeChapter.id} />
-        )}
-
-        {/* Style Intelligence Panel */}
-        {activeTab.type === 'chapter' && activeChapter && isStylePanelOpen && (
-          <StyleIntelligencePanel chapterId={activeChapter.id} />
-        )}
-
-        {/* Worldbuilding Analyzer Panel */}
-        {activeTab.type === 'chapter' && activeChapter && isWorldbuildingAnalyzerOpen && (
-          <WorldbuildingAnalyzerPanel chapterId={activeChapter.id} />
-        )}
-        
-        {/* Right Vertical Tool Sidebar */}
-        {activeTab && (
-          <div 
-            className="w-12 flex flex-col items-center py-4 gap-4 flex-shrink-0"
-            style={{
-              background: 'hsl(var(--surface-900))',
-              borderLeft: '1px solid hsl(var(--surface-800))'
-            }}
-          >
-            <button
-              onClick={() => togglePanel('comments')}
-              className={`p-2 rounded-lg transition-colors ${isCommentSidebarOpen ? 'bg-surface-950 text-accent-600 shadow-sm' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-850'}`}
-              title="Comments"
-            >
-              <MessageSquare className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => activeTab.type === 'chapter' && togglePanel('emotion')}
-              className={`p-2 rounded-lg transition-colors ${activeTab.type !== 'chapter' ? 'opacity-30 cursor-not-allowed text-surface-500' : isEmotionPanelOpen ? 'bg-surface-950 text-accent-600 shadow-sm' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-850'}`}
-              title={activeTab.type === 'chapter' ? "Emotional Intelligence" : "Emotional Intelligence (Chapters only)"}
-              disabled={activeTab.type !== 'chapter'}
-            >
-              <Heart className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => activeTab.type === 'chapter' && togglePanel('continuity')}
-              className={`p-2 rounded-lg transition-colors ${activeTab.type !== 'chapter' ? 'opacity-30 cursor-not-allowed text-surface-500' : isContinuityPanelOpen ? 'bg-surface-950 text-accent-600 shadow-sm' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-850'}`}
-              title={activeTab.type === 'chapter' ? "Continuity Engine" : "Continuity Engine (Chapters only)"}
-              disabled={activeTab.type !== 'chapter'}
-            >
-              <Shield className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => activeTab.type === 'chapter' && togglePanel('style')}
-              className={`p-2 rounded-lg transition-colors ${activeTab.type !== 'chapter' ? 'opacity-30 cursor-not-allowed text-surface-500' : isStylePanelOpen ? 'bg-surface-950 text-accent-600 shadow-sm' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-850'}`}
-              title={activeTab.type === 'chapter' ? "Style Intelligence" : "Style Intelligence (Chapters only)"}
-              disabled={activeTab.type !== 'chapter'}
-            >
-              <Feather className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => activeTab.type === 'chapter' && togglePanel('worldbuilding')}
-              className={`p-2 rounded-lg transition-colors ${activeTab.type !== 'chapter' ? 'opacity-30 cursor-not-allowed text-surface-500' : isWorldbuildingAnalyzerOpen ? 'bg-surface-950 text-accent-600 shadow-sm' : 'text-surface-500 hover:text-surface-300 hover:bg-surface-850'}`}
-              title={activeTab.type === 'chapter' ? "Worldbuilding Analyzer" : "Worldbuilding Analyzer (Chapters only)"}
-              disabled={activeTab.type !== 'chapter'}
-            >
-              <Microscope className="w-4 h-4" />
-            </button>
-          </div>
+        {!isMaps && (
+          <nav aria-label="Editor tools" className="flex w-12 shrink-0 flex-col items-center gap-3 border-l border-surface-800 bg-[hsl(var(--studio-header))] py-4">
+            {editorTools.map(({ id, title, icon: Icon }) => {
+              const disabled = id !== 'comments' && (activeTab.type !== 'chapter' || !activeChapter)
+              const expanded = !disabled && openPanel === id
+              return (
+                <button key={id} type="button" id={`editor-toggle-${id}`} disabled={disabled} aria-label={title}
+                  aria-expanded={expanded} aria-controls={expanded ? `${id}-panel` : undefined}
+                  title={disabled ? `${title} (chapters only)` : title}
+                  onClick={() => setOpenPanel(current => current === id ? null : id)}
+                  className={cn(
+                    'rounded-lg p-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-40',
+                    expanded
+                      ? 'bg-[hsl(var(--brand-green-bg))] text-[hsl(var(--brand-green))]'
+                      : 'text-surface-400 hover:bg-surface-800 hover:text-surface-100',
+                  )}>
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                </button>
+              )
+            })}
+          </nav>
         )}
       </div>
     </div>

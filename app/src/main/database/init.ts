@@ -2,6 +2,7 @@ import initSqlJs, { Database } from 'sql.js'
 import { app } from 'electron'
 import { join } from 'path'
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'fs'
+import { randomUUID } from 'node:crypto'
 
 let db: Database | null = null
 let dbPath: string = ''
@@ -28,6 +29,26 @@ export function saveDb(): void {
 export function dbRun(sql: string, params?: unknown[]): void {
   const database = getDb()
   database.run(sql, params as SqlJs.BindParams | undefined)
+  saveDb()
+}
+
+export function dbRunQueuedEdit(sql: string, params: unknown[], entityType: string, entityId: string, now: string, writeRelated?: () => void): void {
+  const database = getDb()
+  database.run('BEGIN')
+  try {
+    database.run(sql, params as Parameters<Database['run']>[1])
+    if (!database.getRowsModified()) {
+      database.run('ROLLBACK')
+      return
+    }
+    database.run("DELETE FROM sync_queue WHERE entity_type = ? AND entity_id = ? AND status = 'pending' AND operation != 'delete'", [entityType, entityId])
+    database.run("INSERT INTO sync_queue (id, entity_type, entity_id, operation, status, created_at) VALUES (?, ?, ?, 'update', 'pending', ?)", [randomUUID(), entityType, entityId, now])
+    writeRelated?.()
+    database.run('COMMIT')
+  } catch (error) {
+    database.run('ROLLBACK')
+    throw error
+  }
   saveDb()
 }
 
@@ -224,6 +245,34 @@ function createTables(): void {
       updated_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
     )
+  `)
+
+  // sql.js resets foreign_keys when exporting the database, so map cleanup also uses triggers.
+  database.run(`
+    CREATE TABLE IF NOT EXISTS book_maps (
+      id TEXT PRIMARY KEY,
+      book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS book_maps_by_book ON book_maps(book_id);
+    CREATE TABLE IF NOT EXISTS map_pins (
+      map_id TEXT NOT NULL REFERENCES book_maps(id) ON DELETE CASCADE,
+      location_id TEXT NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+      x REAL NOT NULL CHECK (x BETWEEN 0 AND 1),
+      y REAL NOT NULL CHECK (y BETWEEN 0 AND 1),
+      PRIMARY KEY (map_id, location_id)
+    );
+    CREATE INDEX IF NOT EXISTS map_pins_by_location ON map_pins(location_id);
+    CREATE TRIGGER IF NOT EXISTS book_delete_maps AFTER DELETE ON books BEGIN
+      DELETE FROM book_maps WHERE book_id = OLD.id;
+    END;
+    CREATE TRIGGER IF NOT EXISTS map_delete_pins AFTER DELETE ON book_maps BEGIN
+      DELETE FROM map_pins WHERE map_id = OLD.id;
+    END;
+    CREATE TRIGGER IF NOT EXISTS location_delete_pins AFTER DELETE ON locations BEGIN
+      DELETE FROM map_pins WHERE location_id = OLD.id;
+    END;
   `)
 
   database.run(`
@@ -759,7 +808,33 @@ function createTables(): void {
     )
   `)
 
+  database.run(`
+    CREATE TABLE IF NOT EXISTS reference_page_details (
+      kind TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      book_id TEXT NOT NULL,
+      details TEXT NOT NULL,
+      PRIMARY KEY (kind, entity_id)
+    );
+    CREATE INDEX IF NOT EXISTS reference_page_details_book ON reference_page_details(book_id);
+    CREATE TRIGGER IF NOT EXISTS book_delete_reference_details AFTER DELETE ON books BEGIN
+      DELETE FROM reference_page_details WHERE book_id = OLD.id;
+    END;
+  `)
+  const referenceTables = [
+    ['organization', 'organizations'], ['world_rule', 'world_rules'], ['codex', 'codex'], ['wiki', 'wiki'], ['note', 'notes'],
+  ]
+  for (const [kind, table] of referenceTables) {
+    database.run(`
+      CREATE TRIGGER IF NOT EXISTS ${table}_delete_reference_details AFTER DELETE ON ${table} BEGIN
+        DELETE FROM reference_page_details WHERE kind = '${kind}' AND entity_id = OLD.id;
+      END;
+    `)
+  }
+
   // Migrate chapter_versions table for existing databases
+  database.run('CREATE INDEX IF NOT EXISTS sync_queue_entity_status ON sync_queue(entity_type, entity_id, status)')
+
   try {
     database.run(`ALTER TABLE chapter_versions ADD COLUMN user_id TEXT NOT NULL DEFAULT ''`)
   } catch (e: any) {

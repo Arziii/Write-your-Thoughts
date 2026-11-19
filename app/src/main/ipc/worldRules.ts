@@ -1,5 +1,5 @@
 import { IpcMain } from 'electron'
-import { dbRun, dbGet, dbAll } from '../database/init'
+import { dbRunQueuedEdit, dbRun, dbGet, dbAll } from '../database/init'
 import { v4 as uuidv4 } from 'uuid'
 
 export function registerWorldRulesHandlers(ipcMain: IpcMain): void {
@@ -39,13 +39,8 @@ export function registerWorldRulesHandlers(ipcMain: IpcMain): void {
     }
     
     params.push(id)
-    dbRun(`UPDATE world_rules SET ${updates.join(', ')} WHERE id = ?`, params)
-    
-    dbRun(
-      `INSERT INTO sync_queue (id, entity_type, entity_id, operation, status, created_at) VALUES (?, 'world_rules', ?, 'update', 'pending', ?)`,
-      [uuidv4(), id, now]
-    )
-    
+    dbRunQueuedEdit(`UPDATE world_rules SET ${updates.join(', ')} WHERE id = ?`, params, 'world_rules', id, now)
+
     return dbGet('SELECT * FROM world_rules WHERE id = ?', [id])
   })
 

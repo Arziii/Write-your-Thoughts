@@ -1,5 +1,5 @@
 import { IpcMain } from 'electron'
-import { dbRun, dbGet, dbAll } from '../database/init'
+import { dbRunQueuedEdit, dbRun, dbGet, dbAll } from '../database/init'
 import { v4 as uuidv4 } from 'uuid'
 
 export function registerOrganizationsHandlers(ipcMain: IpcMain): void {
@@ -39,13 +39,8 @@ export function registerOrganizationsHandlers(ipcMain: IpcMain): void {
     }
     
     params.push(id)
-    dbRun(`UPDATE organizations SET ${updates.join(', ')} WHERE id = ?`, params)
-    
-    dbRun(
-      `INSERT INTO sync_queue (id, entity_type, entity_id, operation, status, created_at) VALUES (?, 'organizations', ?, 'update', 'pending', ?)`,
-      [uuidv4(), id, now]
-    )
-    
+    dbRunQueuedEdit(`UPDATE organizations SET ${updates.join(', ')} WHERE id = ?`, params, 'organizations', id, now)
+
     return dbGet('SELECT * FROM organizations WHERE id = ?', [id])
   })
 

@@ -1,12 +1,14 @@
 import { useState } from 'react'
-import { Microscope, Loader2, Copy } from 'lucide-react'
+import { Microscope, Copy } from 'lucide-react'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useUserStore } from '../../stores/userStore'
 import { useToastStore } from '../../stores/toastStore'
 import { aiService } from '../../services/aiService'
 import { useStoryBibleStore } from '../../stores/storyBibleStore'
+import { cn } from '../../utils'
+import { EditorToolPanel, PanelAnalyzeButton, PanelEmptyState, panelButton, panelCard } from './EditorToolPanel'
 
-export default function WorldbuildingAnalyzerPanel({ chapterId }: { chapterId: string }) {
+export default function WorldbuildingAnalyzerPanel({ chapterId, onClose }: { chapterId: string; onClose: () => void }) {
   const { 
     chapters, characters, locations, codex, wiki, organizations, worldRules, notes 
   } = useWorkspaceStore()
@@ -61,70 +63,35 @@ export default function WorldbuildingAnalyzerPanel({ chapterId }: { chapterId: s
     }
   }
 
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text)
-    addToast('Copied to clipboard', 'success')
+  const handleCopy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      addToast('Copied to clipboard', 'success')
+    } catch {
+      addToast('Could not copy the analysis', 'error')
+    }
   }
 
   return (
-    <div className="flex flex-col h-full bg-surface-900 w-80 border-l border-surface-800" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-      {/* Panel header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-surface-800 shrink-0 h-9">
-        <div className="flex items-center gap-2">
-          <Microscope className="w-3.5 h-3.5 text-accent-500" />
-          <span className="text-xs font-semibold text-surface-200">Worldbuilding Analyzer</span>
-        </div>
-      </div>
-
-      <div className="flex flex-col h-full overflow-hidden p-3">
-        <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-          {analyzeResult ? (
-            <div className="bg-surface-800 p-3 rounded-lg">
-              <div className="flex justify-end mb-2">
-                <button 
-                  onClick={() => handleCopy(analyzeResult)} 
-                  className="p-1 hover:bg-surface-700 rounded text-surface-400 hover:text-surface-200"
-                  title="Copy Analysis"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              <div className="text-xs text-surface-300 leading-relaxed whitespace-pre-wrap">
-                {analyzeResult}
-              </div>
-            </div>
-          ) : (
-            <div className="text-center text-surface-500 text-xs mt-10">
-              Run the Worldbuilding Analyzer to check your chapter against your Story Bible, Lore, and Organizations.
-            </div>
-          )}
-          {isAnalyzing && (
-            <div className="p-3 rounded-lg text-sm bg-surface-800 text-surface-400 flex flex-col items-center justify-center gap-2 mt-4">
-              <Loader2 className="w-5 h-5 animate-spin text-accent-500" />
-              <span className="text-xs">Analyzing Worldbuilding...</span>
-            </div>
-          )}
-        </div>
-        <div className="mt-auto shrink-0 pt-3">
-          <button
-            onClick={handleAnalyze}
-            disabled={isAnalyzing || !activeChapter}
-            className="w-full py-2 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2"
-          >
-            {isAnalyzing ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Analyzing...
-              </>
-            ) : (
-              <>
-                <Microscope className="w-4 h-4" />
-                Analyze Chapter vs Lore
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
+    <EditorToolPanel id="worldbuilding-panel" title="Worldbuilding Analyzer" icon={Microscope} onClose={onClose}
+      action={<PanelAnalyzeButton label="Analyze chapter vs. lore" busy={isAnalyzing}
+        disabled={!activeChapter} onClick={() => void handleAnalyze()} />}>
+      {isAnalyzing ? (
+        <p role="status" className={cn(panelCard, 'text-sm text-surface-400')}>Checking this chapter against your worldbuilding records…</p>
+      ) : analyzeResult ? (
+        <section className={panelCard} aria-label="Analysis report">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h4 className="text-sm font-semibold">Analysis report</h4>
+            <button type="button" onClick={() => void handleCopy(analyzeResult)} className={panelButton}>
+              <Copy className="h-3.5 w-3.5" aria-hidden="true" /> Copy report
+            </button>
+          </div>
+          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-surface-200">{analyzeResult}</p>
+        </section>
+      ) : (
+        <PanelEmptyState icon={Microscope} title="No analysis yet"
+          description="Check this chapter against your characters, locations, rules, and other lore." />
+      )}
+    </EditorToolPanel>
   )
 }

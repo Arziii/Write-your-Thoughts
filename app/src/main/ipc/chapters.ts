@@ -1,5 +1,5 @@
 import { IpcMain } from 'electron'
-import { dbRun, dbGet, dbAll } from '../database/init'
+import { dbRunQueuedEdit, dbRun, dbGet, dbAll } from '../database/init'
 import { v4 as uuidv4 } from 'uuid'
 
 export function registerChapterHandlers(ipcMain: IpcMain): void {
@@ -45,14 +45,10 @@ export function registerChapterHandlers(ipcMain: IpcMain): void {
     id: string; content: string; wordCount: number
   }) => {
     const now = new Date().toISOString()
-    dbRun(
-      'UPDATE chapters SET content = ?, word_count = ?, updated_at = ?, synced = 0 WHERE id = ?',
-      [data.content, data.wordCount, now, data.id]
-    )
-    dbRun(
-      `INSERT INTO sync_queue (id, entity_type, entity_id, operation, status, created_at)
-       VALUES (?, 'chapter', ?, 'update', 'pending', ?)`,
-      [uuidv4(), data.id, now]
+    dbRunQueuedEdit(
+      'UPDATE chapters SET content = ?, word_count = ?, updated_at = ?, synced = 0 WHERE id = ? AND (content IS NOT ? OR word_count IS NOT ?)',
+      [data.content, data.wordCount, now, data.id, data.content, data.wordCount],
+      'chapter', data.id, now
     )
     return { success: true, savedAt: now }
   })

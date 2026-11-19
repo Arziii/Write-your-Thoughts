@@ -13,6 +13,8 @@ import WorkspacePage from './pages/workspace/WorkspacePage'
 import AppLayout from './layouts/AppLayout'
 import SettingsPage from './pages/settings/SettingsPage'
 import ToastContainer from './components/ui/ToastContainer'
+import { flushEditorSaves } from './hooks/useEditorSave'
+import { startCloudSyncScheduler, syncNow } from './services/syncService'
 
 function App() {
   const { user, isLoading, setUser, setLocalUser, setLoading, setSettings } = useUserStore()
@@ -20,6 +22,15 @@ function App() {
   const { refreshFromDb } = useWorkspaceStore()
   const { addToast } = useToastStore()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    const stopSync = startCloudSyncScheduler()
+    const stopClose = window.api.window.onPrepareClose?.(flushEditorSaves)
+    return () => {
+      stopSync?.()
+      stopClose?.()
+    }
+  }, [])
 
 
   useEffect(() => {
@@ -68,7 +79,7 @@ function App() {
             const { syncService } = await import('./services/syncService')
 
             // ── Phase 1: Push any pending local changes up ──────────────
-            await syncService.processSyncQueue()
+            await syncNow(false)
 
             // ── Phase 3: Pull cloud data down into local SQLite ─────────
             const pullResult = await syncService.performInitialPull()
@@ -135,6 +146,9 @@ function App() {
       } else {
         setLoading(false)
       }
+    }).catch((err) => {
+      console.error('Failed to get auth session on boot:', err)
+      setLoading(false)
     })
 
     // Listen for auth state changes
@@ -164,7 +178,7 @@ function App() {
             const { syncService } = await import('./services/syncService')
             
             // Pull cloud books and data
-            await syncService.processSyncQueue()
+            await syncNow(false)
             const pullResult = await syncService.performInitialPull()
             if (pullResult.success && pullResult.recordsPulled > 0) {
               await refreshFromDb(u.id)

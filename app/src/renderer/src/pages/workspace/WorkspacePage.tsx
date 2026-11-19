@@ -177,6 +177,8 @@ export default function WorkspacePage() {
         const chapter = (chapters as Chapter[]).find((c) => c.id === cId)
         if (chapter) {
           openTab(chapter.id, 'chapter', chapter.title)
+        } else if (cId === `maps-${bId}`) {
+          openTab(cId, 'maps', 'Maps')
         }
       }
 
@@ -192,7 +194,7 @@ export default function WorkspacePage() {
               if (found) return
               const match = arr.find(item => item.id === tId)
               if (match) {
-                restoredTabs.push({ id: tId, type, title: match[labelField] })
+                restoredTabs.push({ id: tId, entityId: tId, type, title: match[labelField] })
                 found = true
               }
             }
@@ -202,7 +204,10 @@ export default function WorkspacePage() {
             check(locations, 'location', 'name')
             check(notes, 'note', 'title')
             check(codex, 'codex', 'title')
-            check(wiki, 'world-wiki', 'title')
+            check(wiki, 'wiki', 'title')
+            check(organizations, 'organization', 'title')
+            check(worldRules, 'world_rule', 'title')
+            if (tId === `maps-${bId}`) restoredTabs.push({ id: tId, entityId: tId, type: 'maps', title: 'Maps' })
             // Timeline and story bible use hardcoded IDs
             if (tId === 'story-bible') { restoredTabs.push({ id: tId, type: 'story-bible', title: 'Story Bible' }); found = true; }
             if (tId === 'character-board') { restoredTabs.push({ id: tId, type: 'character-board', title: 'Characters' }); found = true; }

@@ -1,13 +1,28 @@
-import { Minus, Square, X, PanelLeft } from 'lucide-react'
+import { useSyncExternalStore } from 'react'
+import { Minus, Square, X, PanelLeft, Search, Wifi, WifiOff } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { cn } from '../../utils'
 import LogoImage from '../../assets/Logo.ico'
+import CloudSyncStatus from './CloudSyncStatus'
 
-export default function TitleBar() {
+function subscribeToNetwork(onChange: () => void) {
+  window.addEventListener('online', onChange)
+  window.addEventListener('offline', onChange)
+  return () => {
+    window.removeEventListener('online', onChange)
+    window.removeEventListener('offline', onChange)
+  }
+}
+
+const getNetworkStatus = () => navigator.onLine
+
+export default function TitleBar({ onSearch }: { onSearch?: () => void }) {
   const { currentBook, activeChapter, panelState, toggleSidebar } = useWorkspaceStore()
   const location = useLocation()
   const isEditorRoute = location.pathname.startsWith('/book')
+  const isOnline = useSyncExternalStore(subscribeToNetwork, getNetworkStatus)
+  const NetworkIcon = isOnline ? Wifi : WifiOff
 
   const title = isEditorRoute
     ? (activeChapter
@@ -38,6 +53,33 @@ export default function TitleBar() {
       </div>
 
       <div className="flex-1" />
+
+      <span
+        role="status"
+        title={isOnline ? 'Network connection detected' : 'No network connection. Edits save locally and sync when you reconnect.'}
+        className={cn(
+          'titlebar-no-drag mx-2 flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium',
+          isOnline ? 'border-surface-700 text-surface-300' : 'border-warning-500/30 bg-warning-500/10 text-warning-400'
+        )}
+      >
+        <NetworkIcon className={cn('h-3.5 w-3.5', isOnline && 'text-success-500')} aria-hidden="true" />
+        {isOnline ? 'Online' : 'Offline'}
+      </span>
+
+      <CloudSyncStatus online={isOnline} />
+
+      {onSearch && (
+        <button
+          type="button"
+          onClick={onSearch}
+          className="titlebar-no-drag flex h-full items-center gap-2 px-3 text-xs text-surface-400 hover:bg-surface-800 hover:text-surface-100"
+          title="Search manuscript (Ctrl+K)"
+          aria-keyshortcuts="Control+K Meta+K"
+        >
+          <Search className="w-3.5 h-3.5" aria-hidden="true" />
+          <span>Search manuscript</span>
+        </button>
+      )}
 
       {/* Window controls */}
       <div className="titlebar-no-drag flex items-center h-full">

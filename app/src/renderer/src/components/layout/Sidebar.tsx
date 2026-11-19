@@ -6,7 +6,8 @@ import {
 import { useUserStore } from '../../stores/userStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { authService } from '../../services/authService'
-import { syncService } from '../../services/syncService'
+import { syncNow } from '../../services/syncService'
+import { flushEditorSaves } from '../../hooks/useEditorSave'
 import { useToastStore } from '../../stores/toastStore'
 import { cn } from '../../utils'
 import Modal from '../ui/Modal'
@@ -15,7 +16,7 @@ import SharedBookList from '../books/SharedBookList'
 import ChapterTree from '../chapters/ChapterTree'
 import EntityTree from '../world/EntityTree'
 import SidebarTimeline from '../world/SidebarTimeline'
-import { Users, MapPin, StickyNote, Clock, BookMarked, Globe, Building2, Gavel, Brain, Network } from 'lucide-react'
+import { Users, Map as MapIcon, MapPin, StickyNote, Clock, BookMarked, Globe, Building2, Gavel, Brain, Network } from 'lucide-react'
 import { DragDropContext, DropResult } from '@hello-pangea/dnd'
 
 // ── Forest Literary Palette ──────────────────────────────────────────
@@ -62,8 +63,11 @@ export default function Sidebar() {
   const confirmSignOut = async () => {
     setIsLoggingOut(true)
     try {
-      await syncService.processSyncQueue()
-      await syncService.backupDatabaseToCloud()
+      if (!await flushEditorSaves()) {
+        setIsLoggingOut(false)
+        return
+      }
+      await syncNow()
       await authService.signOut()
       // Hard reload to completely wipe memory and prevent state leakage
       window.location.reload()
@@ -228,6 +232,17 @@ export default function Sidebar() {
                       onRename={async (id, title) => { const loc = await window.api.locations.update({ id, name: title }); updateLocation(loc as any); addToast('Location renamed', 'success') }}
                       onDelete={async (id) => { await window.api.locations.delete(id); removeLocation(id); addToast('Location deleted', 'info') }}
                     />
+
+                    <div className="px-2.5 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => openTab(`maps-${currentBook.id}`, 'maps', 'Maps')}
+                        className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold uppercase tracking-wider text-[hsl(var(--brand-green))] hover:bg-surface-850"
+                      >
+                        <MapIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                        Maps
+                      </button>
+                    </div>
 
                     {/* Relationships */}
                     <div style={{ padding: '0 10px', marginTop: 12 }}>

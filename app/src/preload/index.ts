@@ -1,4 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { SearchRequest, SearchResult } from '../shared/manuscriptSearch'
+import type { BookMap, LocationChapterReference, MapImage, MapPin } from '../shared/maps'
+import type { ReferenceDetails, SaveReferencePage } from '../shared/referencePages'
 
 const api = {
   // Window controls
@@ -6,6 +9,15 @@ const api = {
     minimize: () => ipcRenderer.send('window:minimize'),
     maximize: () => ipcRenderer.send('window:maximize'),
     close: () => ipcRenderer.send('window:close'),
+    onPrepareClose: (callback: () => Promise<boolean>) => {
+      const handle = async (_event: Electron.IpcRendererEvent, requestId: number) => {
+        const saved = await callback().catch(() => false)
+        ipcRenderer.send('window:prepared-close', requestId, saved)
+      }
+      ipcRenderer.on('window:prepare-close', handle)
+      ipcRenderer.send('window:save-handler-ready')
+      return () => { ipcRenderer.removeListener('window:prepare-close', handle) }
+    },
     onMaximized: (cb: () => void) => ipcRenderer.on('window:maximized', cb),
     onUnmaximized: (cb: () => void) => ipcRenderer.on('window:unmaximized', cb),
   },
@@ -26,9 +38,12 @@ const api = {
   // Database Backup/Restore & Sync
   database: {
     getBuffer: () => ipcRenderer.invoke('database:getBuffer'),
+    canAutoBackup: (userId: string) => ipcRenderer.invoke('database:canAutoBackup', userId),
     restoreBuffer: (buffer: Uint8Array) => ipcRenderer.invoke('database:restoreBuffer', buffer),
     getPendingSync: () => ipcRenderer.invoke('database:getPendingSync'),
+    getPendingSyncCount: (): Promise<number> => ipcRenderer.invoke('database:getPendingSyncCount'),
     markSyncComplete: (id: string) => ipcRenderer.invoke('database:markSyncComplete', id),
+    markSyncBatchComplete: (ids: string[]) => ipcRenderer.invoke('database:markSyncBatchComplete', ids),
     getEntityRow: (data: { entityType: string, entityId: string }) => ipcRenderer.invoke('database:getEntityRow', data),
     upsertEntityRow: (data: { entityType: string, row: any }) => ipcRenderer.invoke('database:upsertEntityRow', data),
     upsertCloudRow: (data: { entityType: string, row: any }) => ipcRenderer.invoke('database:upsertCloudRow', data),
@@ -79,6 +94,20 @@ const api = {
     delete: (id: string) => ipcRenderer.invoke('characters:delete', id),
   },
 
+  referencePages: {
+    load: (data: Pick<SaveReferencePage, 'id' | 'kind'>): Promise<ReferenceDetails> => ipcRenderer.invoke('referencePages:load', data),
+    save: (data: SaveReferencePage) => ipcRenderer.invoke('referencePages:save', data),
+  },
+  maps: {
+    list: (bookId: string): Promise<BookMap[]> => ipcRenderer.invoke('maps:list', bookId),
+    create: (data: { bookId: string; name: string }): Promise<BookMap> => ipcRenderer.invoke('maps:create', data),
+    rename: (data: { mapId: string; name: string }): Promise<BookMap> => ipcRenderer.invoke('maps:rename', data),
+    delete: (mapId: string): Promise<void> => ipcRenderer.invoke('maps:delete', mapId),
+    load: (mapId: string): Promise<{ pins: MapPin[]; image: MapImage | null }> => ipcRenderer.invoke('maps:load', mapId),
+    setImage: (data: { mapId: string; bytes: Uint8Array }): Promise<void> => ipcRenderer.invoke('maps:setImage', data),
+    savePin: (data: MapPin & { mapId: string }): Promise<MapPin> => ipcRenderer.invoke('maps:savePin', data),
+    removePin: (data: { mapId: string; locationId: string }): Promise<void> => ipcRenderer.invoke('maps:removePin', data),
+  },
   locations: {
     getByBook: (bookId: string) => ipcRenderer.invoke('locations:getByBook', bookId),
     getById: (id: string) => ipcRenderer.invoke('locations:getById', id),
@@ -105,7 +134,9 @@ const api = {
   },
 
   search: {
-    global: (data: unknown) => ipcRenderer.invoke('search:global', data),
+    global: (data: SearchRequest): Promise<SearchResult[]> => ipcRenderer.invoke('search:global', data),
+    locationReferences: (locationId: string): Promise<LocationChapterReference[]> =>
+      ipcRenderer.invoke('search:locationReferences', locationId),
   },
 
   export: {
@@ -306,4 +337,4 @@ const api = {
 
 contextBridge.exposeInMainWorld('api', api)
 
-export type ElectronAPI = typeof api
+export type ElectronAPI = typeof api & { isMock?: true }

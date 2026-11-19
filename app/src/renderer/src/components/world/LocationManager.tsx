@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useEditorSave } from '../../hooks/useEditorSave'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { Camera, Save, Lock, Unlock, X, Loader2 } from 'lucide-react'
 import { useToastStore } from '../../stores/toastStore'
@@ -6,22 +7,32 @@ import { cn } from '../../utils'
 import { uploadImage, deleteImage } from '../../services/storageService'
 
 export default function LocationManager({ entityId }: { entityId: string }) {
-  const { locations, updateLocation, panelState, toggleEntityLock, drafts, setDraft, clearDraft } = useWorkspaceStore()
+  const { locations, updateLocation, panelState, toggleEntityLock, drafts } = useWorkspaceStore()
   const { addToast } = useToastStore()
   
   const location = locations.find(l => l.id === entityId)
-  const [isSaving, setIsSaving] = useState(false)
   const [isUploadingImage, setIsUploadingImage] = useState(false)
 
   // Read from the in-memory draft (survives tab switches) or fall back to saved data
   const draft = drafts[entityId]
   const formData = draft ?? location ?? null
 
+  const saving = useEditorSave(entityId, async (change: Record<string, unknown>) => {
+    const original = useWorkspaceStore.getState().locations.find(item => item.id === entityId)
+    const fields = ['name', 'description', 'culture', 'history', 'notes', 'image_url'] as const
+    const changed = Object.fromEntries(fields.filter(field => change[field] !== original?.[field]).map(field => [field, change[field]]))
+    if (original && !Object.keys(changed).length) return
+    const updated = await window.api.locations.update({ id: entityId, ...changed })
+    if (!updated) throw new Error('Record could not be found')
+    updateLocation(updated)
+  })
+  const isSaving = saving.status === 'saving'
+
   if (!formData) return <div>Location not found</div>
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
-    setDraft(entityId, { ...(drafts[entityId] ?? location ?? {}), [name]: value })
+    saving.stage({ ...(useWorkspaceStore.getState().drafts[entityId] ?? location ?? {}), [name]: value })
   }
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -32,7 +43,7 @@ export default function LocationManager({ entityId }: { entityId: string }) {
     setIsUploadingImage(true)
     try {
       const url = await uploadImage(file, 'locations', entityId)
-      setDraft(entityId, { ...(drafts[entityId] ?? location ?? {}), image_url: url })
+      saving.stage({ ...(useWorkspaceStore.getState().drafts[entityId] ?? location ?? {}), image_url: url })
       addToast('Image uploaded', 'success')
     } catch (err: any) {
       addToast(err.message || 'Upload failed', 'error')
@@ -43,24 +54,9 @@ export default function LocationManager({ entityId }: { entityId: string }) {
   }
 
   const handleImageDelete = async () => {
-    setDraft(entityId, { ...(drafts[entityId] ?? location ?? {}), image_url: '' })
+    saving.stage({ ...(useWorkspaceStore.getState().drafts[entityId] ?? location ?? {}), image_url: '' })
     await deleteImage('locations', entityId, 'unknown').catch(() => {})
     addToast('Image removed', 'success')
-  }
-
-  const handleSave = async () => {
-    if (!formData) return
-    setIsSaving(true)
-    try {
-      const updated = await window.api.locations.update(formData)
-      updateLocation(updated as any)
-      clearDraft(entityId)
-      addToast('Location saved', 'success')
-    } catch {
-      addToast('Failed to save location', 'error')
-    } finally {
-      setIsSaving(false)
-    }
   }
 
   const isDirty = !!drafts[entityId]
@@ -91,7 +87,7 @@ export default function LocationManager({ entityId }: { entityId: string }) {
             <span className="text-sm">Memory Lock</span>
           </button>
           <button
-            onClick={handleSave}
+            onClick={() => void saving.save()}
             disabled={isSaving}
             className="flex items-center gap-2 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white px-4 py-2 rounded-md font-medium transition-colors"
           >

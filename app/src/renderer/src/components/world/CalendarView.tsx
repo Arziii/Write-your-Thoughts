@@ -6,6 +6,9 @@ const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'F
 
 export default function CalendarView() {
   const { timelineEvents, timelineSettings } = useWorkspaceStore()
+  const searchTarget = useWorkspaceStore(state => state.searchTarget)
+  const clearSearchTarget = useWorkspaceStore(state => state.clearSearchTarget)
+  const [highlightedEventId, setHighlightedEventId] = useState<string>()
   
   // Parse base date
   const baseDate = useMemo(() => {
@@ -23,6 +26,16 @@ export default function CalendarView() {
   useEffect(() => {
     setCurrentDate(baseDate)
   }, [baseDate.getTime()])
+
+  useEffect(() => {
+    if (searchTarget?.type !== 'timeline') return
+    const event = timelineEvents.find(item => item.id === searchTarget.eventId)
+    if (!event) return
+    const storyDay = Number(event.story_day) || 1
+    setCurrentDate(new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + storyDay - 1))
+    setHighlightedEventId(event.id)
+    clearSearchTarget(searchTarget)
+  }, [searchTarget, timelineEvents, baseDate, clearSearchTarget])
 
   const prevMonth = () => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))
@@ -144,7 +157,7 @@ export default function CalendarView() {
                   {dayEvents.map(ev => (
                     <div 
                       key={ev.id} 
-                      className="text-[11px] font-medium truncate px-2 py-1 rounded bg-[#e8f0e5] text-[#2d5a27] border border-[#d4e9d0] cursor-pointer hover:bg-[#d4e9d0] transition-colors shadow-sm"
+                      className={`text-[11px] font-medium truncate px-2 py-1 rounded bg-[#e8f0e5] text-[#2d5a27] border border-[#d4e9d0] cursor-pointer hover:bg-[#d4e9d0] transition-colors shadow-sm ${highlightedEventId === ev.id ? 'ring-2 ring-inset ring-accent-500' : ''}`}
                       title={ev.title}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-[#dc2626] inline-block mr-1.5 align-middle"></span>

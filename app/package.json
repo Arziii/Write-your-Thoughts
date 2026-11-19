@@ -91,6 +91,7 @@
     "electron-updater": "^6.8.9",
     "epub-gen-memory": "^1.1.2",
     "html-to-docx": "^1.8.0",
+    "htmlparser2": "^7.2.0",
     "lucide-react": "^0.344.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

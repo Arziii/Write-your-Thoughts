@@ -3,6 +3,12 @@ import { getDbPath, getDb, saveDb, initDatabase, dbRun, dbGet, dbAll } from '../
 import { readFileSync, writeFileSync } from 'fs'
 
 export function registerDatabaseHandlers(ipcMain: IpcMain): void {
+  ipcMain.handle('database:canAutoBackup', (_event, userId: string) => {
+    if (!userId) return false
+    return !dbGet('SELECT id FROM users WHERE id != ? LIMIT 1', [userId]) &&
+      !dbGet('SELECT id FROM books WHERE user_id != ? LIMIT 1', [userId])
+  })
+
   ipcMain.handle('database:getBuffer', async () => {
     saveDb() // ensure latest memory state is on disk
     const dbPath = getDbPath()
@@ -24,8 +30,12 @@ export function registerDatabaseHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('database:getPendingSync', async () => {
-    return dbAll("SELECT * FROM sync_queue WHERE status = 'pending' ORDER BY created_at ASC")
+    return dbAll("SELECT * FROM sync_queue WHERE status = 'pending' ORDER BY created_at ASC, rowid ASC")
   })
+
+  ipcMain.handle('database:getPendingSyncCount', () =>
+    Number(dbGet("SELECT COUNT(*) AS count FROM sync_queue WHERE status = 'pending'")?.count ?? 0)
+  )
 
   ipcMain.handle('database:markSyncComplete', async (_event, id: string) => {
     // Delete the task so the queue stays small
@@ -33,11 +43,18 @@ export function registerDatabaseHandlers(ipcMain: IpcMain): void {
     return { success: true }
   })
 
+  ipcMain.handle('database:markSyncBatchComplete', (_event, ids: string[]) => {
+    if (Array.isArray(ids) && ids.length && ids.every(id => typeof id === 'string')) {
+      dbRun('DELETE FROM sync_queue WHERE id IN (SELECT value FROM json_each(?))', [JSON.stringify(ids)])
+    }
+  })
+
   ipcMain.handle('database:getEntityRow', async (_event, data: { entityType: string, entityId: string }) => {
     // Safely map entity type to actual table name to prevent SQL injection
     const typeToTable: Record<string, string> = {
       'book': 'books',
       'chapter': 'chapters',
+      'chapter_version': 'chapter_versions',
       'character': 'characters',
       'location': 'locations',
       'note': 'notes',

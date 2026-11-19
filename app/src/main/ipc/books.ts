@@ -1,6 +1,7 @@
 import { IpcMain } from 'electron'
 import { dbRun, dbGet, dbAll } from '../database/init'
 import { v4 as uuidv4 } from 'uuid'
+import { getBookMapIds, removeMapImage } from './maps'
 
 export function registerBookHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('books:getAll', async (_event, userId: string) => {
@@ -64,7 +65,9 @@ export function registerBookHandlers(ipcMain: IpcMain): void {
        VALUES (?, 'book', ?, 'delete', 'pending', ?)`,
       [uuidv4(), bookId, now]
     )
+    const mapIds = getBookMapIds(bookId)
     dbRun('DELETE FROM books WHERE id = ?', [bookId])
+    mapIds.forEach(removeMapImage)
     return { success: true }
   })
 }

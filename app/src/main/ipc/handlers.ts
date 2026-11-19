@@ -7,6 +7,8 @@ import { registerAuthHandlers } from './auth'
 import { registerSettingsHandlers } from './settings'
 import { registerCharacterHandlers } from './characters'
 import { registerLocationHandlers } from './locations'
+import { registerMapHandlers } from './maps'
+import { registerReferencePageHandlers } from './referencePages'
 import { registerNoteHandlers } from './notes'
 import { registerTimelineHandlers } from './timeline'
 import { registerSearchHandlers } from './search'
@@ -36,6 +38,8 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   registerSettingsHandlers(ipcMain)
   registerCharacterHandlers(ipcMain)
   registerLocationHandlers(ipcMain)
+  registerMapHandlers(ipcMain)
+  registerReferencePageHandlers(ipcMain)
   registerNoteHandlers(ipcMain)
   registerTimelineHandlers(ipcMain)
   registerSearchHandlers(ipcMain)
