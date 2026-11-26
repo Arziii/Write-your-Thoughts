@@ -10,12 +10,14 @@ import {
 import { cn } from '../../utils'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useUserStore } from '../../stores/userStore'
+import ReadAloudControls from './ReadAloudControls'
 
 interface EditorToolbarProps {
   editor: Editor | null
   saveStatus: 'saved' | 'saving' | 'unsaved'
   onSave: () => void
   showHistory?: boolean
+  showReadAloud?: boolean
 }
 
 interface ToolbarButtonProps {
@@ -51,7 +53,7 @@ function Divider() {
   return <div className="w-px h-5 bg-surface-700 mx-0.5" />
 }
 
-export default function EditorToolbar({ editor, saveStatus, onSave, showHistory = true }: EditorToolbarProps) {
+export default function EditorToolbar({ editor, saveStatus, onSave, showHistory = true, showReadAloud = false }: EditorToolbarProps) {
   const { focusMode, setFocusMode } = useWorkspaceStore()
   const { user, settings, setSettings } = useUserStore()
 
@@ -279,6 +281,8 @@ export default function EditorToolbar({ editor, saveStatus, onSave, showHistory 
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {showReadAloud && <ReadAloudControls editor={editor} />}
 
       {/* Version History & Milestones */}
       {showHistory && <ToolbarButton

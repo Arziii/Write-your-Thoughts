@@ -4,6 +4,7 @@ import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useUserStore } from '../../stores/userStore'
 import { useStoryBibleStore } from '../../stores/storyBibleStore'
 import { aiService } from '../../services/aiService'
+import { getAIConfigurationError } from '../../services/ai/configuration'
 import { useToastStore } from '../../stores/toastStore'
 
 export default function StoryIntelligenceView() {
@@ -55,8 +56,9 @@ export default function StoryIntelligenceView() {
       return
     }
 
-    if (!settings?.ai_api_key) {
-      addToast('Please set your AI API Key in Settings first.', 'error')
+    const configurationError = getAIConfigurationError(settings)
+    if (!settings || configurationError) {
+      addToast(configurationError ?? 'Open Settings to configure an AI provider.', 'warning')
       return
     }
 

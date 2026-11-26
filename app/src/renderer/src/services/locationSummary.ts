@@ -1,6 +1,7 @@
 import type { LocationChapterReference } from '../../../shared/maps'
 import type { Location, Settings } from '../types'
 import { ProviderFactory } from './ai/ProviderFactory'
+import { resolveAISettings } from './ai/configuration'
 
 export const locationFields = [
   ['description', 'Geography & description'],
@@ -81,10 +82,9 @@ export function getLocationSummary(locationId: string, key: string, evidence: Lo
   if (existing) return existing
 
   const request = (async () => {
-    const configured = settings.ai_settings?.[settings.ai_provider]
+    const configured = resolveAISettings(settings.ai_provider, settings.ai_api_key, settings.ai_settings)
     const provider = ProviderFactory.create(settings.ai_provider, {
       ...configured,
-      apiKey: configured?.apiKey || settings.ai_api_key,
       maxTokens: Math.min(configured?.maxTokens || 850, 850),
     })
     const response: unknown = await provider.generateJSON(

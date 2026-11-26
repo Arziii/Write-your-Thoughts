@@ -8,15 +8,16 @@ import SearchModal from '../components/ui/SearchModal'
 import { cn } from '../utils'
 
 export default function AppLayout() {
-  const { panelState, focusMode, currentBook } = useWorkspaceStore()
+  const { panelState, focusMode, mapEditorFocused, currentBook } = useWorkspaceStore()
   const isMaps = useWorkspaceStore(state => state.tabs.some(tab => tab.id === state.activeTabId && tab.type === 'maps'))
   const workspaceRoot = useMatch('/')
+  const studio = useMatch('/ai-chat')
   const route = useMatch('/book/:bookId/*')
   const searchableBook = currentBook && (workspaceRoot || route?.params.bookId === currentBook.id)
     ? currentBook
     : null
   const [searchBookId, setSearchBookId] = useState<string | null>(null)
-  const bookId = searchableBook?.id
+  const bookId = mapEditorFocused ? undefined : searchableBook?.id
 
   useEffect(() => {
     if (!bookId) return
@@ -51,9 +52,10 @@ export default function AppLayout() {
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <div
+          hidden={mapEditorFocused}
           className={cn(
             'panel-transition overflow-hidden flex-shrink-0',
-            panelState.sidebarOpen && !focusMode ? 'w-60' : 'w-0 opacity-0'
+            panelState.sidebarOpen && !focusMode && !mapEditorFocused ? 'w-60' : 'w-0 opacity-0'
           )}
         >
           <Sidebar />
@@ -68,7 +70,7 @@ export default function AppLayout() {
         <div
           className={cn(
             'panel-transition overflow-hidden flex-shrink-0 border-l',
-            (panelState.aiPanelOpen && !focusMode && isEditorRoute && !isMaps)
+            (panelState.aiPanelOpen && !focusMode && isEditorRoute && !isMaps && !studio)
               ? 'w-80 border-surface-800' 
               : 'w-0 opacity-0 border-transparent'
           )}
@@ -77,7 +79,7 @@ export default function AppLayout() {
         </div>
       </div>
 
-      {searchableBook && searchBookId === searchableBook.id && (
+      {!mapEditorFocused && searchableBook && searchBookId === searchableBook.id && (
         <SearchModal book={searchableBook} onClose={() => setSearchBookId(null)} />
       )}
     </div>

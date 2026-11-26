@@ -648,6 +648,14 @@ function createTables(): void {
   `)
 
   database.run(`
+    CREATE TABLE IF NOT EXISTS timeline_analyses (
+      book_id TEXT PRIMARY KEY,
+      input_key TEXT NOT NULL,
+      FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
+    )
+  `)
+
+  database.run(`
     CREATE TABLE IF NOT EXISTS timeline_events (
       id TEXT PRIMARY KEY,
       book_id TEXT NOT NULL,

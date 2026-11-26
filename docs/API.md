@@ -1,62 +1,15 @@
-# API Reference (IPC Bridge)
+# Electron IPC API
 
-Because **Write Your Thoughts** is an Electron application, the React frontend cannot securely or natively communicate with the local file system or SQLite database. All database interactions must pass through the IPC Bridge exposed to the `window` object.
+[app/src/preload/index.ts](../app/src/preload/index.ts) is the actual `window.api` surface. [Main registration](../app/src/main/ipc/handlers.ts) and individual files in `app/src/main/ipc/` define channel behavior. [Renderer declarations](../app/src/renderer/src/types/electron.d.ts) and the [browser shim](../app/src/renderer/src/services/browserApiMock.ts) are separate checks when changing it.
 
-## The `window.api` Object
+| Namespace group | Responsibility |
+| --- | --- |
+| `window`, `system`, `auth`, `settings` | Window and deep-link events, local account metadata and settings |
+| `books`, `chapters`, `editor`, `comments`, `search` | Manuscript state, save, versions, search and annotations |
+| `database` | Queue and entity sync helpers, snapshot read and restore |
+| `maps`, `characters`, `locations`, `referencePages`, `entities` | Map metadata and pins, records, rich details and ordering |
+| `notes`, `codex`, `wiki`, `organizations`, `worldRules`, `storyBible` | Worldbuilding operations. See the preload for related profile and analysis namespaces |
+| `timeline`, `timelineEvents`, `timelineSettings`, `verseTimeline` | Timeline, analysis, settings and the separate Verse timeline |
+| `export`, `kokoro`, `localAI`, `studioImages`, `plugins` | Main-only filesystem, voice, loopback services and partial plugin file support |
 
-The preload script (`app/src/preload/index.ts`) exposes the `window.api` object to the frontend. This is your primary way of fetching and mutating data.
-
-### Example Usage
-
-```typescript
-// Fetching all books
-const books = await window.api.books.getAll();
-
-// Saving a chapter
-const updatedChapter = await window.api.chapters.update(chapterId, {
-  content: "<p>New draft content</p>",
-  updated_at: new Date().toISOString()
-});
-```
-
----
-
-## Namespaces
-
-### `window.api.books`
-- `getAll()`: Returns `Promise<Book[]>`
-- `getById(id)`: Returns `Promise<Book>`
-- `create(data)`: Returns `Promise<Book>`
-- `update(id, data)`: Returns `Promise<Book>`
-- `delete(id)`: Returns `Promise<boolean>`
-
-### `window.api.chapters`
-- `getAll(bookId)`: Returns `Promise<Chapter[]>`
-- `getById(id)`: Returns `Promise<Chapter>`
-- `create(data)`: Returns `Promise<Chapter>`
-- `update(id, data)`: Returns `Promise<Chapter>`
-- `delete(id)`: Returns `Promise<boolean>`
-
-### `window.api.characters`
-*(Follows standard CRUD pattern)*
-- `getAll(bookId)`
-- `create(data)`
-- `update(id, data)`
-- `delete(id)`
-
-### `window.api.locations`, `organizations`, `timeline`, `rules`
-*(Follow standard CRUD pattern, scoped by `bookId`)*
-
-### `window.api.sync`
-- `triggerManualSync()`: Forces the background sync engine to evaluate the queue.
-- `getQueueStatus()`: Returns the number of pending mutations.
-
----
-
-## Defining New APIs
-
-If you add a new database table (e.g., `magic_spells`), you must:
-1. Update the SQLite schema in `main/database/`.
-2. Add IPC handlers in `main/ipcHandlers.ts` using `ipcMain.handle()`.
-3. Expose the new methods in `preload/index.ts` using `contextBridge`.
-4. Add the types to `window.api` in the global declaration file so TypeScript can infer the return types.
+For example, `window.api.chapters.getByBook(bookId)` reads chapters and `window.api.chapters.save({ id, content, wordCount })` queues an edit through the desktop handler. Validate user-derived input in main. Keep renderer-facing callbacks removable and test genuine Electron when changing a native capability.

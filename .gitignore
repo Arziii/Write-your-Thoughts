@@ -1,3 +1,4 @@
 .agents/
 assets/Screenshot.png
 skills-lock.json
+/app/build/voices/

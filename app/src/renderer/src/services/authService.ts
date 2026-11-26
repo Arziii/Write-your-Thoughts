@@ -1,4 +1,5 @@
-import { supabase } from './supabase'
+import { authStorageKey, supabase } from './supabase'
+import type { Session } from '@supabase/supabase-js'
 import type { User } from '../types'
 
 import { syncService } from './syncService'
@@ -81,34 +82,6 @@ export const authService = {
       }
       // ── End smart cloud restore ─────────────────────────────────────────
 
-      if (!restoredFromCloud) {
-        // DB was NOT replaced — apply any cloud settings on top of local data
-        const result = await syncService.fetchCloudSettings()
-        if (result.success && result.settings) {
-          const s = result.settings
-          const localSettings: any = await window.api.settings.get(data.user.id)
-          const mergedAiApiKey = s.ai_api_key || localSettings?.ai_api_key
-          const mergedAiStylePrompt = s.ai_style_prompt || localSettings?.ai_style_prompt
-
-          const updated: any = await window.api.settings.update({
-            userId: data.user.id,
-            theme: s.theme,
-            accentColor: s.accent_color,
-            editorFont: s.editor_font,
-            fontSize: s.font_size,
-            lineSpacing: s.line_spacing,
-            aiProvider: s.ai_provider,
-            aiApiKey: mergedAiApiKey,
-            aiStylePrompt: mergedAiStylePrompt,
-            preserveFormatting: s.preserve_formatting === 1 || s.preserve_formatting === true,
-            autosaveInterval: s.autosave_interval
-          })
-
-          if (!s.ai_api_key && mergedAiApiKey) {
-            syncService.syncSettingsToCloud(updated as any).catch(e => console.error('Cloud sync failed', e))
-          }
-        }
-      }
     }
 
     return { ...data, restoredFromCloud }
@@ -137,6 +110,11 @@ export const authService = {
   },
 
   async signOut() {
+    if (!navigator.onLine && !window.api.isMock) {
+      await supabase.auth.stopAutoRefresh()
+      for (const suffix of ['-user', '-code-verifier', '']) localStorage.removeItem(authStorageKey + suffix)
+      return
+    }
     const { error } = await supabase.auth.signOut()
     if (error) throw error
   },
@@ -144,6 +122,19 @@ export const authService = {
   async getSession() {
     const { data: { session } } = await supabase.auth.getSession()
     return session
+  },
+
+  async getOfflineUser() {
+    if (window.api.isMock) return null
+    try {
+      const session: Session | null = JSON.parse(localStorage.getItem(authStorageKey) ?? 'null')
+      // Reuse the existing desktop session for SQLite only. Cloud calls still use Supabase.
+      if (!session?.access_token || !session.refresh_token || !session.user?.id) return null
+      const storedUser = await window.api.auth.getStoredUser(session.user.id)
+      return storedUser ? session.user : null
+    } catch {
+      return null
+    }
   },
 
   async getUser() {

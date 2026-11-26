@@ -6,7 +6,7 @@ import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useToastStore } from '../../stores/toastStore'
 import { cn, formatDate } from '../../utils'
 import Modal from '../../components/ui/Modal'
-import type { Book, Chapter } from '../../types'
+import type { Book } from '../../types'
 import { uploadImage, deleteImage } from '../../services/storageService'
 import { authService } from '../../services/authService'
 
@@ -19,7 +19,7 @@ const statusColors: Record<string, string> = {
 
 export default function Dashboard() {
   const { user, localUser, setLocalUser } = useUserStore()
-  const { books, addBook, updateBook, setCurrentBook, setChapters } = useWorkspaceStore()
+  const { books, addBook, updateBook } = useWorkspaceStore()
   const { addToast } = useToastStore()
   const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -58,10 +58,7 @@ export default function Dashboard() {
     .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
     .slice(0, 6)
 
-  const openBook = async (book: Book) => {
-    setCurrentBook(book)
-    const chapters = await window.api.chapters.getByBook(book.id)
-    setChapters(chapters as Chapter[])
+  const openBook = (book: Book) => {
     navigate(`/book/${book.id}`)
   }
 

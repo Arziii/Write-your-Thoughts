@@ -4,6 +4,7 @@ import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useUserStore } from '../../stores/userStore'
 import { useToastStore } from '../../stores/toastStore'
 import { aiService } from '../../services/aiService'
+import { getAIConfigurationError } from '../../services/ai/configuration'
 import { useStoryBibleStore } from '../../stores/storyBibleStore'
 import { cn } from '../../utils'
 import { EditorToolPanel, PanelAnalyzeButton, PanelEmptyState, panelButton, panelCard } from './EditorToolPanel'
@@ -22,11 +23,12 @@ export default function WorldbuildingAnalyzerPanel({ chapterId, onClose }: { cha
   const activeChapter = chapters.find(c => c.id === chapterId)
 
   const handleAnalyze = async () => {
-    if (!activeChapter || !settings?.ai_api_key) {
-      if (!settings?.ai_api_key) {
-        addToast('Set your AI API key in Settings first', 'warning')
-        return
-      }
+    const configurationError = getAIConfigurationError(settings)
+    if (!settings || configurationError) {
+      addToast(configurationError ?? 'Open Settings to configure an AI provider.', 'warning')
+      return
+    }
+    if (!activeChapter) {
       addToast('Open a chapter to analyze', 'info')
       return
     }

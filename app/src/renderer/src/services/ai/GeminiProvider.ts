@@ -47,7 +47,7 @@ export class GeminiProvider extends BaseProvider {
     return availableModels.find(m => m.includes('gemini'))?.replace('models/', '') || defaultModel
   }
 
-  async generateText(systemPrompt: string, messages: AIBrainstormMessage[]): Promise<ProviderResponse> {
+  async generateText(systemPrompt: string, messages: AIBrainstormMessage[], signal?: AbortSignal): Promise<ProviderResponse> {
     if (!this.settings.apiKey) throw new Error('Missing API Key')
     let apiKey = this.settings.apiKey.trim()
     
@@ -77,6 +77,7 @@ export class GeminiProvider extends BaseProvider {
         `https://generativelanguage.googleapis.com/v1beta/models/${cleanModelName}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
+          signal,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(bodyObj),
         }

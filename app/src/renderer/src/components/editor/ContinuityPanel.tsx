@@ -6,6 +6,7 @@ import { useUserStore } from '../../stores/userStore'
 import { Plus, Trash2, Shield, AlertTriangle, BookOpen, CheckCircle, ChevronDown } from 'lucide-react'
 import { useToastStore } from '../../stores/toastStore'
 import { aiService } from '../../services/aiService'
+import { getAIConfigurationError } from '../../services/ai/configuration'
 import type { ContinuityWarning } from '../../types'
 import { cn } from '../../utils'
 import { EditorToolPanel, PanelAnalyzeButton, PanelEmptyState, panelButton, panelCard, panelField, panelIconButton } from './EditorToolPanel'
@@ -96,8 +97,9 @@ export default function ContinuityPanel({ chapterId, onClose }: { chapterId: str
   const activeChapter = chapters.find(c => c.id === chapterId)
 
   const handleAnalyzeContinuity = async () => {
-    if (!settings?.ai_api_key) {
-      addToast('Please set your AI API Key in Settings first', 'error')
+    const configurationError = getAIConfigurationError(settings)
+    if (!settings || configurationError) {
+      addToast(configurationError ?? 'Open Settings to configure an AI provider.', 'warning')
       return
     }
     if (!activeChapter?.content) {

@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
-import { useStoryBibleStore } from '../../stores/storyBibleStore'
 import { useToastStore } from '../../stores/toastStore'
 import type { Relationship } from '../../types'
 
@@ -44,20 +43,13 @@ function InitialsAvatar({ name, size = 56 }: { name: string; size?: number }) {
     .slice(0, 2)
     .toUpperCase()
 
-  const colors = [
-    '#3b82f6', '#8b5cf6', '#ec4899', '#f97316',
-    '#14b8a6', '#22c55e', '#ef4444', '#a855f7',
-  ]
-  const idx = name.charCodeAt(0) % colors.length
-  const bg = colors[idx]
-
   return (
     <div
       style={{
         width: size, height: size, borderRadius: '50%',
-        background: bg, display: 'flex', alignItems: 'center',
+        background: 'hsl(var(--brand-green-bg))', display: 'flex', alignItems: 'center',
         justifyContent: 'center', fontSize: size * 0.33, fontWeight: 700,
-        color: '#fff', userSelect: 'none', flexShrink: 0,
+        color: 'hsl(var(--brand-green))', userSelect: 'none', flexShrink: 0,
       }}
     >
       {initials}
@@ -128,12 +120,11 @@ function Arrow({
 // ── Main Component ──────────────────────────────────────────────────
 export default function RelationshipGraphView() {
   const { characters, openTab, currentBook } = useWorkspaceStore()
-  const { relationships, setRelationships, addRelationship, removeRelationship } = useStoryBibleStore()
   const { addToast } = useToastStore()
 
   const canvasRef = useRef<HTMLDivElement>(null)
   const [canvasSize, setCanvasSize] = useState({ w: 900, h: 600 })
-  const [nodePositions, setNodePositions] = useState<Record<string, NodePos>>({})
+  const [nodeOffsets, setNodeOffsets] = useState<Record<string, NodePos>>({})
   const [allRelationships, setAllRelationships] = useState<Relationship[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -157,6 +148,8 @@ export default function RelationshipGraphView() {
   const panRef = useRef({ x: 0, y: 0, dragging: false, startX: 0, startY: 0 })
   const [pan, setPan] = useState({ x: 0, y: 0 })
 
+  const hasCharacters = characters.length > 0
+
   // Measure canvas
   useEffect(() => {
     if (!canvasRef.current) return
@@ -167,7 +160,7 @@ export default function RelationshipGraphView() {
     })
     ro.observe(canvasRef.current)
     return () => ro.disconnect()
-  }, [])
+  }, [hasCharacters])
 
   // Load relationships
   useEffect(() => {
@@ -188,48 +181,63 @@ export default function RelationshipGraphView() {
     }
   }
 
-  // Initial layout: first character in center, rest in a circle around it
-  useEffect(() => {
-    if (!characters.length) return
-    const cx = canvasSize.w / 2
-    const cy = canvasSize.h / 2
-    const radius = Math.min(canvasSize.w, canvasSize.h) * 0.32
+  const characterIds = useMemo(() => new Set(characters.map(character => character.id)), [characters])
+  const links = allRelationships.filter(link =>
+    characterIds.has(link.source_character_id) && characterIds.has(link.target_character_id)
+  )
+  const linkedIds = new Set(links.flatMap(link => [link.source_character_id, link.target_character_id]))
+  const linkedCharacters = [...linkedIds]
+    .map(id => characters.find(character => character.id === id)!)
+  const unlinkedCharacters = characters.filter(character => !linkedIds.has(character.id))
+  const columns = Math.min(linkedCharacters.length, Math.max(1, Math.floor(canvasSize.w / 150)))
+  const rows = Math.ceil(linkedCharacters.length / Math.max(1, columns))
+  const nodePositions = Object.fromEntries(linkedCharacters.map((character, index) => {
+    const row = Math.floor(index / columns)
+    const rowLength = Math.min(columns, linkedCharacters.length - row * columns)
+    const offset = nodeOffsets[character.id]
+    return [character.id, {
+      x: canvasSize.w / 2 + (index % columns - (rowLength - 1) / 2) * 150 + (offset?.x ?? 0),
+      y: Math.max(65, canvasSize.h / 2 - 14 - (rows - 1) * 60) + row * 120 + (offset?.y ?? 0),
+    }]
+  }))
 
-    const positions: Record<string, NodePos> = {}
+  const nodeMoved = useRef(false)
 
-    characters.forEach((char, idx) => {
-      if (idx === 0) {
-        positions[char.id] = { x: cx, y: cy }
-      } else {
-        const angle = ((idx - 1) / (characters.length - 1)) * 2 * Math.PI
-        positions[char.id] = {
-          x: cx + radius * Math.cos(angle),
-          y: cy + radius * Math.sin(angle),
-        }
-      }
-    })
-
-    setNodePositions(positions)
-  }, [characters, canvasSize])
-
-  // ── Drag handlers ───────────────────────────────────────────────────
-  const onNodeMouseDown = useCallback((e: React.MouseEvent, charId: string) => {
+  function onNodeMouseDown(e: React.MouseEvent, charId: string) {
+    if (e.button !== 0) return
     e.stopPropagation()
-    const pos = nodePositions[charId] || { x: 0, y: 0 }
+    nodeMoved.current = false
+    const offset = nodeOffsets[charId] ?? { x: 0, y: 0 }
     dragRef.current = {
       characterId: charId,
       startMouseX: e.clientX,
       startMouseY: e.clientY,
-      startNodeX: pos.x,
-      startNodeY: pos.y,
+      startNodeX: offset.x,
+      startNodeY: offset.y,
     }
-  }, [nodePositions])
+  }
+
+  function startRelationship(sourceId: string) {
+    setEditModal({
+      rel: null,
+      isNew: true,
+      sourceId,
+      targetId: '',
+      type: 'Friend',
+      trustLevel: 5,
+      affectionLevel: 5,
+      history: '',
+      currentState: '',
+    })
+  }
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
       if (dragRef.current) {
         const { characterId, startMouseX, startMouseY, startNodeX, startNodeY } = dragRef.current
-        setNodePositions(prev => ({
+        if (!nodeMoved.current && Math.hypot(e.clientX - startMouseX, e.clientY - startMouseY) < 4) return
+        nodeMoved.current = true
+        setNodeOffsets(prev => ({
           ...prev,
           [characterId]: {
             x: startNodeX + (e.clientX - startMouseX),
@@ -274,7 +282,7 @@ export default function RelationshipGraphView() {
         addToast('Relationship updated', 'success')
       } else {
         // Create new
-        if (!editModal.targetId) return
+        if (!editModal.targetId || editModal.targetId === editModal.sourceId) return
         const created = await window.api.relationships.upsert({
           book_id: currentBook.id,
           source_character_id: editModal.sourceId,
@@ -315,30 +323,15 @@ export default function RelationshipGraphView() {
     )
   }
 
-  // Collect all unique arrow colors for defs
-  const usedColors = Array.from(new Set(allRelationships.map(r => getRelColor(r.relationship_type))))
-
   return (
-    <div className="flex flex-col h-full" style={{ background: '#f0ece4' }}>
-      {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b flex-shrink-0" style={{ borderColor: '#d3ccbe', background: '#f6f1e9' }}>
-        <h2 className="text-sm font-bold" style={{ color: '#2d5a27', fontFamily: '"Playfair Display", serif' }}>Character Relationship Map</h2>
+    <div className="studio-desk flex h-full flex-col">
+      <div className="studio-chapter-toolbar flex shrink-0 flex-wrap items-center justify-between gap-2 px-4 py-2">
+        <h2 className="font-serif text-sm font-semibold text-[hsl(var(--brand-green))]">Character Relationship Map</h2>
         <button
-          onClick={() => {
-            if (!characters.length) return
-            setEditModal({
-              rel: null,
-              isNew: true,
-              sourceId: characters[0].id,
-              targetId: '',
-              type: 'Friend',
-              trustLevel: 5,
-              affectionLevel: 5,
-              history: '',
-              currentState: '',
-            })
-          }}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-600 hover:bg-accent-500 text-white text-xs font-semibold rounded-lg transition-colors"
+          type="button"
+          disabled={characters.length < 2 || loading}
+          onClick={() => startRelationship(characters[0].id)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-600 hover:bg-accent-500 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
         >
           + Add Relationship
         </button>
@@ -348,7 +341,6 @@ export default function RelationshipGraphView() {
       <div
         ref={canvasRef}
         className="flex-1 relative overflow-hidden select-none"
-        style={{ background: '#f0ece4' }}
         onMouseDown={e => {
           if (e.target === canvasRef.current || (e.target as HTMLElement).tagName === 'svg') {
             panRef.current = { x: pan.x, y: pan.y, dragging: true, startX: e.clientX, startY: e.clientY }
@@ -367,7 +359,7 @@ export default function RelationshipGraphView() {
           style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', zIndex: 1 }}
         >
           <g transform={`translate(${pan.x}, ${pan.y})`} style={{ pointerEvents: 'auto' }}>
-            {allRelationships.map(rel => {
+            {links.map(rel => {
               const src = nodePositions[rel.source_character_id]
               const tgt = nodePositions[rel.target_character_id]
               if (!src || !tgt) return null
@@ -393,14 +385,14 @@ export default function RelationshipGraphView() {
         {/* Character nodes */}
         <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2 }}>
           <div style={{ transform: `translate(${pan.x}px, ${pan.y}px)`, position: 'absolute', top: 0, left: 0 }}>
-            {characters.map((char, idx) => {
+            {linkedCharacters.map(char => {
               const pos = nodePositions[char.id]
               if (!pos) return null
-              const isCenter = idx === 0
-              const nodeSize = isCenter ? 72 : 56
-              const labelColor = isCenter ? '#3b82f6' : '#1e293b'
+              const nodeSize = 56
               return (
-                <div
+                <button
+                  type="button"
+                  title={char.name}
                   key={char.id}
                   style={{
                     position: 'absolute',
@@ -412,12 +404,12 @@ export default function RelationshipGraphView() {
                     flexDirection: 'column',
                     alignItems: 'center',
                     gap: 6,
-                    zIndex: isCenter ? 10 : 5,
+                    zIndex: 5,
                     pointerEvents: 'auto',
                   }}
                   onMouseDown={e => onNodeMouseDown(e, char.id)}
-                  onClick={(e) => {
-                    if (dragRef.current) return
+                  onClick={(event) => {
+                    if (event.detail && nodeMoved.current) return
                     openTab(char.id, 'character', char.name)
                   }}
                 >
@@ -425,8 +417,8 @@ export default function RelationshipGraphView() {
                   <div style={{
                     width: nodeSize, height: nodeSize,
                     borderRadius: '50%',
-                    border: isCenter ? '3px solid #3b82f6' : '2px solid #cbd5e1',
-                    boxShadow: isCenter ? '0 0 0 4px rgba(59,130,246,0.25)' : '0 2px 8px rgba(0,0,0,0.12)',
+                    border: '2px solid hsl(var(--studio-edge))',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
                     overflow: 'hidden',
                     background: '#e2e8f0',
                     display: 'flex',
@@ -442,13 +434,13 @@ export default function RelationshipGraphView() {
                   </div>
                   {/* Name label */}
                   <div style={{
-                    background: 'white',
-                    border: '1px solid #e2e8f0',
+                    background: 'hsl(var(--studio-paper))',
+                    border: '1px solid hsl(var(--studio-edge))',
                     borderRadius: 8,
                     padding: '2px 8px',
                     fontSize: 11,
-                    fontWeight: isCenter ? 700 : 600,
-                    color: labelColor,
+                    fontWeight: 600,
+                    color: 'hsl(var(--studio-ink))',
                     whiteSpace: 'nowrap',
                     boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
                     maxWidth: 120,
@@ -456,53 +448,43 @@ export default function RelationshipGraphView() {
                     textOverflow: 'ellipsis',
                   }}>
                     {char.name}
-                    {isCenter && (
-                      <span style={{ marginLeft: 4, fontSize: 9, color: '#3b82f6', fontWeight: 400 }}>• Center</span>
-                    )}
                   </div>
-                </div>
+                </button>
               )
             })}
           </div>
         </div>
 
-        {/* Legend */}
-        <div style={{
-          position: 'absolute', bottom: 16, left: 16,
-          background: '#fffefb',
-          border: '1px solid #d3ccbe',
-          borderRadius: 12,
-          padding: '10px 14px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 5,
-          boxShadow: '0 4px 12px rgba(45,90,39,0.08)',
-        }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Legend</div>
-          {REL_TYPES.map(rt => (
-            <div key={rt.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 28, height: 2, background: rt.color, borderRadius: 2, position: 'relative' }}>
-                <div style={{
-                  position: 'absolute', right: -4, top: -4,
-                  width: 0, height: 0,
-                  borderTop: '5px solid transparent',
-                  borderBottom: '5px solid transparent',
-                  borderLeft: `7px solid ${rt.color}`,
-                }} />
-              </div>
-              <span style={{ fontSize: 11, fontWeight: 600, color: rt.color }}>{rt.label}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Hint */}
-        <div style={{
-          position: 'absolute', bottom: 16, right: 16,
-          fontSize: 10, color: '#94a3b8', textAlign: 'right',
-        }}>
-          Drag nodes to rearrange · Click arrows to edit · Click nodes to open profile
-        </div>
+        {!loading && links.length === 0 && (
+          <p className="absolute inset-0 grid place-content-center px-4 text-center text-sm text-surface-500">
+            {characters.length < 2 ? 'Add another character to create a relationship.' : 'Add a relationship to connect your characters.'}
+          </p>
+        )}
       </div>
+
+      {!loading && unlinkedCharacters.length > 0 && (
+        <section className="studio-chapter-toolbar shrink-0 border-t border-[hsl(var(--studio-edge))] px-4 py-3" aria-label="Unlinked characters">
+          <h3 className="mb-2 text-xs font-semibold text-surface-400">Unlinked · {unlinkedCharacters.length}</h3>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {unlinkedCharacters.map(character => (
+              <button
+                key={character.id}
+                type="button"
+                onClick={() => startRelationship(character.id)}
+                disabled={characters.length < 2}
+                title={`Add a relationship for ${character.name}`}
+                className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[hsl(var(--studio-edge))] bg-[hsl(var(--studio-paper))] py-1 pl-1 pr-3 text-xs text-surface-200 hover:bg-[hsl(var(--brand-green-bg))] disabled:opacity-60"
+              >
+                {character.image_url
+                  ? <img src={character.image_url} alt="" className="h-6 w-6 rounded-full object-cover" />
+                  : <InitialsAvatar name={character.name} size={24} />}
+                {character.name}
+                <span aria-hidden="true">+</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Edit Modal */}
       {editModal && (
@@ -525,7 +507,11 @@ export default function RelationshipGraphView() {
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">From Character</label>
               <select
                 value={editModal.sourceId}
-                onChange={e => setEditModal(m => m && { ...m, sourceId: e.target.value })}
+                onChange={e => setEditModal(m => m && {
+                  ...m,
+                  sourceId: e.target.value,
+                  targetId: m.targetId === e.target.value ? '' : m.targetId,
+                })}
                 disabled={!editModal.isNew}
                 className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:outline-none focus:border-blue-400"
                 style={{ color: '#0f172a' }}
@@ -631,7 +617,8 @@ export default function RelationshipGraphView() {
               </button>
               <button
                 onClick={saveEditModal}
-                className="px-4 py-2 rounded-lg text-sm font-semibold bg-accent-600 text-white hover:bg-accent-500 transition-colors"
+                disabled={!editModal.targetId || editModal.sourceId === editModal.targetId}
+                className="px-4 py-2 rounded-lg text-sm font-semibold bg-accent-600 text-white hover:bg-accent-500 transition-colors disabled:opacity-50"
               >
                 Save
               </button>

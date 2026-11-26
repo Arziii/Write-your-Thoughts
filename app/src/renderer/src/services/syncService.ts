@@ -6,6 +6,8 @@ const SYNC_INTERVAL = 60_000
 const BACKUP_INTERVAL = 24 * 60 * 60_000
 const BACKUP_IDLE = 5 * 60_000
 let inFlight: Promise<{ success: boolean; error?: string }> | undefined
+const settingsSync = new Map<string, Promise<void>>()
+const settingsQueueKey = (userId: string) => 'wyt-pending-settings-' + userId
 
 export function scheduleCloudSync(changedAt = Date.now(), userId = useUserStore.getState().user?.id) {
   if (!userId || !Number.isFinite(changedAt)) return
@@ -47,6 +49,7 @@ export function startCloudSyncScheduler() {
       await syncNow(false)
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.user) return
+      await syncService.flushPendingSettings(session.user.id)
       const key = `wyt-db-last-backup-${session.user.id}`
       const lastBackup = Number(localStorage.getItem(key)) || 0
       const lastChange = Number(localStorage.getItem('wyt-db-last-change-' + session.user.id)) || 0
@@ -194,6 +197,7 @@ export const syncService = {
   },
 
   async getSharedBooks() {
+    if (!navigator.onLine) return []
     const { data: { session } } = await supabase.auth.getSession()
     const userData = { user: session?.user }
     if (!userData.user) return []
@@ -227,23 +231,45 @@ export const syncService = {
   },
 
   async syncSettingsToCloud(localSettings: import('../types').Settings) {
+    localStorage.setItem(settingsQueueKey(localSettings.user_id), crypto.randomUUID())
+    await this.flushPendingSettings(localSettings.user_id)
+  },
+
+  hasPendingSettings(userId: string) {
+    return localStorage.getItem(settingsQueueKey(userId)) !== null
+  },
+
+  async flushPendingSettings(userId: string) {
+    if (!navigator.onLine || window.api.isMock || !this.hasPendingSettings(userId)) return
+    const running = settingsSync.get(userId)
+    if (running) return running
+    const task = this.pushPendingSettings(userId).finally(() => settingsSync.delete(userId))
+    settingsSync.set(userId, task)
+    return task
+  },
+
+  async pushPendingSettings(userId: string) {
     const { data: { session } } = await supabase.auth.getSession()
-    const userData = { user: session?.user }
-    if (!userData.user) return { success: false }
+    if (session?.user.id !== userId) return
 
-    const { error } = await supabase
-      .from('cloud_settings')
-      .upsert({
-        user_id: userData.user.id,
+    const key = settingsQueueKey(userId)
+    while (navigator.onLine) {
+      const revision = localStorage.getItem(key)
+      if (!revision) return
+      const localSettings = await window.api.settings.get(userId)
+      if (!localSettings) return
+
+      const { error } = await supabase.from('cloud_settings').upsert({
+        user_id: userId,
         settings: localSettings,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' })
-
-    if (error) {
-      console.error('Failed to sync settings to cloud:', error)
-      return { success: false, error: error.message }
+      if (error) {
+        console.error('Failed to sync settings to cloud:', error)
+        return
+      }
+      if (localStorage.getItem(key) === revision) localStorage.removeItem(key)
     }
-    return { success: true }
   },
 
   async fetchCloudSettings() {

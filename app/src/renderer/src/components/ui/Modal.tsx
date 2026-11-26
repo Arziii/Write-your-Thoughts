@@ -5,22 +5,23 @@ import { cn } from '../../utils'
 interface ModalProps {
   isOpen: boolean
   onClose: () => void
+  closeDisabled?: boolean
   title: string
   children: React.ReactNode
   size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl' | 'full'
   className?: string
 }
 
-export default function Modal({ isOpen, onClose, title, children, size = 'md', className }: ModalProps) {
+export default function Modal({ isOpen, onClose, closeDisabled = false, title, children, size = 'md', className }: ModalProps) {
   // Close on Escape
   useEffect(() => {
-    if (!isOpen) return
+    if (!isOpen || closeDisabled) return
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [isOpen, onClose])
+  }, [isOpen, onClose, closeDisabled])
 
   if (!isOpen) return null
 
@@ -39,7 +40,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', c
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      onClick={(e) => !closeDisabled && e.target === e.currentTarget && onClose()}
     >
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" />
@@ -56,8 +57,10 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', c
         <div className="flex items-center justify-between px-5 py-4 border-b border-surface-700 shrink-0">
           <h2 className="text-base font-semibold text-surface-100">{title}</h2>
           <button
+            aria-label="Close dialog"
+            disabled={closeDisabled}
             onClick={onClose}
-            className="text-surface-500 hover:text-surface-200 transition-colors rounded-md p-1 hover:bg-surface-700"
+            className="text-surface-500 hover:text-surface-200 transition-colors rounded-md p-1 hover:bg-surface-700 disabled:opacity-40"
           >
             <X className="w-4 h-4" />
           </button>

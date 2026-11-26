@@ -148,7 +148,7 @@ export default function RichEditor({ chapterId, initialContent, onContentChange 
       <EditorFindToolbar editor={editor} chapterId={chapterId} />
       {/* Toolbar */}
       <div className="studio-chapter-toolbar shrink-0">
-        <EditorToolbar editor={editor} saveStatus={saving.status} onSave={saving.save} />
+        <EditorToolbar editor={editor} saveStatus={saving.status} onSave={saving.save} showReadAloud />
       </div>
 
       {/* Editor canvas */}

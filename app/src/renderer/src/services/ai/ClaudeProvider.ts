@@ -56,7 +56,7 @@ export class ClaudeProvider extends BaseProvider {
     return availableModels[0] || defaultModel
   }
 
-  async generateText(systemPrompt: string, messages: AIBrainstormMessage[]): Promise<ProviderResponse> {
+  async generateText(systemPrompt: string, messages: AIBrainstormMessage[], signal?: AbortSignal): Promise<ProviderResponse> {
     if (!this.settings.apiKey) throw new Error('Missing API Key')
     let apiKey = this.settings.apiKey.trim()
     
@@ -73,6 +73,7 @@ export class ClaudeProvider extends BaseProvider {
     let response: Response
     try {
       response = await fetch('https://api.anthropic.com/v1/messages', {
+        signal,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

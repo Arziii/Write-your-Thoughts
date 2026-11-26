@@ -111,7 +111,8 @@ body {
   --studio-paper: 45 49% 97%;
   --studio-header: 43 32% 95%;
   --studio-toolbar: 43 23% 92%;
-  --studio-tabs: 98 12% 88%;
+  --studio-tabs: 100 12% 90%;
+  --studio-tab-active: 43 32% 97%;
   --studio-edge: 42 16% 76%;
   --studio-shadow: 35 33% 24%;
   --studio-ink: 38 18% 15%;
@@ -122,7 +123,8 @@ body {
   --studio-paper: 42 8% 23%;
   --studio-header: 45 7% 22%;
   --studio-toolbar: 44 7% 19%;
-  --studio-tabs: 65 6% 17%;
+  --studio-tabs: 48 7% 16%;
+  --studio-tab-active: 46 8% 26%;
   --studio-edge: 46 7% 31%;
   --studio-shadow: 0 0% 0%;
   --studio-ink: 42 18% 84%;
@@ -131,13 +133,20 @@ body {
 .studio-tab-strip {
   background: hsl(var(--studio-tabs));
   border-bottom: 1px solid hsl(var(--studio-edge));
+  scrollbar-width: thin;
+}
+
+.studio-tab:hover {
+  background: hsl(var(--studio-tab-active) / 0.55);
+  color: hsl(var(--surface-100));
 }
 
 .studio-tab[data-active='true'] {
-  background: hsl(var(--studio-header));
+  background: hsl(var(--studio-tab-active));
   border-color: hsl(var(--studio-edge));
-  box-shadow: inset 0 2px hsl(var(--brand-green));
+  box-shadow: 0 1px 2px hsl(var(--studio-shadow) / 0.1);
   color: hsl(var(--studio-ink));
+  font-weight: 600;
 }
 
 .studio-chapter-header {
@@ -188,6 +197,125 @@ body {
 
 .reference-workspace {
   background: linear-gradient(165deg, hsl(var(--studio-header)), hsl(var(--studio-desk)) 55%);
+}
+
+.reference-profile {
+  color: hsl(var(--studio-ink));
+  background: linear-gradient(165deg, hsl(var(--studio-paper)), hsl(var(--studio-header)));
+  container-type: inline-size;
+}
+
+.profile-worksheet {
+  --worksheet-paper: hsl(var(--studio-header));
+  --worksheet-panel: hsl(var(--studio-paper));
+  --worksheet-edge: hsl(var(--studio-edge));
+  --worksheet-ink: hsl(var(--studio-ink));
+  --worksheet-muted: hsl(var(--surface-400));
+  max-width: 56rem;
+  margin-inline: auto;
+  padding: clamp(1rem, 4vw, 3rem);
+  background: var(--worksheet-paper);
+  color: var(--worksheet-ink);
+}
+
+.profile-worksheet-intro,
+.profile-worksheet-sections {
+  display: grid;
+  gap: clamp(0.75rem, 2vw, 1.25rem);
+}
+
+.profile-worksheet-sections {
+  margin-top: clamp(0.75rem, 2vw, 1.25rem);
+}
+
+.profile-worksheet-card,
+.profile-worksheet-portrait {
+  min-width: 0;
+  border: 1px solid var(--worksheet-edge);
+  border-radius: 0.7rem;
+  background: var(--worksheet-panel);
+}
+
+.profile-worksheet-card {
+  padding: clamp(0.875rem, 2vw, 1.4rem);
+}
+
+.profile-worksheet-portrait {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: min(100%, 16rem);
+  aspect-ratio: 1;
+  overflow: hidden;
+  font-size: 0.875rem;
+}
+
+@container (min-width: 42rem) {
+  .profile-worksheet-intro {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2.25fr);
+  }
+
+  .profile-worksheet-sections {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.profile-worksheet-detail {
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.profile-worksheet-heading {
+  display: block;
+  margin-bottom: 0.75rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.profile-worksheet-input {
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--worksheet-edge);
+  border-radius: 0.65rem;
+  background: hsl(var(--surface-950));
+  color: var(--worksheet-ink);
+  font-size: 0.875rem;
+}
+
+.profile-worksheet-detail input {
+  border-radius: 999px;
+}
+
+.profile-worksheet-input::placeholder {
+  color: var(--worksheet-muted);
+}
+
+.profile-prose-section {
+  min-width: 0;
+  border-top: 1px solid var(--worksheet-edge);
+  padding-top: 0.875rem;
+}
+
+.reference-growing-field.profile-prose-field::after,
+.reference-growing-field.profile-prose-field > textarea {
+  padding: 0.25rem 0.125rem;
+  font: 1rem/1.65 Georgia, serif;
+}
+
+.profile-prose-field > textarea {
+  border-color: transparent;
+  border-radius: 0.25rem;
+  background: transparent;
+}
+
+.profile-worksheet-input:focus,
+.profile-worksheet-portrait:focus-visible {
+  outline: 2px solid hsl(var(--brand-green));
+  outline-offset: 2px;
 }
 
 .reference-field-group {

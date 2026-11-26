@@ -12,9 +12,13 @@ import ResetPasswordPage from './pages/auth/ResetPasswordPage'
 import WorkspacePage from './pages/workspace/WorkspacePage'
 import AppLayout from './layouts/AppLayout'
 import SettingsPage from './pages/settings/SettingsPage'
+import ChatStudioPage from './pages/workspace/ChatStudioPage'
 import ToastContainer from './components/ui/ToastContainer'
 import { flushEditorSaves } from './hooks/useEditorSave'
-import { startCloudSyncScheduler, syncNow } from './services/syncService'
+import { activeAudiobookExports } from './services/audiobookExport'
+import { startCloudSyncScheduler, syncNow, syncService } from './services/syncService'
+import { isLocalAIProvider } from './services/ai/configuration'
+import type { User } from '@supabase/supabase-js'
 
 function App() {
   const { user, isLoading, setUser, setLocalUser, setLoading, setSettings } = useUserStore()
@@ -25,7 +29,13 @@ function App() {
 
   useEffect(() => {
     const stopSync = startCloudSyncScheduler()
-    const stopClose = window.api.window.onPrepareClose?.(flushEditorSaves)
+    const stopClose = window.api.window.onPrepareClose?.(async () => {
+      if (activeAudiobookExports.size) {
+        useToastStore.getState().addToast('Audiobook export is running. Wait for it to finish or cancel it first.', 'info')
+        return false
+      }
+      return flushEditorSaves()
+    })
     return () => {
       stopSync?.()
       stopClose?.()
@@ -35,8 +45,7 @@ function App() {
 
   useEffect(() => {
     // Deep Link Listener
-    window.api.system?.onDeepLink(async (url: string) => {
-      console.log('[DeepLink] Received:', url)
+    const stopDeepLinks = window.api.system?.onDeepLink(async (url: string) => {
       try {
         const hashParams = new URLSearchParams(url.split('#')[1])
         const accessToken = hashParams.get('access_token')
@@ -63,181 +72,57 @@ function App() {
       }
     })
 
-    // Check existing session on app launch
-    authService.getSession().then((session) => {
-      if (session?.user) {
-        setUser(session.user)
-        // Load local user details (like avatar) from SQLite
-        window.api.auth.getStoredUser(session.user.id).then((lUser) => {
-          if (lUser) setLocalUser(lUser as never)
-        })
-        // Load user settings from SQLite
-        window.api.settings.get(session.user.id).then(async (localSettings) => {
-          if (localSettings) setSettings(localSettings as never)
-
-          try {
-            const { syncService } = await import('./services/syncService')
-
-            // ── Phase 1: Push any pending local changes up ──────────────
-            await syncNow(false)
-
-            // ── Phase 3: Pull cloud data down into local SQLite ─────────
-            const pullResult = await syncService.performInitialPull()
-            if (pullResult.success && pullResult.recordsPulled > 0) {
-              // Refresh the React store from the freshly-updated SQLite DB
-              await refreshFromDb(session.user.id)
-              addToast(`Synced ${pullResult.recordsPulled} records from cloud`, 'success')
-            }
-            // Show conflict toasts if any
-            for (const conflict of pullResult.conflicts) {
-              addToast(conflict, 'info')
-            }
-
-            // ── Phase 3 & 4: Subscribe to Realtime for live updates ─────────
-            syncService.subscribeToRealtime(async (entityType, row, eventType) => {
-              if (eventType === 'DELETE') return // deletes are rare; skip for now
-              
-              if (entityType === 'workspace_state') {
-                await window.api.editor.saveWorkspaceState({
-                  userId: session.user.id,
-                  currentBookId: row.current_book_id,
-                  currentChapterId: row.current_chapter_id,
-                  openTabs: typeof row.open_tabs === 'string' ? JSON.parse(row.open_tabs) : row.open_tabs,
-                  panelState: typeof row.panel_state === 'string' ? JSON.parse(row.panel_state) : row.panel_state
-                })
-              } else {
-                await window.api.database.upsertCloudRow({ entityType, row })
-              }
-              await refreshFromDb(session.user.id)
-            })
-
-            // ── Settings sync ────────────────────────────────────────────
-            const result = await syncService.fetchCloudSettings()
-            if (result.success && result.settings) {
-              const localSettings: any = await window.api.settings.get(session.user.id)
-              const mergedAiApiKey = result.settings.ai_api_key || localSettings?.ai_api_key
-              const mergedAiStylePrompt = result.settings.ai_style_prompt || localSettings?.ai_style_prompt
-              
-              const updated = await window.api.settings.update({
-                userId: session.user.id,
-                theme: result.settings.theme,
-                accentColor: result.settings.accent_color,
-                editorFont: result.settings.editor_font,
-                fontSize: result.settings.font_size,
-                lineSpacing: result.settings.line_spacing,
-                aiProvider: result.settings.ai_provider,
-                aiApiKey: mergedAiApiKey,
-                aiStylePrompt: mergedAiStylePrompt,
-                preserveFormatting: result.settings.preserve_formatting === 1,
-                autosaveInterval: result.settings.autosave_interval
-              })
-              setSettings(updated as never)
-
-              if (!result.settings.ai_api_key && mergedAiApiKey) {
-                syncService.syncSettingsToCloud(updated as any).catch(e => console.error('Cloud sync failed', e))
-              }
-            }
-          } catch (e) {
-            console.error('Failed to sync on boot', e)
-          } finally {
-            setLoading(false)
-          }
-        })
-      } else {
-        setLoading(false)
-      }
-    }).catch((err) => {
-      console.error('Failed to get auth session on boot:', err)
-      setLoading(false)
-    })
-
-    // Listen for auth state changes
-    const { data: { subscription } } = authService.onAuthStateChange(async (event, u) => {
-      if (u) {
-        if (event === 'INITIAL_SESSION') {
-          // Handled by the getSession block on boot
+    let active = true
+    let sessionRevision = 0
+    async function openSavedSession() {
+      const revision = sessionRevision
+      try {
+        const cachedUser = await authService.getOfflineUser()
+        if (!active || revision !== sessionRevision) return
+        if (cachedUser) {
+          await openWorkspace(cachedUser, revision)
           return
         }
-
-        if (event === 'SIGNED_IN') {
-          // It's a fresh manual login. 
-          // We DO NOT call setLoading(true) so the LoginPage stays visible with its button spinner!
-          
-          try {
-            // Wait 500ms to allow authService.signIn to finish saving the local user profile
-            await new Promise(r => setTimeout(r, 500))
-
-            const lUser = await window.api.auth.getStoredUser(u.id)
-            if (lUser) setLocalUser(lUser as never)
-            
-            const result: any = await window.api.settings.get(u.id)
-            if (result) {
-              setSettings(result as never)
-            }
-
-            const { syncService } = await import('./services/syncService')
-            
-            // Pull cloud books and data
-            await syncNow(false)
-            const pullResult = await syncService.performInitialPull()
-            if (pullResult.success && pullResult.recordsPulled > 0) {
-              await refreshFromDb(u.id)
-            }
-            
-            // Subscribe to live updates
-            syncService.subscribeToRealtime(async (entityType, row, eventType) => {
-              if (eventType === 'DELETE') return
-              if (entityType === 'workspace_state') {
-                await window.api.editor.saveWorkspaceState({
-                  userId: u.id,
-                  currentBookId: row.current_book_id,
-                  currentChapterId: row.current_chapter_id,
-                  openTabs: typeof row.open_tabs === 'string' ? JSON.parse(row.open_tabs) : row.open_tabs,
-                  panelState: typeof row.panel_state === 'string' ? JSON.parse(row.panel_state) : row.panel_state
-                })
-              } else {
-                await window.api.database.upsertCloudRow({ entityType, row })
-              }
-              await refreshFromDb(u.id)
-            })
-            
-            // Fetch cloud settings
-            const res = await syncService.fetchCloudSettings()
-            if (res.success && res.settings) {
-              const localSettings: any = await window.api.settings.get(u.id)
-              const mergedAiApiKey = res.settings.ai_api_key || localSettings?.ai_api_key
-              const mergedAiStylePrompt = res.settings.ai_style_prompt || localSettings?.ai_style_prompt
-
-              const updated: any = await window.api.settings.update({
-                userId: u.id,
-                theme: res.settings.theme,
-                accentColor: res.settings.accent_color,
-                editorFont: res.settings.editor_font,
-                fontSize: res.settings.font_size,
-                lineSpacing: res.settings.line_spacing,
-                aiProvider: res.settings.ai_provider,
-                aiApiKey: mergedAiApiKey,
-                aiStylePrompt: mergedAiStylePrompt,
-                preserveFormatting: res.settings.preserve_formatting === 1,
-                autosaveInterval: res.settings.autosave_interval
-              })
-              setSettings(updated as never)
-
-              if (!res.settings.ai_api_key && mergedAiApiKey) {
-                syncService.syncSettingsToCloud(updated as any).catch(e => console.error('Cloud sync failed', e))
-              }
-            }
-          } finally {
-            // This instantly unmounts the LoginPage and reveals the perfectly loaded Dashboard!
-            setUser(u)
-          }
+        if (navigator.onLine) {
+          const session = await authService.getSession()
+          if (active && session?.user) await openWorkspace(session.user, revision)
         }
-      } else {
-        // Unsubscribe from Realtime on logout
-        const { syncService } = await import('./services/syncService')
-        syncService.unsubscribeFromRealtime()
-        navigate('/login')
+      } catch (error) {
+        console.error('Failed to open saved workspace:', error)
+      } finally {
+        if (active) setLoading(false)
       }
+    }
+
+    async function openWorkspace(nextUser: User, revision: number) {
+      const [profile, localSettings] = await Promise.all([
+        window.api.auth.getStoredUser(nextUser.id),
+        window.api.settings.get(nextUser.id),
+      ])
+      if (!active || revision !== sessionRevision) return
+      setLocalUser(profile ?? null)
+      setSettings(localSettings ?? null)
+      setUser(nextUser)
+    }
+
+    void openSavedSession()
+
+    const { data: { subscription } } = authService.onAuthStateChange((event, nextUser) => {
+      if (event === 'SIGNED_OUT') {
+        sessionRevision++
+        setUser(null)
+        setLocalUser(null)
+        setSettings(null)
+        navigate('/login')
+        return
+      }
+      if (event === 'USER_UPDATED' && nextUser?.id === useUserStore.getState().user?.id) {
+        setUser(nextUser)
+        return
+      }
+      if (event !== 'SIGNED_IN' || !nextUser || useUserStore.getState().isFreshLogin ||
+          useUserStore.getState().user?.id === nextUser.id) return
+      void openWorkspace(nextUser, ++sessionRevision).catch(error => console.error('Could not open workspace:', error))
     })
 
     // Track selection changes globally for TextAreas and Inputs to support AI Polish on any page
@@ -271,11 +156,108 @@ function App() {
     window.addEventListener('replace-textarea-selection', handleReplaceSelection)
 
     return () => {
+      active = false
       subscription.unsubscribe()
+      stopDeepLinks?.()
+      clearTimeout(selTimeout)
       document.removeEventListener('selectionchange', handleSelectionChange)
       window.removeEventListener('replace-textarea-selection', handleReplaceSelection)
     }
   }, [])
+
+  useEffect(() => {
+    if (!user || window.api.isMock) return
+    const userId = user.id
+    let active = true
+    let connecting = false
+    let rerunOnConnect = false
+
+    async function connectCloud() {
+      if (!active || !navigator.onLine) return
+      if (connecting) {
+        rerunOnConnect = true
+        return
+      }
+      connecting = true
+      const localSettingsAtStart = useUserStore.getState().settings
+      try {
+        const session = await authService.getSession()
+        if (!active || session?.user.id !== userId) return
+        if (!await flushEditorSaves() || !active) return
+        await syncNow()
+        if (!active || !navigator.onLine) return
+
+        const pull = await syncService.performInitialPull()
+        if (!active || !navigator.onLine) return
+        if (pull.recordsPulled > 0) await refreshFromDb(userId)
+        if (!active) return
+        for (const conflict of pull.conflicts) addToast(conflict, 'info')
+
+        syncService.subscribeToRealtime(async (entityType, row, eventType) => {
+          if (!active || eventType === 'DELETE') return
+          try {
+            if (entityType === 'workspace_state') {
+              await window.api.editor.saveWorkspaceState({
+                userId,
+                currentBookId: row.current_book_id,
+                currentChapterId: row.current_chapter_id,
+                openTabs: typeof row.open_tabs === 'string' ? JSON.parse(row.open_tabs) : row.open_tabs,
+                panelState: typeof row.panel_state === 'string' ? JSON.parse(row.panel_state) : row.panel_state,
+              })
+            } else {
+              await window.api.database.upsertCloudRow({ entityType, row })
+            }
+            if (active) await refreshFromDb(userId)
+          } catch (error) {
+            console.error('Failed to apply cloud update:', error)
+          }
+        })
+
+        if (syncService.hasPendingSettings(userId)) {
+          await syncService.flushPendingSettings(userId)
+          return
+        }
+        const remote = await syncService.fetchCloudSettings()
+        if (!active || !remote.success || !remote.settings || syncService.hasPendingSettings(userId) ||
+            useUserStore.getState().settings !== localSettingsAtStart) return
+        const localSettings = localSettingsAtStart
+        const cloud = remote.settings
+        const localProvider = localSettings?.ai_provider
+        const keepLocalProvider = localProvider &&
+          isLocalAIProvider(localProvider, localSettings?.ai_settings?.[localProvider]?.baseUrl)
+        const updated = await window.api.settings.update({
+          userId,
+          theme: cloud.theme,
+          accentColor: cloud.accent_color,
+          editorFont: cloud.editor_font,
+          fontSize: cloud.font_size,
+          lineSpacing: cloud.line_spacing,
+          aiProvider: keepLocalProvider ? localProvider : cloud.ai_provider,
+          aiApiKey: keepLocalProvider ? undefined : cloud.ai_api_key || localSettings?.ai_api_key,
+          aiStylePrompt: cloud.ai_style_prompt || localSettings?.ai_style_prompt,
+          preserveFormatting: cloud.preserve_formatting === 1 || cloud.preserve_formatting === true,
+          autosaveInterval: cloud.autosave_interval,
+        })
+        if (active && updated && useUserStore.getState().settings === localSettingsAtStart) setSettings(updated)
+      } catch (error) {
+        console.error('Cloud sync could not connect:', error)
+      } finally {
+        connecting = false
+        if (rerunOnConnect) {
+          rerunOnConnect = false
+          void connectCloud()
+        }
+      }
+    }
+
+    void connectCloud()
+    window.addEventListener('online', connectCloud)
+    return () => {
+      active = false
+      window.removeEventListener('online', connectCloud)
+      syncService.unsubscribeFromRealtime()
+    }
+  }, [user?.id])
 
   // Apply theme class to document
   useEffect(() => {
@@ -313,6 +295,7 @@ function App() {
           <Route path="/book/:bookId" element={<WorkspacePage />} />
           <Route path="/book/:bookId/chapter/:chapterId" element={<WorkspacePage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/ai-chat" element={<ChatStudioPage />} />
         </Route>
 
         {/* Fallback */}

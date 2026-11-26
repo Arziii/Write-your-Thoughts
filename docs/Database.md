@@ -1,131 +1,33 @@
-# Database Schema & Authentication
+# Database and storage reference
 
-**Write Your Thoughts** utilizes a hybrid dual-database architecture: a local SQLite database for offline-first performance, and a remote Supabase PostgreSQL database for synchronization and auth.
+The source of truth for local DDL is [app/src/main/database/init.ts](../app/src/main/database/init.ts), especially `initDatabase`, `createTables` and the post-DDL compatibility migrations. The database file is `<Electron userData>/database/write-your-thoughts.db`. SQLite loads into memory and exports the database file after writes. Initialization requests foreign key enforcement. The current sql.js export resets that flag in the tested path. Main IPC also enforces some relationships and cleanup through application checks and triggers. See [DB-01](KNOWN_ISSUES.md#db-01-sqlite-foreign-keys-after-export).
 
-## Authentication System
+## Local schema by ownership
 
-We use **Supabase Auth** as our identity provider.
+| Record group | Tables and relationships |
+| --- | --- |
+| Account | `users` has the Supabase user ID as the local primary key. `settings`, `workspace_state`, and `books` refer to the user. `settings` stores editor and AI preferences. Workspace fields include open tabs and panel state as JSON text. |
+| Manuscript | `books` has many `chapters` via `book_id`. `chapters.content` holds HTML, with word count and order stored separately. `chapter_versions` and `comments` belong to chapters. Local chapter version columns include `snapshot_type`, `milestone_name`, `word_count`, and `user_id`; legacy columns may remain after migration. |
+| Worldbuilding | `characters`, `locations`, `notes`, `codex`, `wiki`, `organizations`, `world_rules` and `story_bibles` refer to books. Profile tables reference the relevant entity. `lore_entries` refers to codex. `reference_page_details` has composite key `(kind, entity_id)` with book-scoped JSON text and cleanup triggers for entity or book deletion. |
+| Maps | `book_maps` belongs to a book. `map_pins` uses composite key `(map_id, location_id)` and normalized x/y. Main checks that a pin's location and map belong to the same book. Indexes and foreign keys or cleanup triggers support reads and deletion. |
+| Voice and analysis | `character_voice_profiles`, `speech_patterns`, `dialogue_samples` belong to characters. Chapter analysis uses `chapter_emotions`, `scene_emotions`, `continuity_events`, `continuity_warnings`, `chapter_metrics`, and `chapter_statistics`. `style_profiles`, `story_analysis`, `arc_analysis`, `pacing_analysis`, and `emotion_analysis` are book-scoped, with arc analysis also keyed through character references. |
+| Relationships | `character_relationships` refers to a book and its source/target characters. `relationship_events` and `relationship_states` refer to a relationship and optionally or necessarily to a chapter depending on the table. States are unique per relationship/chapter. |
+| Timeline | `timeline_events` and `verse_timeline_events` are book-scoped. `timeline_settings` and `timeline_analyses` are keyed by book. Effective timeline columns include `story_day`, `chapter_id`, `characters_involved` and `duration_days` via migrations. The earlier `CREATE TABLE IF NOT EXISTS` wins on clean databases, so additional foreign keys in the later definition do not get added automatically. |
+| Change queue | `sync_queue` holds entity type, ID, operation, status and timestamp. The entity/status index supports coalescing and reads. Some IPC writes use `dbRunQueuedEdit` to transact edits with the queued update. |
 
-### Features
-- **Email/Password Login**: Primary authentication method.
-- **Deep Linking for Resets**: Password resets trigger `wyt://auth/reset-password` deep links that route natively back to the desktop application.
-- **Session Persistence**: Sessions remain active between app launches using secure local storage.
-- **Automatic Hydration**: On a fresh sign-in, the system automatically pulls the latest cloud backup to hydrate the local SQLite database.
-- **Social Logins**: Infrastructure supports Google, GitHub, and Microsoft (WIP).
+See the exact column defaults, foreign keys, indexes and legacy ALTERs in the source. When changing SQLite, check an empty database and a database initialized with the earlier schema. Use [Testing](TESTING.md) for the workflow.
 
-### Security Model
-Every user owns their own workspace. Row Level Security (RLS) policies enforce strict isolation in the Supabase PostgreSQL instance: users can never access data belonging to another UUID.
+## Boundaries outside SQLite
 
-We also enforce a strict **Exponential Backoff and Account Lockout** policy for logins using Supabase RPC functions (`check_login_attempt`, `record_failed_login`):
-- 1-3 failed attempts: No delay.
-- 4th failed attempt: 5-second delay.
-- 5th failed attempt: 30-second delay.
-- 6th failed attempt: 5-minute delay.
-- 7th failed attempt: Permanent lockout.
-The only way to unlock an account is by successfully resetting the password via the "Forgot Password" email flow. After a successful password reset, the user is redirected to manually sign in with their new credentials.
+| Data | Location |
+| --- | --- |
+| Imported raster map bytes | `<userData>/map-images/<mapId>` |
+| Painted geometry, brushes, stamps, labels and atlas paths | renderer localStorage under `wyt-parchment-map-<mapId>` |
+| Last selected atlas | renderer localStorage under `wyt-map-selection-<bookId>` |
+| AI Chat threads and turns | IndexedDB database `wyt-chat-studio` |
+| System and Kokoro reading choices, saved Supabase session and selected UI caches | renderer storage |
+| Uploaded book/character/location images | Supabase `images` bucket through [storageService](../app/src/renderer/src/services/storageService.ts) |
+| Cloud settings and backups | `cloud_settings` and the `user_backups` bucket |
+| Local plugin files | `<userData>/plugins/` |
 
----
-
-## Entity Relationship Overview
-
-```text
-User
-│
-├── Books
-│     │
-│     ├── Chapters ───────┐
-│     │                   │
-│     ├── Characters      │
-│     ├── Locations       ├──> Associated with specific Book IDs
-│     ├── Organizations   │
-│     ├── Timeline Events │
-│     ├── World Rules     │
-│     └── Notes ──────────┘
-│
-└── Settings
-```
-
-## Schema Definitions
-
-*(These tables exist identically in both SQLite locally and PostgreSQL remotely).*
-
-### `users`
-Stores account and profile information.
-| Field | Type | Description |
-|---|---|---|
-| `id` | UUID | Primary Key (from Supabase Auth) |
-| `email` | String | User's email |
-| `display_name` | String | Used for UI greeting |
-| `avatar_url` | String | Cloud URL to profile picture |
-| `updated_at` | Timestamp | Last modified |
-
-### `settings`
-User-specific application preferences.
-| Field | Type | Description |
-|---|---|---|
-| `id` | UUID | Primary Key |
-| `user_id` | UUID | Foreign Key |
-| `theme` | String | 'dark' or 'light' |
-| `ai_provider` | String | openai, gemini, claude |
-| `ai_api_key` | String | Securely stored key |
-
-### `books`
-Projects or manuscripts.
-| Field | Type | Description |
-|---|---|---|
-| `id` | UUID | Primary Key |
-| `user_id` | UUID | Foreign Key |
-| `title` | String | Project Title |
-| `description` | Text | Synopsis |
-| `cover_image` | String | Cloud URL to cover art |
-| `synced` | Integer | (0/1) Local sync status flag |
-
-### `chapters`
-Individual chapter files for modular editing.
-| Field | Type | Description |
-|---|---|---|
-| `id` | UUID | Primary Key |
-| `book_id` | UUID | Foreign Key |
-| `title` | String | Chapter Title |
-| `content` | Text | HTML string of the Tiptap editor |
-| `chapter_order` | Number | Sort integer |
-| `updated_at` | Timestamp | Critical for sync conflict resolution |
-| `synced` | Integer | (0/1) Local sync status flag |
-
-### `chapter_versions`
-Local snapshots and remote milestones.
-| Field | Type | Description |
-|---|---|---|
-| `id` | UUID | Primary Key |
-| `chapter_id` | UUID | Foreign Key |
-| `content` | Text | HTML string |
-| `snapshot_type` | String | 'auto' (15 min) or 'milestone' |
-| `milestone_name`| String | Optional user-defined name |
-
-### Worldbuilding Entities
-The database includes multiple tables for world lore. They all follow a similar schema structure (`id`, `book_id`, `name`, `description`, `notes`):
-- `characters`
-- `locations`
-- `organizations`
-- `world_rules`
-- `timeline_events` (includes `story_day` and `duration_days`)
-
-### `sync_queue` (Local Only)
-Tracks pending offline modifications waiting to be pushed to Supabase.
-| Field | Type | Description |
-|---|---|---|
-| `id` | UUID | Primary Key |
-| `entity_type` | String | e.g. 'book', 'chapter', 'character' |
-| `entity_id` | UUID | ID of the mutated record |
-| `operation` | String | 'create', 'update', 'delete', 'upsert' |
-| `status` | String | 'pending', 'processing', 'completed' |
-| `created_at` | Timestamp | Queue insertion time |
-
-### `login_attempts` (Cloud Only)
-Tracks failed login attempts for security lockouts.
-| Field | Type | Description |
-|---|---|---|
-| `email` | String | Primary Key |
-| `failed_attempts` | Integer | Counter |
-| `lockout_until` | Timestamp | Time when lockout expires |
-| `is_locked` | Boolean | True if permanently locked |
+The code's actual row sync mapping, settings/backup coverage and auth are in [Data and sync](modules/DATA_AND_SYNC.md). The [historical SQL](Supabase-Setup.md) differs from current runtime expectations and is reference material.

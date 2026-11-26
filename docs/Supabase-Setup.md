@@ -1,4 +1,7 @@
-# Supabase Database Setup & Migration
+# Historical Supabase schema notes
+
+This is archived source material. Its unprefixed tables and legacy migration fragments do not match the current renderer's cloud contracts. Use [Data and sync](modules/DATA_AND_SYNC.md) for current requirements, [Setup](SETUP.md) for environment variables, and [DB-02](KNOWN_ISSUES.md#db-02-cloud-provisioning-and-coverage) for the outstanding provisioning gap. Review and adapt any historical SQL in a disposable project first.
+
 
 To enable cloud sync and authentication, you must deploy the application's database schema to your Supabase project.
 

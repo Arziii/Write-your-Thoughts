@@ -5,6 +5,7 @@ import { useUserStore } from '../../stores/userStore'
 import { Plus, Trash2, Save, Sparkles, RefreshCw, Network } from 'lucide-react'
 import { useToastStore } from '../../stores/toastStore'
 import { aiService } from '../../services/aiService'
+import { getAIConfigurationError } from '../../services/ai/configuration'
 import RelationshipGraph from './RelationshipGraph'
 import type { Relationship, RelationshipEvent } from '../../types'
 
@@ -129,8 +130,9 @@ export default function RelationshipIntelligenceTab({ characterId }: Props) {
   }
 
   const handleAnalyzeWithAI = async () => {
-    if (!settings?.ai_api_key) {
-      addToast('Please set your AI API Key in Settings first', 'error')
+    const configurationError = getAIConfigurationError(settings)
+    if (!settings || configurationError) {
+      addToast(configurationError ?? 'Open Settings to configure an AI provider.', 'warning')
       return
     }
     if (!currentRel || !targetCharacter) return

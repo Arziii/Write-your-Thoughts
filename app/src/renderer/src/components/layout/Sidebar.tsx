@@ -1,7 +1,8 @@
 import { useState } from 'react'
+import { useOpenBookTab } from '../../hooks/useOpenBookTab'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import {
-  BookOpen, Home, Settings, LogOut, ChevronLeft, PanelLeft
+  BookOpen, Home, MessageSquare, Settings, LogOut, ChevronLeft, PanelLeft
 } from 'lucide-react'
 import { useUserStore } from '../../stores/userStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
@@ -36,7 +37,7 @@ const F = {
 export default function Sidebar() {
   const { user, localUser } = useUserStore()
   const {
-    currentBook, setCurrentBook, toggleSidebar,
+    currentBook, toggleSidebar,
     characters, addCharacter, updateCharacter, removeCharacter,
     locations, addLocation, updateLocation, removeLocation,
     notes, addNote, updateNote, removeNote,
@@ -45,8 +46,9 @@ export default function Sidebar() {
     wiki, addWiki, updateWiki, removeWiki,
     organizations, addOrganization, updateOrganization, removeOrganization,
     worldRules, addWorldRule, updateWorldRule, removeWorldRule,
-    openTab, reorderChapters, reorderEntity
+    reorderChapters, reorderEntity
   } = useWorkspaceStore()
+  const openBookTab = useOpenBookTab()
   const { addToast } = useToastStore()
   const navigate = useNavigate()
   const location = useLocation()
@@ -78,8 +80,8 @@ export default function Sidebar() {
     }
   }
 
-  const handleGoHome = () => { setCurrentBook(null); navigate('/') }
-  const handleBackToBooks = () => { setCurrentBook(null); navigate('/') }
+  const handleGoHome = () => navigate('/')
+  const handleBackToBooks = () => navigate('/')
 
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return
@@ -149,10 +151,7 @@ export default function Sidebar() {
       </div>
 
       {/* ── Main content ──────────────────────────────────────── */}
-      <div 
-        className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col"
-        onClick={() => { if (location.pathname !== '/') navigate('/') }}
-      >
+      <div className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col">
         {currentBook ? (
           <>
             {/* Explorer / Timeline tabs */}
@@ -191,7 +190,7 @@ export default function Sidebar() {
                     {/* Story Intelligence */}
                     <div style={{ padding: '10px 10px 8px' }}>
                       <button
-                        onClick={() => openTab(currentBook.id, 'story_intelligence', 'Story Intelligence')}
+                        onClick={() => openBookTab(currentBook.id, 'story_intelligence', 'Story Intelligence')}
                         style={{
                           width: '100%', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8,
                           justifyContent: 'center', borderRadius: 10, fontSize: 11, fontWeight: 700,
@@ -236,7 +235,7 @@ export default function Sidebar() {
                     <div className="px-2.5 pt-2">
                       <button
                         type="button"
-                        onClick={() => openTab(`maps-${currentBook.id}`, 'maps', 'Maps')}
+                        onClick={() => openBookTab(`maps-${currentBook.id}`, 'maps', 'Maps')}
                         className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold uppercase tracking-wider text-[hsl(var(--brand-green))] hover:bg-surface-850"
                       >
                         <MapIcon className="h-3.5 w-3.5" aria-hidden="true" />
@@ -247,7 +246,7 @@ export default function Sidebar() {
                     {/* Relationships */}
                     <div style={{ padding: '0 10px', marginTop: 12 }}>
                       <button
-                        onClick={() => openTab('relationships', 'relationship_manager', 'Relationships')}
+                        onClick={() => openBookTab('relationships', 'relationship_manager', 'Relationships')}
                         style={{
                           width: '100%', padding: '6px 8px', display: 'flex', alignItems: 'center', gap: 8,
                           color: F.green, background: 'none', border: 'none', borderRadius: 8,
@@ -265,7 +264,7 @@ export default function Sidebar() {
                     {/* Timeline Record */}
                     <div style={{ padding: '0 10px', marginTop: 12 }}>
                       <button
-                        onClick={() => openTab('verse_timeline', 'verse_timeline', 'Timeline Record')}
+                        onClick={() => openBookTab('verse_timeline', 'verse_timeline', 'Timeline Record')}
                         style={{
                           width: '100%', padding: '6px 8px', display: 'flex', alignItems: 'center', gap: 8,
                           color: F.green, background: 'none', border: 'none', borderRadius: 8,
@@ -370,6 +369,17 @@ export default function Sidebar() {
 
       {/* ── Bottom nav ───────────────────────────────────────── */}
       <div style={{ borderTop: `1px solid ${F.border}`, paddingTop: 6, paddingBottom: 6 }}>
+        <button
+          id="nav-ai-chat"
+          type="button"
+          aria-current={location.pathname === '/ai-chat' ? 'page' : undefined}
+          onClick={() => navigate('/ai-chat')}
+          className={cn('mx-2 my-0.5 flex w-[calc(100%-1rem)] items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13px] font-medium',
+            location.pathname === '/ai-chat' ? 'bg-surface-800 text-surface-100' : 'text-surface-400 hover:bg-surface-800 hover:text-surface-200')}
+        >
+          <MessageSquare className="h-4 w-4 shrink-0" />
+          AI Chat
+        </button>
         <button
           id="nav-settings"
           onClick={() => navigate('/settings')}

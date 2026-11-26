@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useOpenBookTab } from '../../hooks/useOpenBookTab'
 import { Plus, MoreHorizontal, Pencil, Trash2, ChevronDown, GripVertical } from 'lucide-react'
 import { Droppable, Draggable } from '@hello-pangea/dnd'
 import Modal from '../ui/Modal'
@@ -32,7 +33,8 @@ interface EntityTreeProps {
 }
 
 export default function EntityTree({ title, items, staticItems, icon, type, onCreate, onRename, onDelete, emptyMessage, singularTitle }: EntityTreeProps) {
-  const { openTab, activeTabId } = useWorkspaceStore()
+  const { activeTabId } = useWorkspaceStore()
+  const openBookTab = useOpenBookTab()
   
   const [isExpanded, setIsExpanded] = useState(false)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -67,7 +69,7 @@ export default function EntityTree({ title, items, staticItems, icon, type, onCr
   }
 
   const openItem = (item: { id: string; title: string }) => {
-    openTab(item.id, type, item.title)
+    openBookTab(item.id, type, item.title)
   }
 
   return (
@@ -93,7 +95,7 @@ export default function EntityTree({ title, items, staticItems, icon, type, onCr
           {staticItems?.map(item => (
             <div key={item.id} className="group relative">
               <button
-                onClick={() => openTab(item.id, type, item.title)}
+                onClick={() => openBookTab(item.id, type, item.title)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6, width: '100%',
                   padding: '6px 6px', borderRadius: 6, fontSize: 13, fontWeight: activeTabId === item.id ? 600 : 500,

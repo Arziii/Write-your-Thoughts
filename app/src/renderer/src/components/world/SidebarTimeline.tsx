@@ -1,16 +1,22 @@
 import { useState, useMemo } from 'react'
-import { Clock, RefreshCw, Calendar, Plus, Settings } from 'lucide-react'
+import { useOpenBookTab } from '../../hooks/useOpenBookTab'
+import { Clock, RefreshCw, Calendar } from 'lucide-react'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useUserStore } from '../../stores/userStore'
-import { aiService } from '../../services/aiService'
+import { analyzeTimeline, makeTimelineInput, timelineInputKey } from '../../services/timelineAnalysis'
+import { getAIConfigurationError } from '../../services/ai/configuration'
 import { useToastStore } from '../../stores/toastStore'
+import type { TimelineEvent } from '../../types'
+
+const analyzingBooks = new Set<string>()
 
 export default function SidebarTimeline() {
-  const { currentBook, chapters, timelineEvents, setTimelineEvents, addTimelineEvent, timelineSettings, setTimelineSettings, openTab } = useWorkspaceStore()
-  const { user, settings } = useUserStore()
+  const { currentBook, timelineEvents, setTimelineEvents, timelineSettings, setTimelineSettings } = useWorkspaceStore()
+  const openBookTab = useOpenBookTab()
   const { addToast } = useToastStore()
   
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [analysisError, setAnalysisError] = useState<{ bookId: string; message: string }>()
   const [showFirstDayModal, setShowFirstDayModal] = useState(false)
   const [firstDayInput, setFirstDayInput] = useState('')
 
@@ -18,60 +24,61 @@ export default function SidebarTimeline() {
     return [...timelineEvents].sort((a, b) => b.story_day - a.story_day)
   }, [timelineEvents])
 
-  const handleAnalyzeAll = async (overrideStartDate?: string) => {
-    if (!user || !currentBook) return
-    
-    if (!settings?.ai_api_key) {
-      addToast('Please set your AI API Key in Settings first.', 'error')
-      return
-    }
-
+  const handleAnalyzeAll = async () => {
+    const { user, settings } = useUserStore.getState()
+    const workspace = useWorkspaceStore.getState()
+    const book = workspace.currentBook
+    if (!user || !book || analyzingBooks.has(book.id)) return
+    const isCurrentBook = () => useWorkspaceStore.getState().currentBook?.id === book.id && useUserStore.getState().user?.id === user.id
+    analyzingBooks.add(book.id)
     setIsAnalyzing(true)
-    
+    setAnalysisError(undefined)
     try {
-      const allText = chapters.map(c => c.content).join('\n\n')
-      if (!allText.trim()) throw new Error('No chapter content to analyze.')
-
-      const result = await aiService.analyzeTimelineEvents({
-        content: allText,
-        provider: settings.ai_provider as any,
-        apiKey: settings?.ai_api_key, providerSettings: settings?.ai_settings,
-        storyContext: currentBook.story_context || '',
-        startDate: overrideStartDate || timelineSettings?.start_date_string
-      })
-
-      if (result.events && result.events.length > 0) {
-        // Clear existing timeline events to prevent duplicates
-        for (const existingEv of timelineEvents) {
-          await window.api.timelineEvents.delete(existingEv.id)
-        }
-        setTimelineEvents([])
-
-        for (const ev of result.events) {
-          const newEvent = await window.api.timelineEvents.create({
-            book_id: currentBook.id,
-            title: ev.title,
-            description: ev.description,
-            story_day: ev.story_day,
-            duration_days: ev.duration_days,
-            characters_involved: ev.characters_involved
-          })
-          addTimelineEvent(newEvent as any)
-        }
-        addToast(`Discovered ${result.events.length} events!`, 'success')
-      } else {
-        addToast('No new timeline events found.', 'info')
+      const input = makeTimelineInput(book.id, workspace.chapters, workspace.drafts, book.story_context || '')
+      if (!input.chapters.length) throw new Error('No chapter content to analyze.')
+      const inputKey = await timelineInputKey(input)
+      const cached: TimelineEvent[] | null = await window.api.timelineEvents.getAnalysis(book.id, inputKey)
+      if (!isCurrentBook()) return
+      if (cached !== null) {
+        setTimelineEvents(cached)
+        addToast('Manuscript unchanged. Showing the saved timeline.', 'info')
+        return
       }
-    } catch (err: any) {
-      console.error(err)
-      addToast(err.message || 'Failed to analyze timeline.', 'error')
+
+      const configurationError = getAIConfigurationError(settings)
+      if (!settings || configurationError) {
+        throw new Error(configurationError ?? 'Open Settings to configure an AI provider.')
+      }
+
+      const events = await analyzeTimeline(input, settings)
+      if (!isCurrentBook()) return
+      const latest = useWorkspaceStore.getState()
+      const latestInput = makeTimelineInput(book.id, latest.chapters, latest.drafts, latest.currentBook?.story_context || '')
+      if (JSON.stringify(input) !== JSON.stringify(latestInput)) {
+        addToast('The manuscript changed during analysis. Run it again to use the latest text.', 'info')
+        return
+      }
+      if (!events.length) {
+        addToast('No on-page timeline events were found.', 'info')
+        return
+      }
+
+      const saved: TimelineEvent[] = await window.api.timelineEvents.saveAnalysis(book.id, inputKey, events)
+      if (isCurrentBook()) {
+        setTimelineEvents(saved)
+        addToast('Timeline updated with ' + saved.length + (saved.length === 1 ? ' entry.' : ' entries.'), 'success')
+      }
+    } catch (error) {
+      if (isCurrentBook()) {
+        const message = (error instanceof Error ? error.message : 'Failed to analyze timeline.')
+          .replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '')
+        setAnalysisError({ bookId: book.id, message })
+        addToast(message, 'error')
+      }
     } finally {
+      analyzingBooks.delete(book.id)
       setIsAnalyzing(false)
     }
-  }
-
-  const handleAddManual = async () => {
-    // Deprecated: No manual events. The user only wants chapter-by-chapter AI summaries.
   }
 
   const handleSaveFirstDay = async () => {
@@ -85,16 +92,6 @@ export default function SidebarTimeline() {
       setTimelineSettings(updated as any)
       setShowFirstDayModal(false)
       addToast('First day set!', 'success')
-      
-      // Attempt to auto-analyze if API key is set
-      if (settings?.ai_api_key) {
-        // Run asynchronously so state has a moment to settle, though we use firstDayInput to be safe
-        setTimeout(() => {
-          handleAnalyzeAll(firstDayInput)
-        }, 100)
-      } else {
-        addToast('Please set your AI API Key in Settings to generate the timeline.', 'info')
-      }
     } catch (e) {
       console.error(e)
       addToast('Failed to set first day', 'error')
@@ -119,7 +116,7 @@ export default function SidebarTimeline() {
         <button
           onClick={() => {
             if (currentBook) {
-              openTab(currentBook.id, 'timeline', 'Calendar')
+              openBookTab(`calendar-${currentBook.id}`, 'timeline', 'Calendar')
             }
           }}
           className="w-full py-2 bg-surface-800 hover:bg-surface-700 text-surface-200 text-sm font-medium rounded-lg transition-colors border border-surface-700 hover:border-surface-600 flex items-center justify-center gap-2"
@@ -145,6 +142,10 @@ export default function SidebarTimeline() {
           {timelineSettings?.start_date_string ? 'Change First Day' : 'Set First Day'}
         </button>
       </div>
+
+      {analysisError?.bookId === currentBook?.id && analysisError && (
+        <p role="alert" className="px-4 pt-3 text-xs text-warning-400">{analysisError.message}{timelineEvents.length > 0 && ' Showing the last saved timeline.'}</p>
+      )}
 
       {/* Timeline List */}
       <div className="flex-1 overflow-y-auto p-4">

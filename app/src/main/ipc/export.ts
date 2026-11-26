@@ -1,6 +1,8 @@
 import { IpcMain, dialog, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { writeFileSync } from 'fs'
+import { open, unlink } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
 import { dbGet, dbAll } from '../database/init'
 import TurndownService from 'turndown'
 import HTMLtoDOCX from 'html-to-docx'
@@ -42,6 +44,53 @@ function cleanManuscriptHTML(html: string, chapterTitle: string): string {
 }
 
 export function registerExportHandlers(ipcMain: IpcMain): void {
+  const destinations = new Map<number, { token: string; directory: string }>()
+  ipcMain.handle('export:audiobookFolder', async event => {
+    const options = { title: 'Choose an audiobook export folder', properties: ['openDirectory', 'createDirectory'] as ('openDirectory' | 'createDirectory')[] }
+    const window = BrowserWindow.fromWebContents(event.sender)
+    const selection = await (window ? dialog.showOpenDialog(window, options) : dialog.showOpenDialog(options))
+    if (selection.canceled || !selection.filePaths[0] || event.sender.isDestroyed()) return null
+    const destination = { token: randomUUID(), directory: selection.filePaths[0] }
+    const senderId = event.sender.id
+    if (!destinations.has(senderId)) event.sender.once('destroyed', () => destinations.delete(senderId))
+    destinations.set(senderId, destination)
+    return destination
+  })
+  ipcMain.handle('export:audiobookChapter', async (event, token: string, title: string, clips: ArrayBuffer[]) => {
+    const destination = destinations.get(event.sender.id)
+    if (!destination || token !== destination.token) throw new Error('Choose an audiobook export folder first.')
+    // Every Kokoro clip uses the same 44-byte PCM header. Retain one header and append the sample data.
+    const parts = clips.map(clip => Buffer.from(clip))
+    const first = parts[0]
+    if (!first || parts.some(part => part.length <= 44 || part.toString('ascii', 0, 4) !== 'RIFF' ||
+      part.toString('ascii', 36, 40) !== 'data' || !part.subarray(8, 40).equals(first.subarray(8, 40)))) {
+      throw new Error('Kokoro returned incompatible audio clips.')
+    }
+    const length = parts.reduce((sum, part) => sum + part.length - 44, 0)
+    if (length > 0xffffffff - 36) throw new Error('This chapter is too large for a WAV file.')
+    const header = Buffer.from(first.subarray(0, 44))
+    header.writeUInt32LE(36 + length, 4)
+    header.writeUInt32LE(length, 40)
+    const name = title.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 110).replace(/[. ]+$/, '') || 'Chapter'
+    for (let suffix = 1; ; suffix++) {
+      const path = join(destination.directory, `${name}${suffix === 1 ? '' : ` (${suffix})`}.wav`)
+      const file = await open(path, 'wx').catch(error => {
+        if (error.code !== 'EEXIST') throw error
+        return null
+      })
+      if (!file) continue
+      try {
+        await file.writeFile(header)
+        for (const part of parts) await file.writeFile(part.subarray(44))
+      } catch (error) {
+        await file.close()
+        await unlink(path)
+        throw error
+      }
+      await file.close()
+      return path
+    }
+  })
   ipcMain.handle('export:book', async (event, data: { bookId: string; format: string; authorName?: string; includeToc?: boolean; fontFamily?: string; fontSize?: number; lineSpacing?: number; margin?: number }) => {
     try {
       const book = dbGet('SELECT * FROM books WHERE id = ?', [data.bookId])

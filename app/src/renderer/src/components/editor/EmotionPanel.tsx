@@ -5,6 +5,7 @@ import { useToastStore } from '../../stores/toastStore'
 import { useUserStore } from '../../stores/userStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { aiService } from '../../services/aiService'
+import { getAIConfigurationError } from '../../services/ai/configuration'
 import type { ChapterEmotion } from '../../types'
 import { cn } from '../../utils'
 import { EditorToolPanel, PanelAnalyzeButton, PanelEmptyState, panelBadge, panelButton, panelCard, panelField, panelIconButton } from './EditorToolPanel'
@@ -66,25 +67,23 @@ export default function EmotionPanel({ chapterId, onClose }: { chapterId: string
   }, [chapterId])
 
   const handleAnalyzeWithAI = async () => {
-    if (!settings?.ai_api_key) {
-      addToast('Please set your AI API Key in Settings first', 'error')
+    const configurationError = getAIConfigurationError(settings)
+    if (!settings || configurationError) {
+      addToast(configurationError ?? 'Open Settings to configure an AI provider.', 'warning')
       return
     }
-    // Use all chapter content (whole story)
-    const allContent = chapters
-      .filter(c => c.content?.trim())
-      .map(c => `--- Chapter: ${c.title} ---\n${c.content}`)
-      .join('\n\n')
+    const content = chapters.find(chapter => chapter.id === chapterId)?.content
+      ?.replace(/<[^>]*>/g, ' ').trim()
 
-    if (!allContent) {
-      addToast('No chapter content found in this book yet.', 'error')
+    if (!content) {
+      addToast('Add some text to this chapter first.', 'error')
       return
     }
 
     setIsAnalyzing(true)
     try {
       const result = await aiService.analyzeEmotion({
-        content: allContent,
+        content,
         storyContext: storyBible?.premise,
         provider: settings.ai_provider as any,
         apiKey: settings?.ai_api_key, providerSettings: settings?.ai_settings

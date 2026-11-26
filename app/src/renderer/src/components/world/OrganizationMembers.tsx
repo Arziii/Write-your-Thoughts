@@ -10,7 +10,7 @@ interface Props {
   onOpen: (character: ReferenceTarget) => void
 }
 
-const field = 'min-w-0 rounded-md border border-surface-700 bg-surface-950 px-2.5 py-1.5 text-sm text-surface-100'
+const field = 'profile-worksheet-input !w-auto min-w-0 max-w-full'
 
 export default function OrganizationMembers({ members, characters, onChange, onOpen }: Props) {
   const [newMemberId, setNewMemberId] = useState('')
@@ -31,16 +31,16 @@ export default function OrganizationMembers({ members, characters, onChange, onO
   }
 
   return (
-    <section className="reference-card space-y-3" aria-label="Organization members">
+    <section className="profile-worksheet-card space-y-3" aria-label="Organization members">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold">Members{members.length ? ` (${members.length})` : ''}</h3>
+        <h3 className="profile-worksheet-heading !mb-0">Members{members.length ? ` (${members.length})` : ''}</h3>
         <button type="button" onClick={addMember}
-          className="inline-flex items-center gap-1.5 rounded-md border border-surface-700 px-2.5 py-1.5 text-xs font-medium hover:bg-surface-800">
+          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--worksheet-edge)] px-2.5 py-1.5 text-xs font-medium hover:bg-[hsl(var(--brand-green-bg))]">
           <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add member
         </button>
       </div>
       {members.length ? (
-        <ul className="divide-y divide-surface-800">
+        <ul className="divide-y divide-[var(--worksheet-edge)]">
           {members.map((member, index) => {
             const character = characters.find(item => item.id === member.characterId)
             return (
@@ -65,9 +65,9 @@ export default function OrganizationMembers({ members, characters, onChange, onO
                   {characters.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
                 </select>
                 <input value={member.rank} maxLength={120} aria-label={`Member ${index + 1} role or rank`}
-                  className={`${field} w-40 max-w-full grow`} placeholder="Role or rank (optional)"
+                  className={`${field} grow`} placeholder="Role or rank (optional)"
                   onChange={event => editMember(member.id, { rank: event.target.value })} />
-                <button type="button" aria-label={`Remove member ${index + 1}`} className="rounded p-1.5 hover:bg-surface-800"
+                <button type="button" aria-label={`Remove member ${index + 1}`} className="rounded p-1.5 hover:bg-[hsl(var(--brand-green-bg))]"
                   onClick={() => onChange(current => current.filter(item => item.id !== member.id))}>
                   <X className="h-4 w-4" aria-hidden="true" />
                 </button>
@@ -75,7 +75,7 @@ export default function OrganizationMembers({ members, characters, onChange, onO
             )
           })}
         </ul>
-      ) : <p className="text-xs text-surface-400">Add a name or link a character from this book.</p>}
+      ) : <p className="text-xs text-[var(--worksheet-muted)]">Add a name or link a character from this book.</p>}
     </section>
   )
 }

@@ -31,17 +31,27 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    if (!navigator.onLine) {
+      setError('Connect to the internet to sign in. Saved work is available offline on this device while you stay signed in.')
+      return
+    }
     setIsLoading(true)
 
     try {
       setIsFreshLogin(true)
       const result = await authService.signIn(email, password)
+      if (!result.user) throw new Error('No account was returned. Please sign in again.')
+      const [localUser, settings] = await Promise.all([
+        window.api.auth.getStoredUser(result.user.id),
+        window.api.settings.get(result.user.id),
+      ])
+      useUserStore.setState({ user: result.user, localUser: localUser ?? null, settings: settings ?? null })
       if (result.restoredFromCloud) {
         setIsRestoring(true)
         addToast('Data restored from cloud. Loading your workspace...', 'success')
       } else {
         setIsRestoring(true)
-        addToast('Syncing workspace...', 'success')
+        addToast('Signed in', 'success')
       }
     } catch (err: any) {
       setIsFreshLogin(false)

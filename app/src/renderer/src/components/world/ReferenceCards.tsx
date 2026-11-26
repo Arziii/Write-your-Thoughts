@@ -11,11 +11,11 @@ export interface ReferenceTarget {
   title: string
 }
 
-const inputStyle = 'min-w-0 rounded-md border border-surface-700 bg-surface-950 px-2.5 py-1.5 text-sm text-surface-100'
-const buttonStyle = 'inline-flex items-center gap-1.5 rounded-md border border-surface-700 px-2.5 py-1.5 text-xs font-medium hover:bg-surface-800 disabled:opacity-50'
+const inputStyle = 'profile-worksheet-input min-w-0'
+const buttonStyle = 'inline-flex items-center gap-1.5 rounded-md border border-[var(--worksheet-edge)] px-2.5 py-1.5 text-xs font-medium hover:bg-[hsl(var(--brand-green-bg))] disabled:opacity-50'
 const linkKey = ({ id, type, role }: ReferenceLink) => JSON.stringify([type, id, role])
 const targetKey = ({ id, type }: ReferenceTarget) => JSON.stringify([type, id])
-const fieldRow = 'reference-field-row py-4 first:pt-0 last:pb-0'
+const fieldCard = 'profile-worksheet-card block'
 
 function GrowingField({ value, ...props }: Omit<ComponentPropsWithoutRef<'textarea'>, 'value'> & { value: string }) {
   return (
@@ -105,12 +105,12 @@ export default function ReferenceCards({ kind, details, targets, onChange, onOpe
 
   return (
     <div className="space-y-5">
-      <div className="reference-card reference-field-group divide-y divide-surface-800">
+      <div className="profile-worksheet-sections">
         {config.artwork && (
-          <section className={fieldRow}>
-            <h3 className="text-sm font-semibold">{config.artwork}</h3>
+          <section className={fieldCard}>
+            <h3 className="profile-worksheet-heading">{config.artwork}</h3>
             <div className="min-w-0 space-y-2">
-              {details.artwork && <img src={details.artwork} alt={config.artwork} className="max-h-52 max-w-full rounded-md bg-surface-900 object-contain" />}
+              {details.artwork && <img src={details.artwork} alt={config.artwork} className="max-h-52 max-w-full rounded-lg bg-[var(--worksheet-paper)] object-contain" />}
               <div className="flex flex-wrap gap-2">
                 <label className={`${buttonStyle} cursor-pointer focus-within:outline`}>
                   <ImagePlus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -124,8 +124,8 @@ export default function ReferenceCards({ kind, details, targets, onChange, onOpe
           </section>
         )}
         {config.fields.map(field => (
-          <label key={field} className={fieldRow}>
-            <span className="text-sm font-semibold">{field}</span>
+          <label key={field} className={fieldCard}>
+            <span className="profile-worksheet-heading">{field}</span>
             <span className="min-w-0 space-y-2">
               {field === 'Tags' && tags.length > 0 && (
                 <span aria-hidden="true" className="flex flex-wrap gap-1.5">
@@ -149,9 +149,9 @@ export default function ReferenceCards({ kind, details, targets, onChange, onOpe
       )}
 
       {kind === 'codex' && (
-        <section className="reference-card" aria-label="Entry cards">
+        <section className="profile-worksheet-card" aria-label="Entry cards">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold">Entry cards</h3>
+            <h3 className="profile-worksheet-heading !mb-0">Entry cards</h3>
             <button type="button" className={buttonStyle} disabled={entries.length >= 24}
               onClick={() => onChange(current => ({
                 ...current, entries: [...(current.entries ?? []), { id: crypto.randomUUID(), title: '', details: '' }],
@@ -160,13 +160,13 @@ export default function ReferenceCards({ kind, details, targets, onChange, onOpe
             </button>
           </div>
           {entries.length > 0 && (
-            <div className="divide-y divide-surface-800">
+            <div className="divide-y divide-[var(--worksheet-edge)]">
               {entries.map(entry => (
                 <div key={entry.id} className="flex flex-col gap-2 py-3 last:pb-0">
                   <div className="flex items-center gap-1">
                     <input className={`${inputStyle} flex-1`} aria-label="Card name" placeholder="Name" maxLength={120} value={entry.title}
                       onChange={event => updateEntry(entry.id, { title: event.target.value })} />
-                    <button type="button" className="rounded p-1 hover:bg-surface-800" aria-label={`Remove card ${entry.title || 'without a name'}`}
+                    <button type="button" className="rounded p-1 hover:bg-[hsl(var(--brand-green-bg))]" aria-label={`Remove card ${entry.title || 'without a name'}`}
                       onClick={() => onChange(current => ({ ...current, entries: current.entries?.filter(item => item.id !== entry.id) }))}>
                       <X className="h-4 w-4" aria-hidden="true" />
                     </button>
@@ -180,21 +180,21 @@ export default function ReferenceCards({ kind, details, targets, onChange, onOpe
         </section>
       )}
 
-      <section className="reference-card space-y-3">
-        <h3 className="flex items-center gap-2 text-sm font-semibold"><Link2 className="h-4 w-4" aria-hidden="true" /> Linked records</h3>
+      <section className="profile-worksheet-card space-y-3">
+        <h3 className="profile-worksheet-heading !flex items-center gap-2"><Link2 className="h-4 w-4" aria-hidden="true" /> Linked records</h3>
         {details.links.length > 0 && (
           <ul className="flex flex-wrap gap-2">
             {details.links.map(link => {
               const item = targets.find(candidate => candidate.type === link.type && candidate.id === link.id)
               return (
-                <li key={linkKey(link)} className="flex items-center gap-1 rounded-md border border-surface-700 bg-surface-950 px-2 py-1 text-xs">
-                  <span className="text-surface-400">{link.role}</span>
+                <li key={linkKey(link)} className="flex items-center gap-1 rounded-md border border-[var(--worksheet-edge)] bg-surface-950 px-2 py-1 text-xs">
+                  <span className="text-[var(--worksheet-muted)]">{link.role}</span>
                   {item ? (
                     <button type="button" className="flex items-center gap-1 text-left font-medium hover:underline" onClick={() => onOpen(item)}>
                       {item.title} <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
                     </button>
-                  ) : <span className="text-surface-400">Record unavailable</span>}
-                  <button type="button" aria-label={`Remove link to ${item?.title ?? 'unavailable record'}`} className="rounded p-1 hover:bg-surface-800"
+                  ) : <span className="text-[var(--worksheet-muted)]">Record unavailable</span>}
+                  <button type="button" aria-label={`Remove link to ${item?.title ?? 'unavailable record'}`} className="rounded p-1 hover:bg-[hsl(var(--brand-green-bg))]"
                     onClick={() => onChange(current => ({ ...current, links: current.links.filter(existing => linkKey(existing) !== linkKey(link)) }))}>
                     <X className="h-3 w-3" aria-hidden="true" />
                   </button>
@@ -204,11 +204,11 @@ export default function ReferenceCards({ kind, details, targets, onChange, onOpe
           </ul>
         )}
         <form onSubmit={addLink} className="flex flex-wrap items-center gap-2">
-          <select aria-label="Link role" className={`${inputStyle} w-auto max-w-full`} value={role}
+          <select aria-label="Link role" className={`${inputStyle} !w-auto max-w-full`} value={role}
             onChange={event => { setRole(event.target.value); setSelectedTarget('') }}>
             {config.linkRoles.map(option => <option key={option}>{option}</option>)}
           </select>
-          <select aria-label="Record to link" className={`${inputStyle} max-w-full flex-1`} value={selectedTarget} onChange={event => setSelectedTarget(event.target.value)}>
+          <select aria-label="Record to link" className={`${inputStyle} !w-auto max-w-full flex-1`} value={selectedTarget} onChange={event => setSelectedTarget(event.target.value)}>
             <option value="">{eligibleTargets.length ? 'Choose a record' : 'No matching records'}</option>
             {eligibleTargets.map(entry => <option key={targetKey(entry)} value={targetKey(entry)}>{entry.title} ({typeLabels[entry.type]})</option>)}
           </select>

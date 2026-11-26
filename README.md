@@ -1,202 +1,39 @@
-# Write Your Thoughts (Beta v1)
+# Write Your Thoughts
 
-<p align="center">
-  <img src="assets/Logo.png" alt="Write Your Thoughts Logo" width="200" height="200" />
-</p>
+Write Your Thoughts is a desktop workspace for novelists and worldbuilders. Draft and organize a manuscript, develop its setting, and export the finished work.
 
-<p align="center">
-  <em>A desktop-first writing software designed for authors, combining offline reliability with cloud synchronization and intelligent AI assistance. Built with Electron, React, and TypeScript.</em>
-</p>
+![Write Your Thoughts logo](assets/Logo.png)
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Electron-191970?style=for-the-badge&logo=Electron&logoColor=white" />
-  <img src="https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB" />
-  <img src="https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white" />
-  <img src="https://img.shields.io/badge/tailwindcss-%2338B2AC.svg?style=for-the-badge&logo=tailwind-css&logoColor=white" />
-  <img src="https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" />
-  <img src="https://img.shields.io/badge/sqlite-%2307405e.svg?style=for-the-badge&logo=sqlite&logoColor=white" />
-</p>
+- Use the rich-text chapter editor, manuscript search, comments, and version history.
+- Develop characters, locations, organizations, world rules, codex entries, wiki pages, notes, timelines, and relationships.
+- Paint a fantasy atlas, add stamps, draw routes and rivers, and link pins to locations.
+- Use AI if configured, listen with system voices or Kokoro, and export to Markdown, DOCX, EPUB, PDF, or chapter WAV files.
 
----
+## Run locally
 
-## 📖 Overview
-
-Write Your Thoughts is a comprehensive workspace tailored specifically for novel writers and worldbuilders. It provides a distraction-free writing environment that operates completely offline, while seamlessly syncing your data securely to the cloud via Supabase. It incorporates "Story Intelligence," a contextual AI that understands your world's lore, characters, and rules to assist you in writing.
-
-## ✨ Features
-
-- **Desktop-First Experience**: Lightning-fast local SQLite database. Works completely offline.
-- **Story Intelligence System**: Keep track of characters, locations, organizations, and world rules with smart AI cross-referencing.
-- **Rich Text Editor**: Powerful block-style editor built on Tiptap.
-- **Cloud Synchronization**: Background sync engine resolving conflicts and preserving offline changes.
-- **AI-Assisted Editing**: Context-aware AI to brainstorm, check grammar, analyze continuity, and develop story arcs.
-- **Export Options**: Export your work to multiple formats including EPUB, DOCX, PDF and Markdown.
-
-## 📸 Screenshots
-
-- Dashboard View
-<img src="assets/Dashboard1.png" alt="Dashboard View" width="600" height="600" />
-
-- Rich Editor & AI Panel
-<img src="assets/Dashboard2.png" alt="Rich Editor & AI Panel" width="600" height="600" />
-
-- Worldbuilding (Characters/Locations)
-<img src="assets/Dashboard3.png" alt="Worldbuilding" width="600" height="600" />
-
-- Timeline Analyzer
-<img src="assets/Dashboard4.png" alt="Timeline Analyzer" width="600" height="600" />
-
-## 🚀 Technology Stack
-
-- **Framework**: [Electron](https://www.electronjs.org/) + [React](https://reactjs.org/) + [Vite](https://vitejs.dev/)
-- **Language**: [TypeScript](https://www.typescriptlang.org/)
-- **Styling**: [Tailwind CSS](https://tailwindcss.com/)
-- **State Management**: [Zustand](https://github.com/pmndrs/zustand)
-- **Editor Core**: [Tiptap](https://tiptap.dev/)
-- **Database/Auth**: [Supabase](https://supabase.com/) & local SQLite (`sql.js`)
-- **AI Integration**: OpenAI / Anthropic / Google Gemini support / Grok / Ollama / OpenRouter /Local AI
-
----
-
-## 🏗️ Architecture Overview
-
-The application follows an **Offline-First Multi-Process Architecture**:
-
-1. **Renderer Process (React)**: Handles the UI, state (Zustand), and Tiptap editor.
-2. **Main Process (Electron)**: Manages local SQLite storage and secure IPC bridge.
-3. **Sync Engine (Background)**: Synchronizes local SQLite changes to Supabase when online.
-
-For more details, see [Architecture Documentation](docs/Architecture.md).
-
-## 📂 Folder Structure
-
-```
-write-your-thoughts/
-├── app/
-│   ├── src/
-│   │   ├── main/          # Electron Main Process & SQLite Setup
-│   │   ├── preload/       # IPC Bridge exposing APIs to Renderer
-│   │   └── renderer/      # React Frontend (UI, State, Services)
-│   ├── build/             # Electron packaging assets
-│   ├── tailwind.config.js # Styling configuration
-│   └── vite.config.ts     # Build configuration
-└── docs/                  # Project Documentation
+```powershell
+cd app
+npm.cmd ci
+npm.cmd run dev
 ```
 
-For more details, see [Folder Structure Documentation](docs/Folder-Structure.md).
+Run `npm.cmd run build` from `app/` to build the Electron bundles. On other shells use `npm` where appropriate. See [Setup](docs/SETUP.md) for account setup, local providers, and packaging.
 
----
+## Data and offline use
 
-## 🛠️ Installation Guide
+Electron stores manuscripts and worldbuilding records in an on-device SQLite database using sql.js. A cached desktop account can reopen its local workspace offline after initial sign-in. Optional Supabase sync covers selected records. Imported map images are local files, painted map layers are saved in renderer storage, and AI Chat history uses IndexedDB. These storage boundaries determine what can be recovered on another device. See [Database](docs/Database.md) and [Data and sync](docs/modules/DATA_AND_SYNC.md).
 
-### Prerequisites
+## Documentation
 
-- [Node.js](https://nodejs.org/) (v18 or higher recommended)
-- A Supabase project for cloud sync (optional if strictly offline)
-- AI API Key (OpenAI, Gemini, or Claude)
+| Start here | Purpose |
+| --- | --- |
+| [Project context](docs/PROJECT_CONTEXT.md) and [Architecture](docs/Architecture.md) | Goals, stack, layout, state, and process boundaries |
+| [Features](docs/FEATURES.md) | Implemented, partial, and planned capabilities |
+| [Current state](docs/CURRENT_STATE.md) and [Changelog](docs/CHANGELOG.md) | Audit baseline and task history |
+| [Tasks](docs/TASKS.md), [Handoff](docs/HANDOFF.md), and [Known issues](docs/KNOWN_ISSUES.md) | Work status and limitations |
+| [Testing](docs/TESTING.md) and [Decisions](docs/DECISIONS.md) | Verification and technical reasoning |
+| [AGENTS.md](AGENTS.md) | Instructions shared by Codex and Google Antigravity |
 
-### Step 1: Clone the repository
+**Latest repository update, 2026-11-26.** Enlarged the fantasy atlas world canvas to 2560 × 1600 and improved map viewport fitting in focus mode. See [MAP-001](docs/HANDOFF.md#map-001-larger-fantasy-map-canvas-and-viewport-fit).
 
-```bash
-git clone https://github.com/Arziii/write-your-thoughts.git
-cd write-your-thoughts/app
-```
-
-### Step 2: Install dependencies
-
-```bash
-npm install
-```
-
-### Step 3: Environment Setup
-
-Copy the example environment file and fill in your credentials.
-
-```bash
-cp .env.example .env
-```
-
-Ensure your `.env` contains:
-
-```env
-VITE_SUPABASE_URL=your_supabase_project_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-```
-
-### Step 4: Database Setup (Supabase)
-
-You must deploy the application's database schema to your Supabase project to enable cloud syncing and the AI features. See the [Supabase Setup & Migrations](docs/Supabase-Setup.md) guide for the exact SQL scripts to copy and paste into your Supabase SQL Editor.
-
-### Step 5: AI Integration Setup
-
-To use the powerful AI features (Story Intelligence, Grammar Polish, Brainstorming), you must configure your API key inside the app:
-
-1. Launch the application (`npm run dev`).
-2. Navigate to **Settings** (gear icon in the bottom left).
-3. Under the **AI Configuration** section:
-   - Select your preferred **AI Provider** (e.g., Groq, OpenAI, Anthropic, Gemini, Ollama, etc.).
-   - Enter your **API Key** (if required by the provider).
-   - (Optional) Click **Show Advanced Settings** to configure a specific **Model Override**, Temperature, or Custom Base URL.
-4. Click **Test Connection** to verify your key is working correctly.
-
----
-
-## 💻 Running the Project
-
-### Development Mode
-
-Start the application in development mode with hot-reloading:
-
-```bash
-npm run dev
-```
-
-### Production Build
-
-To build the application executable for your current operating system:
-
-```bash
-npm run build
-```
-
----
-
-## 🧠 AI Features & Capabilities
-
-Write Your Thoughts integrates a sophisticated **Story Intelligence** system:
-
-- **Workspace-Aware AI**: The AI panel dynamically reads your current book, chapter, selected text, and world lore to provide hyper-relevant advice.
-- **Lore Analyzers**: Automatically generate timelines, flag lore contradictions, and analyze character relationships based on your manuscript.
-- **Continuity Engine**: Track baseline writing style and warn the author if a new chapter deviates dramatically from established tones.
-
-For more details, see [AI System Documentation](docs/AI-System.md).
-
----
-
-## 🗺️ Roadmap & Known Limitations
-
-**Roadmap:**
-
-- Cloud conflict-resolution UI
-- Comprehensive Export Engine (PDF, native EPUB)
-- Voice Intelligence (Dictation with live formatting)
-- Collaborative Editing
-
-**Known Limitations:**
-
-- Syncing large manuscript conflicts requires manual resolution occasionally.
-- Native spellcheck requires OS-level dictionaries.
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Development Guide](docs/Development-Guide.md) for details on our coding conventions, testing procedures, and submission guidelines.
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Credits
-
-Built by authors, for authors. Powered by the open-source community.
+The application uses the [MIT license](LICENSE). Models and artwork may carry separate terms. See the [map asset credits](assets/maps/map-assets/map-assets/LICENSES.md).

@@ -493,7 +493,7 @@ export interface AIBrainstormOptions {
   messages: AIBrainstormMessage[]
   provider: AIProvider
   apiKey?: string
-  providerSettings?: ProviderSettings
+  providerSettings?: Record<string, ProviderSettings>
   storyContext?: string
 }
 

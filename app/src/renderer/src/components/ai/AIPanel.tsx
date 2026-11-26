@@ -1,17 +1,19 @@
 import { useState } from 'react'
 import {
   Sparkles, CheckCheck, X, Loader2, History, ChevronDown,
-  RotateCcw, Zap, AlignLeft, Maximize2, PanelRight, Copy, RefreshCcw, Trash2
+  RotateCcw, Zap, AlignLeft, Maximize2, PanelRight, Copy, Trash2
 } from 'lucide-react'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useUserStore } from '../../stores/userStore'
 import { useToastStore } from '../../stores/toastStore'
 import { aiService } from '../../services/aiService'
+import { getAIConfigurationError, isLocalAIProvider } from '../../services/ai/configuration'
 import type { AIPolishResult, ChapterVersion, AIMode, AIBrainstormMessage } from '../../types'
 import { useStoryBibleStore } from '../../stores/storyBibleStore'
 import { cn, formatDate } from '../../utils'
 import VersionHistory from './VersionHistory'
 import Modal from '../ui/Modal'
+import MessageActions from './MessageActions'
 
 const modeDescriptions: Record<AIMode, string> = {
   grammar: 'Fix grammar & punctuation only',
@@ -21,6 +23,13 @@ const modeDescriptions: Record<AIMode, string> = {
   shorten: 'Condense and make punchy',
   describe: 'Enhance sensory details',
   custom: 'Follow custom instruction',
+}
+
+type ChatMode = 'manuscript' | 'ideas'
+type AssistantMessage = AIBrainstormMessage & { id: string; createdAt: number }
+
+function createMessage(role: AssistantMessage['role'], content: string): AssistantMessage {
+  return { role, content, id: crypto.randomUUID(), createdAt: Date.now() }
 }
 
 export default function AIPanel() {
@@ -37,21 +46,31 @@ export default function AIPanel() {
   const [showModeMenu, setShowModeMenu] = useState(false)
 
   // Brainstorm state
-  const [brainstormMessages, setBrainstormMessages] = useState<AIBrainstormMessage[]>([])
+  const [chatMode, setChatMode] = useState<ChatMode>('manuscript')
+  const [chatThreads, setChatThreads] = useState<Record<string, AssistantMessage[]>>({})
   const [brainstormInput, setBrainstormInput] = useState('')
+  const [edit, setEdit] = useState<{ id: string; text: string } | null>(null)
   const [isBrainstorming, setIsBrainstorming] = useState(false)
   const [showClearConfirm, setShowClearConfirm] = useState(false)
 
   const activeTab = tabs.find(t => t.id === activeTabId)
+  const chapter = activeTab?.type === 'chapter' && activeChapter?.id === activeTab.entityId ? activeChapter : null
+  const chatKey = chatMode === 'manuscript' ? `chapter:${chapter?.id ?? ''}` : `ideas:${currentBook?.id ?? ''}`
+  const brainstormMessages = chatThreads[chatKey] ?? []
+
+  function setBrainstormMessages(messages: AssistantMessage[]) {
+    setChatThreads(threads => ({ ...threads, [chatKey]: messages }))
+  }
 
   const handlePolish = async () => {
     const textToPolish = selectedText?.trim() || activeChapter?.content;
 
-    if (!textToPolish || !settings?.ai_api_key) {
-      if (!settings?.ai_api_key) {
-        addToast('Set your AI API key in Settings first', 'warning')
-        return
-      }
+    const configurationError = getAIConfigurationError(settings)
+    if (!settings || configurationError) {
+      addToast(configurationError ?? 'Open Settings to configure an AI provider.', 'warning')
+      return
+    }
+    if (!textToPolish) {
       addToast('Select some text or open a chapter to polish', 'info')
       return
     }
@@ -158,21 +177,42 @@ export default function AIPanel() {
   }
 
   const handleBrainstorm = async (overrideInput?: string) => {
-    const inputToUse = overrideInput ?? brainstormInput
-    if (!inputToUse.trim() || !settings?.ai_api_key) {
-      if (!settings?.ai_api_key) addToast('Set your AI API key in Settings first', 'warning')
+    const inputToUse = (overrideInput ?? brainstormInput).trim()
+    if (isBrainstorming || !inputToUse) return
+    if (chatMode === 'manuscript' && !chapter) {
+      addToast('Open a chapter to ask about its text.', 'info')
+      return
+    }
+    const configurationError = getAIConfigurationError(settings)
+    if (!settings || configurationError) {
+      addToast(configurationError ?? 'Open Settings to configure an AI provider.', 'warning')
       return
     }
 
-    const newMessages: AIBrainstormMessage[] = [
-      ...brainstormMessages,
-      { role: 'user', content: inputToUse }
-    ]
+    const currentEdit = edit
+    const newMessages = [...brainstormMessages, createMessage('user', inputToUse)]
     setBrainstormMessages(newMessages)
-    setBrainstormInput('')
+    if (overrideInput === undefined) setBrainstormInput('')
+    setEdit(null)
     setIsBrainstorming(true)
 
     try {
+      const provider = settings.ai_provider || 'openai'
+      if (chatMode === 'manuscript' && chapter) {
+        const draft = useWorkspaceStore.getState().drafts[chapter.id]?.content
+        const response = await aiService.askManuscript({
+          question: inputToUse,
+          chapterTitle: chapter.title,
+          chapterContent: typeof draft === 'string' ? draft : chapter.content,
+          selection: selectedText,
+          provider,
+          apiKey: settings.ai_api_key,
+          providerSettings: settings.ai_settings,
+        })
+        setBrainstormMessages([...newMessages, createMessage('assistant', response)])
+        return
+      }
+      const local = isLocalAIProvider(provider, settings.ai_settings?.[provider]?.baseUrl)
       let storyContext = ''
       
       if (currentBook) {
@@ -187,7 +227,11 @@ export default function AIPanel() {
       }
       
       if (selectedText && selectedText.trim().length > 0) {
-        storyContext += `Selected Text: "${selectedText.trim()}"\n`
+        const selection = selectedText.trim()
+        if (local && selection.length > 3600) {
+          throw new Error('Select a shorter passage for local Brainstorm chat.')
+        }
+        storyContext += `Selected Text: "${selection}"\n`
       }
       
       const lockedIds = panelState.lockedEntities || []
@@ -206,26 +250,50 @@ export default function AIPanel() {
       }
 
       if (verseTimelineEvents.length > 0) {
-        if (!relatedDocsAdded) { storyContext += '\nRelated Documents:\n'; relatedDocsAdded = true }
-        storyContext += '• Global World Events:\n' + [...verseTimelineEvents].sort((a,b) => (a.sort_order||0)-(b.sort_order||0)).map(e => `  - ${e.event_date ? `[${e.event_date}] ` : ''}${e.title}: ${e.description}`).join('\n') + '\n'
+        const events = [...verseTimelineEvents].sort((a,b) => (a.sort_order||0)-(b.sort_order||0))
+        const terms = local ? inputToUse.toLowerCase().match(/[\p{L}\p{N}]{5,}/gu) ?? [] : []
+        const matchingEvents = local
+          ? events.filter(event => {
+              const text = `${event.title} ${event.description}`.toLowerCase()
+              return terms.some(term => text.includes(term))
+            }).slice(0, 4)
+          : events
+        if (matchingEvents.length) {
+          if (!relatedDocsAdded) storyContext += '\nRelated Documents:\n'
+          storyContext += '• Global World Events:\n' + matchingEvents.map(e => `  - ${e.event_date ? `[${e.event_date}] ` : ''}${e.title}: ${local ? e.description?.slice(0, 240) ?? '' : e.description}`).join('\n') + '\n'
+        }
       }
 
-      const recentMessages = newMessages.slice(-20)
+      const recentMessages = newMessages.slice(-20).map(({ role, content }) => ({ role, content }))
 
       const response = await aiService.brainstorm({
         messages: recentMessages,
-        provider: settings.ai_provider || 'openai',
+        provider,
         apiKey: settings?.ai_api_key, providerSettings: settings?.ai_settings,
         storyContext: storyContext.trim(),
       })
 
-      setBrainstormMessages([...newMessages, { role: 'assistant', content: response }])
+      setBrainstormMessages([...newMessages, createMessage('assistant', response)])
     } catch (err: unknown) {
+      setBrainstormMessages(brainstormMessages)
+      if (overrideInput === undefined) setBrainstormInput(inputToUse)
+      setEdit(currentEdit)
       const msg = err instanceof Error ? err.message : 'Brainstorming failed'
       addToast(msg, 'error')
     } finally {
       setIsBrainstorming(false)
     }
+  }
+
+  function saveMessageEdit(message: AssistantMessage, text: string) {
+    const content = text.trim()
+    if (!content || content === message.content || isBrainstorming) return
+    if (message.role === 'user') {
+      void handleBrainstorm(content)
+      return
+    }
+    setBrainstormMessages(brainstormMessages.map(item => item.id === message.id ? { ...item, content } : item))
+    setEdit(null)
   }
 
   const handleCopy = (text: string) => {
@@ -362,13 +430,6 @@ export default function AIPanel() {
               )}
             </button>
 
-            {/* No API key warning */}
-            {!settings?.ai_api_key && (
-              <p className="text-[11px] text-warning-400 text-center px-2">
-                ⚠ Set an AI API key in Settings to enable polish.
-              </p>
-            )}
-
             {/* AI Result */}
             {polishResult && (
               <div className="space-y-3 animate-fade-in">
@@ -423,12 +484,33 @@ export default function AIPanel() {
           <VersionHistory />
         ) : (
           <div className="flex flex-col h-full overflow-hidden">
+            <div aria-label="Chat mode" role="group" className="mb-2 grid shrink-0 grid-cols-2 gap-1 rounded-lg border border-surface-700 p-1">
+              {(['manuscript', 'ideas'] as const).map(mode => (
+                <button
+                  key={mode}
+                  type="button"
+                  disabled={isBrainstorming}
+                  aria-pressed={chatMode === mode}
+                  onClick={() => {
+                    setChatMode(mode)
+                    setEdit(null)
+                  }}
+                  className={cn('rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
+                    chatMode === mode
+                      ? 'bg-[hsl(var(--brand-green-bg))] font-semibold text-[hsl(var(--brand-green))]'
+                      : 'text-surface-400 hover:bg-surface-800')}
+                >
+                  {mode === 'manuscript' ? 'Ask Manuscript' : 'Brainstorm Ideas'}
+                </button>
+              ))}
+            </div>
             {/* Header / Clear Session */}
             {brainstormMessages.length > 0 && (
               <div className="flex justify-end mb-2 shrink-0">
                 <button
                   onClick={() => setShowClearConfirm(true)}
-                  className="flex items-center gap-1.5 px-2 py-1 bg-surface-800 hover:bg-surface-700 text-surface-400 hover:text-surface-200 rounded text-xs transition-colors"
+                  disabled={isBrainstorming}
+                  className="flex items-center gap-1.5 px-2 py-1 bg-surface-800 hover:bg-surface-700 text-surface-400 hover:text-surface-200 rounded text-xs transition-colors disabled:opacity-50"
                   title="Clear Session"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -440,30 +522,46 @@ export default function AIPanel() {
             <div className="flex-1 overflow-y-auto space-y-4 mb-3 pr-1">
               {brainstormMessages.length === 0 ? (
                 <div className="text-center text-surface-500 text-xs mt-10">
-                  Ask Story Intelligence for ideas, plot points, or character concepts.
+                  {chatMode === 'ideas'
+                    ? 'Explore ideas, alternate scenes, or new characters.'
+                    : chapter ? 'Ask what’s on the page. Answers quote your current chapter.'
+                      : 'Open a chapter to ask about its text.'}
                 </div>
               ) : (
-                brainstormMessages.map((msg, idx) => (
-                  <div key={idx} className={cn("p-2.5 rounded-lg text-sm whitespace-pre-wrap relative group select-text", msg.role === 'user' ? "bg-accent-900/30 text-surface-200 ml-4" : "bg-surface-800 text-surface-300 mr-4")}>
-                    {msg.content}
-                    <div className="absolute -bottom-3 right-2 hidden group-hover:flex items-center gap-1 bg-surface-800 border border-surface-700 rounded-md p-1 shadow-sm">
-                      <button 
-                        onClick={() => handleCopy(msg.content)} 
-                        className="p-1 hover:bg-surface-700 rounded text-surface-400 hover:text-surface-200"
-                        title="Copy"
-                      >
-                        <Copy className="w-3 h-3" />
-                      </button>
-                      <button 
-                        onClick={() => handleBrainstorm(msg.content)} 
-                        className="p-1 hover:bg-surface-700 rounded text-surface-400 hover:text-surface-200"
-                        title={msg.role === 'user' ? "Resend" : "Send again"}
-                        disabled={isBrainstorming}
-                      >
-                        <RefreshCcw className="w-3 h-3" />
-                      </button>
+                brainstormMessages.map(msg => (
+                  <article key={msg.id} aria-label={msg.role === 'user' ? 'Your message' : 'AI reply'}
+                    className={cn('min-w-0 text-sm', msg.role === 'user' ? 'ml-4' : 'mr-4')}>
+                    <div className={cn('rounded-lg p-2.5', msg.role === 'user' ? 'bg-accent-900/30 text-surface-200' : 'bg-surface-800 text-surface-300')}>
+                      {msg.role === 'assistant' && chatMode === 'ideas' && <p className="mb-1 text-xs font-medium text-surface-400">Brainstorm suggestion</p>}
+                      {edit?.id === msg.id ? (
+                        <>
+                          <textarea autoFocus aria-label="Edit message" value={edit.text}
+                            onChange={event => setEdit({ id: msg.id, text: event.target.value })}
+                            className="block min-h-20 w-full resize-y rounded-md border border-surface-700 bg-surface-950 p-2 text-sm text-surface-100 focus-visible:outline-accent-700"
+                          />
+                          <div className="mt-2 flex flex-wrap justify-end gap-1">
+                            <button type="button" onClick={() => setEdit(null)} className="rounded-md px-2 py-1 text-xs hover:bg-surface-850">Cancel</button>
+                            <button type="button" onClick={() => saveMessageEdit(msg, edit.text)}
+                              disabled={isBrainstorming || !edit.text.trim() || edit.text.trim() === msg.content}
+                              className="rounded-md bg-[hsl(var(--brand-green-bg))] px-2 py-1 text-xs font-medium text-[hsl(var(--brand-green))] disabled:opacity-50">
+                              {msg.role === 'user' ? 'Send revision' : 'Save edit'}
+                            </button>
+                          </div>
+                        </>
+                      ) : <p className="select-text whitespace-pre-wrap break-words">{msg.content}</p>}
                     </div>
-                  </div>
+                    {edit?.id !== msg.id && (
+                      <MessageActions
+                        content={msg.content}
+                        createdAt={msg.createdAt}
+                        alignRight={msg.role === 'user'}
+                        disabled={isBrainstorming}
+                        onEdit={() => setEdit({ id: msg.id, text: msg.content })}
+                        onResend={msg.role === 'user' ? () => void handleBrainstorm(msg.content) : undefined}
+                        onCopyError={() => addToast('Could not copy. Select the text to copy it manually.', 'error')}
+                      />
+                    )}
+                  </article>
                 ))
               )}
               {isBrainstorming && (
@@ -493,7 +591,8 @@ export default function AIPanel() {
               <textarea
                 value={brainstormInput}
                 onChange={(e) => setBrainstormInput(e.target.value)}
-                placeholder="Ask Story Intelligence..."
+                placeholder={chatMode === 'manuscript' ? 'Ask about this chapter…' : 'Ask for ideas…'}
+                disabled={isBrainstorming}
                 className="w-full bg-surface-800 border border-surface-700 rounded-lg p-2.5 text-sm text-surface-200 focus:outline-none focus:border-accent-500 resize-none h-20"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
@@ -520,9 +619,7 @@ export default function AIPanel() {
         title="Clear Session"
         size="sm"
       >
-        <p className="text-sm text-surface-300 mb-6">
-          Are you sure you want to clear the entire brainstorm session? This cannot be undone.
-        </p>
+        <p className="text-sm text-surface-300 mb-6">Clear the messages in this chat?</p>
         <div className="flex justify-end gap-3">
           <button
             onClick={() => setShowClearConfirm(false)}
@@ -533,6 +630,7 @@ export default function AIPanel() {
           <button
             onClick={() => {
               setBrainstormMessages([])
+              setEdit(null)
               setShowClearConfirm(false)
             }}
             className="px-4 py-2 text-sm font-medium bg-error-600 hover:bg-error-500 text-white rounded-md transition-colors"

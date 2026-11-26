@@ -7,10 +7,20 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
 // Fallback to a valid URL format so the app doesn't crash on boot if .env is missing
 const safeUrl = supabaseUrl.startsWith('http') ? supabaseUrl : 'https://setup-pending.supabase.co'
 const safeKey = supabaseAnonKey || 'setup-pending-key'
+export const authStorageKey = 'sb-' + new URL(safeUrl).hostname.split('.')[0] + '-auth-token'
 
 export const supabase = createClient(safeUrl, safeKey, {
+  global: {
+    fetch: (input, init) => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        return Promise.reject(new TypeError('Cloud connection is offline'))
+      }
+      return fetch(input, init)
+    },
+  },
   auth: {
     storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    storageKey: authStorageKey,
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: false, // Desktop app - no URL-based auth

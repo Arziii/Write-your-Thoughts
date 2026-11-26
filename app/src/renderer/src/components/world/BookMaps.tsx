@@ -6,6 +6,7 @@ import type { BookMap, MapImage, MapPin } from '../../../../shared/maps'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import Modal from '../ui/Modal'
 import MapCanvas from './MapCanvas'
+import ParchmentMapTools, { disposeParchmentMap, initializeParchmentMap } from './ParchmentMapTools'
 import LocationSummaryPanel from './LocationSummaryPanel'
 
 const buttonStyle = 'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-surface-700 px-2.5 py-1.5 text-xs font-medium hover:bg-surface-800 disabled:opacity-50'
@@ -23,8 +24,13 @@ export default function BookMaps({ bookId }: { bookId: string }) {
   const [actionError, setActionError] = useState('')
   const [action, setAction] = useState<MapAction | null>(null)
   const [name, setName] = useState('')
+  const [parchment, setParchment] = useState(false)
   const storageKey = `wyt-map-selection-${bookId}`
   const selectedMap = maps.find(map => map.id === selectedId)
+  const focused = useWorkspaceStore(state => state.mapEditorFocused)
+  const setFocused = useWorkspaceStore(state => state.setMapEditorFocused)
+
+  useEffect(() => () => setFocused(false), [setFocused])
 
   useEffect(() => {
     if (window.api.isMock) {
@@ -52,6 +58,7 @@ export default function BookMaps({ bookId }: { bookId: string }) {
   function startAction(next: MapAction) {
     setActionError('')
     setName(next.type === 'create' ? '' : next.map.name)
+    setParchment(false)
     setAction(next)
   }
 
@@ -65,6 +72,7 @@ export default function BookMaps({ bookId }: { bookId: string }) {
         const map: BookMap = await window.api.maps.create({ bookId, name })
         setMaps(current => [...current, map])
         selectMap(map.id)
+        initializeParchmentMap(map.id, parchment)
       } else if (action.type === 'rename') {
         const map: BookMap = await window.api.maps.rename({ mapId: action.map.id, name })
         setMaps(current => current.map(item => item.id === map.id ? map : item))
@@ -73,6 +81,7 @@ export default function BookMaps({ bookId }: { bookId: string }) {
         const remaining = maps.filter(map => map.id !== action.map.id)
         setMaps(remaining)
         selectMap(remaining[0]?.id ?? '')
+        disposeParchmentMap(action.map.id)
       }
       setAction(null)
     } catch (error) {
@@ -83,8 +92,8 @@ export default function BookMaps({ bookId }: { bookId: string }) {
   }
 
   return (
-    <section className="flex h-full flex-col text-surface-100">
-      <div className="flex flex-wrap items-center gap-2 border-b border-surface-800 bg-surface-900 px-4 py-2">
+    <section className="studio-desk flex h-full min-h-0 flex-col !p-0 text-surface-100">
+      {!focused && <div className="flex flex-wrap items-center gap-2 border-b border-surface-800 bg-surface-900 px-3 py-1.5">
         {maps.length > 0 && (
           <>
             <label htmlFor="book-map-picker" className="text-xs font-medium text-surface-400">Map</label>
@@ -106,9 +115,9 @@ export default function BookMaps({ bookId }: { bookId: string }) {
             </button>
           </>
         )}
-      </div>
+      </div>}
 
-      {selectedMap ? <MapWorkspace key={selectedMap.id} mapId={selectedMap.id} bookId={bookId} /> : (
+      {selectedMap ? <MapWorkspace key={selectedMap.id} map={selectedMap} bookId={bookId} focused={focused} onFocusChange={setFocused} /> : (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
           <MapIcon className="h-8 w-8 text-surface-500" aria-hidden="true" />
           <p role="status" className="text-sm text-surface-400">{loadError || (loading ? 'Loading maps…' : 'Create a map to start placing locations. You can add an image later.')}</p>
@@ -126,6 +135,15 @@ export default function BookMaps({ bookId }: { bookId: string }) {
                 <input className={fieldStyle} value={name} onChange={event => setName(event.target.value)} placeholder="World map" required maxLength={100} autoFocus />
               </label>
             )}
+            {action.type === 'create' && (
+              <div className="space-y-2">
+                <p className="text-sm text-surface-400">New maps start as open ocean. Use Edit map to paint land.</p>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={parchment} onChange={event => setParchment(event.target.checked)} />
+                  Use the sample parchment region
+                </label>
+              </div>
+            )}
             {actionError && <p role="alert" className="text-sm text-danger-500">{actionError}</p>}
             <div className="flex justify-end gap-2">
               <button type="button" className={buttonStyle} disabled={busy} onClick={() => setAction(null)}>Cancel</button>
@@ -140,7 +158,13 @@ export default function BookMaps({ bookId }: { bookId: string }) {
   )
 }
 
-function MapWorkspace({ mapId, bookId }: { mapId: string; bookId: string }) {
+function MapWorkspace({ map, bookId, focused, onFocusChange }: {
+  map: BookMap
+  bookId: string
+  focused: boolean
+  onFocusChange: (focused: boolean) => void
+}) {
+  const mapId = map.id
   const locations = useWorkspaceStore(state => state.locations)
   const openTab = useWorkspaceStore(state => state.openTab)
   const [pins, setPins] = useState<MapPin[]>([])
@@ -226,46 +250,57 @@ function MapWorkspace({ mapId, bookId }: { mapId: string; bookId: string }) {
     })
   }
 
+  const mapControls = (
+    <>
+      <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" hidden onChange={importImage} />
+      <button type="button" className={buttonStyle} onClick={() => fileInput.current?.click()} disabled={busy || loading}>
+        <ImagePlus className="h-4 w-4" aria-hidden="true" /> {image ? 'Replace image' : 'Import image'}
+      </button>
+      <select className={`${fieldStyle} max-w-52`} aria-label="Location to pin" value={locationId} disabled={busy || loading} onChange={event => {
+        setLocationId(event.target.value)
+        setPlacing(false)
+      }}>
+        <option value="">{bookLocations.length ? 'Choose a location' : 'No locations yet'}</option>
+        {bookLocations.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+      </select>
+      {location && (
+        <>
+          <button type="button" className={buttonStyle} aria-pressed={placing} disabled={busy || loading} onClick={() => setPlacing(value => !value)}>
+            <PinIcon className="h-4 w-4" aria-hidden="true" /> {placing ? 'Cancel placement' : existingPin ? 'Move pin' : 'Place pin'}
+          </button>
+          {existingPin && (
+            <>
+              <button type="button" className={buttonStyle} onClick={() => openTab(location.id, 'location', location.name)}>Open location</button>
+              <button type="button" className={buttonStyle} disabled={busy} onClick={removePin}>Remove pin</button>
+            </>
+          )}
+        </>
+      )}
+    </>
+  )
+
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2 border-b border-surface-800 px-4 py-2">
-        <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" hidden onChange={importImage} />
-        <button type="button" className={buttonStyle} onClick={() => fileInput.current?.click()} disabled={busy || loading}>
-          <ImagePlus className="h-4 w-4" aria-hidden="true" /> {image ? 'Replace image' : 'Import image'}
-        </button>
-        <select className={`${fieldStyle} max-w-52`} aria-label="Location to pin" value={locationId} disabled={busy || loading} onChange={event => {
-          setLocationId(event.target.value)
-          setPlacing(false)
-        }}>
-          <option value="">{bookLocations.length ? 'Choose a location' : 'No locations yet'}</option>
-          {bookLocations.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-        </select>
-        {location && (
-          <>
-            <button type="button" className={buttonStyle} aria-pressed={placing} disabled={busy || loading} onClick={() => setPlacing(value => !value)}>
-              <PinIcon className="h-4 w-4" aria-hidden="true" /> {placing ? 'Cancel placement' : existingPin ? 'Move pin' : 'Place pin'}
-            </button>
-            {existingPin && (
-              <>
-                <button type="button" className={buttonStyle} onClick={() => openTab(location.id, 'location', location.name)}>Open location</button>
-                <button type="button" className={buttonStyle} disabled={busy} onClick={removePin}>Remove pin</button>
-              </>
-            )}
-          </>
-        )}
-      </div>
-
       {error && <p role="alert" className="px-4 py-2 text-sm text-danger-500">{error}</p>}
       {placing && <p role="status" className="px-4 py-2 text-xs text-surface-400">Click the map to place the pin for {location?.name}.</p>}
       {loading ? <p role="status" className="p-4 text-sm text-surface-400">Loading map…</p> : (
-        <div className="flex min-h-0 min-w-0 flex-1">
-          <MapCanvas key={imageUrl ?? 'blank'} imageUrl={imageUrl} pins={namedPins} placing={placing}
-            selectedLocationId={locationId} onSelectPin={id => {
-              setLocationId(id)
-              setSummaryLocationId(id)
-            }} onPlace={placePin} />
-          {summaryLocation && <LocationSummaryPanel key={summaryLocation.id} location={summaryLocation} onClose={() => setSummaryLocationId('')} />}
-        </div>
+        <ParchmentMapTools mapId={mapId} mapName={map.name} hasImage={Boolean(imageUrl)} focused={focused} viewerControls={mapControls}
+          onEdit={() => { setSummaryLocationId(''); onFocusChange(true) }}
+          onExit={() => onFocusChange(false)}
+          beforeDrawing={() => { setPlacing(false); setSummaryLocationId('') }}>
+          {({ overlay, placementPreview, brush, onEditPoint, hideImage, hidePins }) => (
+            <div className="flex min-h-0 min-w-0 flex-1">
+              <MapCanvas overlay={overlay} placementPreview={placementPreview} brush={brush} key={imageUrl ?? 'blank'} imageUrl={imageUrl} hideImage={focused && hideImage}
+                fitTrigger={focused}
+                pins={focused && hidePins ? [] : namedPins} placing={Boolean(onEditPoint) || placing}
+                selectedLocationId={locationId} onSelectPin={id => {
+                  setLocationId(id)
+                  setSummaryLocationId(id)
+                }} onPlace={onEditPoint ?? placePin} />
+              {summaryLocation && <LocationSummaryPanel key={summaryLocation.id} location={summaryLocation} onClose={() => setSummaryLocationId('')} />}
+            </div>
+          )}
+        </ParchmentMapTools>
       )}
     </>
   )

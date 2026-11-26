@@ -32,7 +32,7 @@ type EditorTool = typeof editorTools[number]['id']
 export default function EditorView() {
   const {
     activeTabId, activeChapter, tabs,
-    currentBook, toggleSidebar, toggleAIPanel, panelState
+    currentBook, toggleSidebar, toggleAIPanel, panelState, mapEditorFocused
   } = useWorkspaceStore()
   const [wordCount, setWordCount] = useState(activeChapter?.word_count ?? 0)
 
@@ -73,15 +73,16 @@ export default function EditorView() {
   const activeTab = tabs.find(t => t.id === activeTabId)
   if (!activeTab) return null
   const isMaps = activeTab.type === 'maps'
+  const isProfile = activeTab.type === 'character' || activeTab.type === 'location'
   const commentSubjectId = activeTab.type === 'chapter' && activeChapter ? activeChapter.id : activeTab.entityId || activeTab.id
 
   return (
     <div className="flex flex-col h-full" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       {/* Chapter tabs */}
-      <EditorTabs />
+      {!mapEditorFocused && <EditorTabs />}
 
       {/* Chapter header */}
-      <div
+      {!mapEditorFocused && <div
         className={`flex shrink-0 items-center gap-3 px-4 ${activeTab.type === 'chapter' ? 'studio-chapter-header py-3 md:px-6' : 'py-2'}`}
         style={{
           ...(activeTab.type !== 'chapter' && {
@@ -106,15 +107,15 @@ export default function EditorView() {
 
         <div className="min-w-0 flex-1">
           {currentBook && <p className="mb-0.5 truncate text-xs font-medium text-surface-400">{currentBook.title}</p>}
-          <h2 title={activeTab.title} className={`truncate font-bold leading-tight text-surface-50 ${activeTab.type === 'chapter' ? 'text-xl md:text-2xl' : 'text-base'}`}
+          {!isProfile && <h2 title={activeTab.title} className={`truncate font-bold leading-tight text-surface-50 ${activeTab.type === 'chapter' ? 'text-xl md:text-2xl' : 'text-base'}`}
             style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>
             {activeTab.title}
-          </h2>
+          </h2>}
         </div>
 
         <div id="editor-find-slot" className="min-w-0 empty:hidden" />
 
-        {!isMaps && (
+        {!isMaps && !isProfile && activeTab.type !== 'relationship_manager' && (
           <span className="shrink-0 whitespace-nowrap rounded-md bg-[hsl(var(--brand-green-bg))] px-2.5 py-1 text-xs font-medium tabular-nums text-[hsl(var(--brand-green))]">
             {formatWordCount(wordCount)}
           </span>
@@ -133,7 +134,7 @@ export default function EditorView() {
             <Sparkles className="w-4 h-4" />
           </button>
         )}
-      </div>
+      </div>}
 
       {/* Dynamic Content Area */}
       <div className="flex-1 overflow-hidden relative flex" style={{ background: 'hsl(var(--surface-950))' }}>

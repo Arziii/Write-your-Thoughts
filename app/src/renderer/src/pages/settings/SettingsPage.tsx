@@ -9,6 +9,8 @@ import { authService } from '../../services/authService'
 import { useEffect } from 'react'
 import { ProviderSettings, AIProvider } from '../../types'
 import { ProviderFactory } from '../../services/ai/ProviderFactory'
+import { isLocalAIProvider, resolveAISettings } from '../../services/ai/configuration'
+import ReadAloudSettings from './ReadAloudSettings'
 
 export interface PluginInfo {
   id: string
@@ -58,6 +60,7 @@ export default function SettingsPage() {
   }
 
   const currentProviderSettings = aiSettingsObj[aiProvider] || {}
+  const localAI = isLocalAIProvider(aiProvider, currentProviderSettings.baseUrl)
 
   useEffect(() => {
     const draft = getDraft()
@@ -102,7 +105,7 @@ export default function SettingsPage() {
         userId: user.id,
         theme,
         aiProvider,
-        aiApiKey: currentProviderSettings.apiKey || aiApiKey,
+        aiApiKey: localAI ? undefined : currentProviderSettings.apiKey || aiApiKey,
         aiSettings: JSON.stringify(aiSettingsObj),
         aiStylePrompt,
         preserveFormatting,
@@ -114,19 +117,24 @@ export default function SettingsPage() {
       sessionStorage.removeItem('settings_draft')
       setSettings(updated as never)
 
-      // Update display name if changed
-      if (displayName !== (user?.user_metadata?.display_name || '')) {
-        await authService.updateProfile(displayName)
-        const updatedLocalUser = await window.api.auth.getUser(user.id)
-        useUserStore.getState().setLocalUser(updatedLocalUser as any)
-      }
-
       // Sync to cloud in background
       import('../../services/syncService').then(({ syncService }) => {
         syncService.syncSettingsToCloud(updated as any).catch(e => console.error('Cloud sync failed', e))
       })
 
-      addToast('Settings saved', 'success')
+      addToast(navigator.onLine ? 'Settings saved' : 'Settings saved on this device', 'success')
+      if (displayName !== (user.user_metadata?.display_name || '')) {
+        if (!navigator.onLine) {
+          addToast('Connect to the internet to update your account name.', 'info')
+        } else {
+          try {
+            await authService.updateProfile(displayName)
+            useUserStore.getState().setLocalUser(await window.api.auth.getStoredUser(user.id))
+          } catch {
+            addToast('Could not update your account name.', 'warning')
+          }
+        }
+      }
     } catch {
       addToast('Failed to save settings', 'error')
     } finally {
@@ -233,6 +241,8 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        <ReadAloudSettings />
+
         {/* AI Section */}
         <section className="space-y-4">
           <h2 className="text-sm font-semibold text-surface-300 uppercase tracking-wider flex items-center gap-2">
@@ -269,17 +279,17 @@ export default function SettingsPage() {
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-1.5 flex items-center gap-1.5">
                 <Key className="w-3.5 h-3.5" />
-                API Key {['ollama', 'lmstudio'].includes(aiProvider) && '(Optional)'}
+                API Key {localAI && '(Optional)'}
               </label>
               <input
                 id="settings-api-key"
                 type="password"
                 value={currentProviderSettings.apiKey || ''}
                 onChange={(e) => updateProviderSetting('apiKey', e.target.value)}
-                placeholder={(!currentProviderSettings.apiKey && aiApiKey) ? '••••••••••••••••••••••••••••••••••••••••••••••••' : `Your ${aiProvider} API key...`}
+                placeholder={localAI ? 'Leave blank for a default local server' : (!currentProviderSettings.apiKey && aiApiKey) ? '••••••••••••••••••••••••••••••••••••••••••••••••' : `Your ${aiProvider} API key...`}
                 className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 text-sm focus:outline-none focus:border-accent-500 transition-all font-mono"
               />
-              <p className="text-[11px] text-surface-600 mt-1">Your API key is securely synced to your cloud account.</p>
+              {localAI && <p className="text-xs text-surface-400 mt-1">Start the local server and download a model. It can then run while you’re offline.</p>}
             </div>
 
             <div className="pt-2">
@@ -288,18 +298,19 @@ export default function SettingsPage() {
                   setIsTestingConnection(true)
                   setConnectionStatus({type: 'idle', message: ''})
                   try {
-                    const settingsToUse = { ...currentProviderSettings, _providerId: aiProvider } as any
-                    if (!settingsToUse.apiKey && aiApiKey && !['ollama', 'lmstudio'].includes(aiProvider)) {
-                      settingsToUse.apiKey = aiApiKey
-                    }
+                    const settingsToUse = resolveAISettings(aiProvider, aiApiKey, aiSettingsObj)
                     const providerInstance = ProviderFactory.create(aiProvider, settingsToUse)
                     
                     // Automatically test and fetch models
-                    const isConnected = await providerInstance.testConnection()
-                    if (!isConnected) throw new Error('Failed to connect.')
+                    if (!localAI && !await providerInstance.testConnection()) throw new Error('Failed to connect.')
 
                     const fetchedModels = await providerInstance.getAvailableModels()
                     setAvailableModels(fetchedModels)
+                    if (localAI && fetchedModels.length === 0) throw new Error('The local server is running. Download or load a model first.')
+                    if (localAI && settingsToUse.model && !fetchedModels.includes(settingsToUse.model)) {
+                      setIsAdvancedOpen(true)
+                      throw new Error('The selected model is unavailable. Choose an installed model under Advanced Settings.')
+                    }
                     
                     let modelToUse = settingsToUse.model
                     
@@ -320,7 +331,7 @@ export default function SettingsPage() {
                     }
 
                     // Force save the key globally for fallback
-                    if (settingsToUse.apiKey && !aiApiKey) {
+                    if (!localAI && settingsToUse.apiKey && !aiApiKey) {
                       setAiApiKey(settingsToUse.apiKey)
                     }
                     

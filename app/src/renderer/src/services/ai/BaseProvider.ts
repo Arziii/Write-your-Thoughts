@@ -9,7 +9,7 @@ export interface IAIProvider {
   testConnection(): Promise<boolean>
 
   /** Generate plain text or markdown response. */
-  generateText(systemPrompt: string, messages: AIBrainstormMessage[]): Promise<ProviderResponse>
+  generateText(systemPrompt: string, messages: AIBrainstormMessage[], signal?: AbortSignal): Promise<ProviderResponse>
 
   /** Generate JSON response. Returns parsed JSON object. */
   generateJSON(systemPrompt: string, content: string): Promise<any>
@@ -29,7 +29,7 @@ export abstract class BaseProvider implements IAIProvider {
   }
 
   abstract testConnection(): Promise<boolean>
-  abstract generateText(systemPrompt: string, messages: AIBrainstormMessage[]): Promise<ProviderResponse>
+  abstract generateText(systemPrompt: string, messages: AIBrainstormMessage[], signal?: AbortSignal): Promise<ProviderResponse>
   abstract generateJSON(systemPrompt: string, content: string): Promise<any>
   abstract getAvailableModels(): Promise<string[]>
   abstract getRecommendedModel(availableModels: string[]): string

@@ -2,8 +2,26 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { SearchRequest, SearchResult } from '../shared/manuscriptSearch'
 import type { BookMap, LocationChapterReference, MapImage, MapPin } from '../shared/maps'
 import type { ReferenceDetails, SaveReferencePage } from '../shared/referencePages'
+import type { LocalAIRequest, LocalAIResponse } from '../shared/localAI'
+import type { KokoroSpeechRequest } from '../shared/kokoro'
+import type { AnalyzedTimelineEvent } from '../shared/timelineAnalysis'
+import type { StudioImageRequest } from '../shared/chatStudio'
 
 const api = {
+  studioImages: {
+    models: (server: string): Promise<string[]> => ipcRenderer.invoke('studioImages:models', server),
+    generate: (request: StudioImageRequest, requestId: string): Promise<string> => ipcRenderer.invoke('studioImages:generate', request, requestId),
+    cancel: (requestId: string): Promise<void> => ipcRenderer.invoke('studioImages:cancel', requestId),
+  },
+  localAI: {
+    request: (request: LocalAIRequest): Promise<LocalAIResponse> => ipcRenderer.invoke('localAI:request', request),
+    cancel: (requestId: string): Promise<void> => ipcRenderer.invoke('localAI:cancel', requestId),
+  },
+  kokoro: {
+    available: (): Promise<boolean> => ipcRenderer.invoke('kokoro:available'),
+    speak: (request: KokoroSpeechRequest): Promise<ArrayBuffer> => ipcRenderer.invoke('kokoro:speak', request),
+    cancel: (id: string): Promise<void> => ipcRenderer.invoke('kokoro:cancel', id),
+  },
   // Window controls
   window: {
     minimize: () => ipcRenderer.send('window:minimize'),
@@ -25,7 +43,9 @@ const api = {
   // System
   system: {
     onDeepLink: (cb: (url: string) => void) => {
-      ipcRenderer.on('deep-link', (_event, url) => cb(url))
+      const handle = (_event: Electron.IpcRendererEvent, url: string) => cb(url)
+      ipcRenderer.on('deep-link', handle)
+      return () => ipcRenderer.removeListener('deep-link', handle)
     }
   },
 
@@ -140,6 +160,8 @@ const api = {
   },
 
   export: {
+    audiobookFolder: (): Promise<{ token: string; directory: string } | null> => ipcRenderer.invoke('export:audiobookFolder'),
+    audiobookChapter: (token: string, title: string, clips: ArrayBuffer[]): Promise<string> => ipcRenderer.invoke('export:audiobookChapter', token, title, clips),
     book: (bookId: string, authorName: string | undefined, options: any) => ipcRenderer.invoke('export:book', { bookId, authorName, ...options }),
   },
 
@@ -297,6 +319,8 @@ const api = {
   },
   timelineEvents: {
     getByBook: (bookId: string) => ipcRenderer.invoke('timeline:getByBook', bookId),
+    getAnalysis: (bookId: string, inputKey: string) => ipcRenderer.invoke('timeline:getAnalysis', bookId, inputKey),
+    saveAnalysis: (bookId: string, inputKey: string, events: AnalyzedTimelineEvent[]) => ipcRenderer.invoke('timeline:saveAnalysis', bookId, inputKey, events),
     getById: (id: string) => ipcRenderer.invoke('timeline:getById', id),
     create: (data: any) => ipcRenderer.invoke('timeline:create', data),
     update: (data: any) => ipcRenderer.invoke('timeline:update', data),

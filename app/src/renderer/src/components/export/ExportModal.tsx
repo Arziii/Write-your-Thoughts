@@ -5,6 +5,7 @@ import { useUserStore } from '../../stores/userStore'
 import { useToastStore } from '../../stores/toastStore'
 import { Book } from '../../types'
 import { cn } from '../../utils'
+import AudiobookExport from './AudiobookExport'
 
 interface ExportModalProps {
   book: Book
@@ -62,6 +63,8 @@ export default function ExportModal({ book, isOpen, onClose }: ExportModalProps)
   const { addToast } = useToastStore()
   
   const [format, setFormat] = useState<ExportFormat>('epub')
+  const [audiobook, setAudiobook] = useState(false)
+  const [audiobookBusy, setAudiobookBusy] = useState(false)
   const [includeToc, setIncludeToc] = useState(true)
   const [fontFamily, setFontFamily] = useState('Times New Roman')
   const [fontSize, setFontSize] = useState(12)
@@ -77,6 +80,8 @@ export default function ExportModal({ book, isOpen, onClose }: ExportModalProps)
       window.api.chapters.getByBook(book.id).then(chaps => setChapters(chaps || []))
     }
   }, [isOpen, book])
+
+  useEffect(() => { if (!isOpen) setAudiobook(false) }, [isOpen])
 
   const handleExport = async () => {
     setIsExporting(true)
@@ -103,6 +108,12 @@ export default function ExportModal({ book, isOpen, onClose }: ExportModalProps)
       setIsExporting(false)
     }
   }
+
+  if (audiobook) return (
+    <Modal isOpen={isOpen} onClose={onClose} closeDisabled={audiobookBusy} title="Export Audiobook" size="lg">
+      {isOpen && <AudiobookExport chapters={chapters} onClose={() => setAudiobook(false)} onBusyChange={setAudiobookBusy} />}
+    </Modal>
+  )
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Publish & Export" size="full">
@@ -131,6 +142,7 @@ export default function ExportModal({ book, isOpen, onClose }: ExportModalProps)
               </button>
             ))}
           </div>
+          <button type="button" disabled={isExporting} onClick={() => setAudiobook(true)} className="w-full rounded-xl border border-surface-700 bg-surface-900 p-3 text-sm text-surface-200 hover:bg-surface-800 disabled:opacity-50">Export Audiobook</button>
         </div>
 
         {/* Content Options */}

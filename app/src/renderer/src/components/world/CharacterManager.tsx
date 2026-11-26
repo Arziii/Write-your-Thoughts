@@ -1,14 +1,19 @@
 import { useState, useEffect } from 'react'
 import { useEditorSave } from '../../hooks/useEditorSave'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
-import { Camera, Save, Lock, Unlock, X, Loader2 } from 'lucide-react'
+import { ImagePlus, Save, Lock, Unlock, Loader2, Users } from 'lucide-react'
 import { useToastStore } from '../../stores/toastStore'
 import { cn } from '../../utils'
 import VoiceIntelligenceTab from './VoiceIntelligenceTab'
 import RelationshipIntelligenceTab from './RelationshipIntelligenceTab'
-import { uploadImage, deleteImage } from '../../services/storageService'
+import { uploadImage } from '../../services/storageService'
 
-type TabType = 'general' | 'voice' | 'relationships'
+const characterTabs = [
+  { id: 'general', label: 'General Info' },
+  { id: 'voice', label: 'Voice Intelligence' },
+] as const
+
+type TabType = typeof characterTabs[number]['id']
 
 export default function CharacterManager({ entityId }: { entityId: string }) {
   const { characters, updateCharacter, panelState, toggleEntityLock, drafts } = useWorkspaceStore()
@@ -51,7 +56,9 @@ export default function CharacterManager({ entityId }: { entityId: string }) {
   }
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
+    const input = e.currentTarget
+    const file = input.files?.[0]
+    input.value = ''
     if (!file) return
     if (file.size > 5 * 1024 * 1024) { addToast('Image must be under 5MB', 'error'); return }
 
@@ -64,159 +71,172 @@ export default function CharacterManager({ entityId }: { entityId: string }) {
       addToast(err.message || 'Upload failed', 'error')
     } finally {
       setIsUploadingImage(false)
-      e.target.value = ''
     }
   }
 
-  const handleImageDelete = async () => {
+  const handleImageDelete = () => {
     saving.stage({ ...(useWorkspaceStore.getState().drafts[entityId] ?? character ?? {}), image_url: '' })
-    // Best-effort delete from storage (unknown ext, try all common ones)
-    await deleteImage('characters', entityId, 'unknown').catch(() => {})
-    addToast('Image removed', 'success')
   }
 
   const isDirty = !!drafts[entityId]
 
   return (
-    <div className="p-8 max-w-4xl mx-auto overflow-y-auto h-full text-surface-200">
-      <div className="flex justify-between items-center mb-8">
-        <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-bold text-surface-100">{formData.name || 'Unnamed Character'}</h1>
-          {isDirty && (
-            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-warning-500/15 text-warning-400 border border-warning-500/20">
-              Unsaved
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => toggleEntityLock(entityId)}
-            className={cn(
-              "flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors border",
-              panelState.lockedEntities?.includes(entityId)
-                ? "bg-accent-900/30 text-accent-400 border-accent-800 hover:bg-accent-900/50"
-                : "bg-surface-800 text-surface-400 border-surface-700 hover:bg-surface-700 hover:text-surface-300"
-            )}
-            title="Lock this character into AI context"
-          >
-            {panelState.lockedEntities?.includes(entityId) ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
-            <span className="text-sm">Memory Lock</span>
-          </button>
-          <button
-            onClick={() => void saving.save()}
-            disabled={isSaving}
-            className="flex items-center gap-2 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white px-4 py-2 rounded-md font-medium transition-colors"
-          >
-            <Save className="w-4 h-4" />
-            {isSaving ? 'Saving...' : 'Save'}
-          </button>
-        </div>
-      </div>
-
-      <div className="flex border-b border-surface-700 mb-6 gap-6">
-        <button
-          onClick={() => setActiveTab('general')}
-          className={cn(
-            "pb-3 text-sm font-medium transition-colors border-b-2",
-            activeTab === 'general' ? "border-accent-500 text-accent-400" : "border-transparent text-surface-400 hover:text-surface-200"
-          )}
-        >
-          General Info
-        </button>
-        <button
-          onClick={() => setActiveTab('voice')}
-          className={cn(
-            "pb-3 text-sm font-medium transition-colors border-b-2",
-            activeTab === 'voice' ? "border-accent-500 text-accent-400" : "border-transparent text-surface-400 hover:text-surface-200"
-          )}
-        >
-          Voice Intelligence
-        </button>
-      </div>
-
-      {activeTab === 'general' ? (
-        <div className="grid grid-cols-3 gap-8">
-          {/* Left Column: Image & Basic Info */}
-        <div className="col-span-1 space-y-6">
-          <div className="relative group">
-            <div className="aspect-[3/4] bg-surface-800 rounded-lg overflow-hidden border border-surface-700 flex items-center justify-center">
-              {isUploadingImage ? (
-                <div className="flex flex-col items-center gap-2">
-                  <Loader2 className="w-8 h-8 text-accent-400 animate-spin" />
-                  <span className="text-xs text-surface-400">Uploading...</span>
-                </div>
-              ) : formData.image_url ? (
-                <img src={formData.image_url} alt={formData.name} className="w-full h-full object-cover" />
-              ) : (
-                <Camera className="w-12 h-12 text-surface-600" />
-              )}
-            </div>
-            {!isUploadingImage && (
-              <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center cursor-pointer transition-opacity rounded-lg gap-2">
-                <span className="text-white text-sm font-medium">Upload Image</span>
-                <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-              </label>
-            )}
-            {formData.image_url && !isUploadingImage && (
+    <div className="reference-profile h-full overflow-y-auto">
+      <div className="mx-auto max-w-6xl space-y-5 p-4 md:p-7">
+        <header className="reference-card flex flex-wrap items-center justify-between gap-2 !px-3 !py-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {characterTabs.map(({ id, label }) => (
               <button
-                onClick={handleImageDelete}
-                className="absolute top-2 right-2 z-10 p-1 bg-red-600/80 hover:bg-red-600 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                title="Remove image"
+                key={id}
+                type="button"
+                aria-pressed={activeTab === id}
+                onClick={() => setActiveTab(id)}
+                className={cn(
+                  'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                  activeTab === id
+                    ? 'bg-[hsl(var(--brand-green-bg))] text-[hsl(var(--brand-green))]'
+                    : 'text-surface-400 hover:bg-surface-900 hover:text-surface-100'
+                )}
               >
-                <X className="w-3 h-3" />
+                {label}
               </button>
+            ))}
+          </div>
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            {isDirty && (
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-warning-500/15 text-warning-400 border border-warning-500/20">
+                Unsaved
+              </span>
             )}
+            <button
+              onClick={() => toggleEntityLock(entityId)}
+              className={cn(
+                "flex items-center gap-2 px-3 py-1.5 text-sm rounded-md font-medium transition-colors border",
+                panelState.lockedEntities?.includes(entityId)
+                  ? "bg-[hsl(var(--brand-green-bg))] text-[hsl(var(--brand-green))] border-current hover:brightness-95"
+                  : "text-[hsl(var(--brand-green))] border-current hover:bg-[hsl(var(--brand-green-bg))]"
+              )}
+              title="Lock this character into AI context"
+            >
+              {panelState.lockedEntities?.includes(entityId) ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+              <span className="text-sm">Memory Lock</span>
+            </button>
+            <button
+              onClick={() => void saving.save()}
+              disabled={isSaving}
+              className="flex items-center gap-2 border border-transparent bg-[hsl(var(--brand-green-bg))] hover:brightness-95 disabled:opacity-50 text-[hsl(var(--brand-green))] px-3 py-1.5 text-sm rounded-md font-medium transition-colors"
+            >
+              <Save className="w-4 h-4" />
+              {isSaving ? 'Saving...' : 'Save'}
+            </button>
           </div>
+        </header>
 
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-surface-400 uppercase tracking-wider mb-1">Name</label>
-              <input name="name" value={formData.name} onChange={handleChange} className="w-full bg-surface-800 border border-surface-700 rounded p-2 text-sm focus:outline-none focus:border-accent-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-surface-400 uppercase tracking-wider mb-1">Nickname</label>
-              <input name="nickname" value={formData.nickname} onChange={handleChange} className="w-full bg-surface-800 border border-surface-700 rounded p-2 text-sm focus:outline-none focus:border-accent-500" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-surface-400 uppercase tracking-wider mb-1">Age</label>
-                <input name="age" value={formData.age} onChange={handleChange} className="w-full bg-surface-800 border border-surface-700 rounded p-2 text-sm focus:outline-none focus:border-accent-500" />
+        {activeTab === 'general' ? (
+          <div className="profile-worksheet">
+            <div className="profile-worksheet-intro">
+              <div className="profile-worksheet-portrait group" role="group" aria-label="Character picture" aria-busy={isUploadingImage}>
+                <label className="absolute inset-0 grid cursor-pointer place-items-center focus-within:outline focus-within:-outline-offset-4" title={formData.image_url ? 'Replace image' : 'Upload image'}>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    aria-label={formData.image_url ? 'Replace character image' : 'Upload character image'}
+                    onChange={handleImageUpload}
+                    disabled={isUploadingImage}
+                    className="sr-only"
+                  />
+                  {formData.image_url ? (
+                    <img src={formData.image_url} alt={`Portrait of ${formData.name || 'this character'}`} className="absolute inset-0 h-full w-full object-contain" />
+                  ) : (
+                    <span className="flex flex-col items-center gap-2">
+                      <ImagePlus className="h-7 w-7" aria-hidden="true" />
+                      Upload image
+                    </span>
+                  )}
+                  {formData.image_url && (
+                    <span className="pointer-events-none absolute bottom-2 left-2 rounded-md bg-black/80 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                      Replace image
+                    </span>
+                  )}
+                </label>
+                {formData.image_url && (
+                  <button
+                    type="button"
+                    onClick={handleImageDelete}
+                    disabled={isUploadingImage}
+                    className="absolute right-2 top-2 rounded-md bg-black/80 px-2 py-1 text-xs text-white opacity-0 transition-opacity hover:bg-black group-hover:opacity-100 group-focus-within:opacity-100 pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto"
+                  >
+                    Remove image
+                  </button>
+                )}
+                {isUploadingImage && (
+                  <div role="status" className="absolute inset-x-0 top-0 flex items-center justify-center gap-2 bg-black/90 p-2 text-xs text-white">
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    Uploading image…
+                  </div>
+                )}
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-surface-400 uppercase tracking-wider mb-1">Gender</label>
-                <input name="gender" value={formData.gender} onChange={handleChange} className="w-full bg-surface-800 border border-surface-700 rounded p-2 text-sm focus:outline-none focus:border-accent-500" />
-              </div>
-            </div>
-          </div>
-        </div>
 
-        {/* Right Column: Detailed Info */}
-        <div className="col-span-2 space-y-6">
-          <div>
-            <label className="block text-xs font-semibold text-surface-400 uppercase tracking-wider mb-1">Appearance</label>
-            <textarea name="appearance" value={formData.appearance} onChange={handleChange} rows={3} className="w-full bg-surface-800 border border-surface-700 rounded p-2 text-sm focus:outline-none focus:border-accent-500 resize-none" placeholder="Physical features, clothing, distinguishing marks..."></textarea>
+              <section className="profile-worksheet-card grid content-center gap-2.5" aria-label="Character details">
+              <div className="mb-2 flex min-w-0 items-center gap-3">
+                <span className="shrink-0 rounded-lg bg-[hsl(var(--brand-green-bg))] p-2.5 text-[hsl(var(--brand-green))]">
+                  <Users className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <div>
+                  <span className="block text-xs font-semibold text-[hsl(var(--brand-green))]">Character</span>
+                  <h1 className="break-words font-serif text-2xl font-semibold leading-tight md:text-3xl">{formData.name || 'Unnamed Character'}</h1>
+                </div>
+              </div>
+                {([
+                  ['name', 'Name'],
+                  ['nickname', 'Nickname'],
+                  ['age', 'Age'],
+                  ['gender', 'Gender'],
+                ] as const).map(([field, label]) => (
+                  <label key={field} className="profile-worksheet-detail">
+                    <span>{label}</span>
+                    <input
+                      className="profile-worksheet-input"
+                      name={field}
+                      value={formData[field] ?? ''}
+                      onChange={handleChange}
+                    />
+                  </label>
+                ))}
+              </section>
+            </div>
+
+            <div className="profile-worksheet-sections">
+              {([
+                ['appearance', 'Physical Description', 'Physical features, clothing, distinguishing marks…'],
+                ['notes', 'Background & Notes', 'Backstory, secrets, and other details…'],
+                ['goals', 'Goals & Motivations', 'What do they want? What drives them?'],
+                ['relationships', 'Relationships', 'Family, friends, allies, and rivals…'],
+                ['personality', 'Personality', 'Traits, habits, fears, and desires…'],
+              ] as const).map(([field, label, placeholder]) => (
+                <label key={field} className="profile-prose-section block">
+                  <span className="profile-worksheet-heading">{label}</span>
+                  <div className="reference-growing-field profile-prose-field" data-content={formData[field] ?? ''}>
+                    <textarea
+                      className="profile-worksheet-input"
+                      name={field}
+                      value={formData[field] ?? ''}
+                      onChange={handleChange}
+                      placeholder={placeholder}
+                      rows={3}
+                    />
+                  </div>
+                </label>
+              ))}
+            </div>
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-surface-400 uppercase tracking-wider mb-1">Personality</label>
-            <textarea name="personality" value={formData.personality} onChange={handleChange} rows={3} className="w-full bg-surface-800 border border-surface-700 rounded p-2 text-sm focus:outline-none focus:border-accent-500 resize-none" placeholder="Traits, habits, fears, desires..."></textarea>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-surface-400 uppercase tracking-wider mb-1">Goals & Motivations</label>
-            <textarea name="goals" value={formData.goals} onChange={handleChange} rows={3} className="w-full bg-surface-800 border border-surface-700 rounded p-2 text-sm focus:outline-none focus:border-accent-500 resize-none" placeholder="What do they want? Why do they want it?"></textarea>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-surface-400 uppercase tracking-wider mb-1">Relationships</label>
-            <textarea name="relationships" value={formData.relationships} onChange={handleChange} rows={3} className="w-full bg-surface-800 border border-surface-700 rounded p-2 text-sm focus:outline-none focus:border-accent-500 resize-none" placeholder="Family, friends, enemies..."></textarea>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-surface-400 uppercase tracking-wider mb-1">Other Notes</label>
-            <textarea name="notes" value={formData.notes} onChange={handleChange} rows={4} className="w-full bg-surface-800 border border-surface-700 rounded p-2 text-sm focus:outline-none focus:border-accent-500 resize-none" placeholder="Backstory, secrets, random facts..."></textarea>
-          </div>
-        </div>
+        ) : (
+          <section className="space-y-4">
+            <h1 className="font-serif text-2xl font-semibold">{formData.name || 'Unnamed Character'}</h1>
+            <VoiceIntelligenceTab characterId={entityId} />
+          </section>
+        )}
       </div>
-      ) : (
-        <VoiceIntelligenceTab characterId={entityId} />
-      )}
     </div>
   )
 }

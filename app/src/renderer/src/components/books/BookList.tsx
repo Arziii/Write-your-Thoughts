@@ -12,7 +12,7 @@ import type { Book } from '../../types'
 
 export default function BookList() {
   const { user } = useUserStore()
-  const { books, setBooks, addBook, updateBook, removeBook, setCurrentBook, setChapters } = useWorkspaceStore()
+  const { books, setBooks, addBook, updateBook, removeBook } = useWorkspaceStore()
   const { addToast } = useToastStore()
   const navigate = useNavigate()
 
@@ -32,10 +32,7 @@ export default function BookList() {
     window.api.books.getAll(user.id).then((b) => setBooks(b as Book[]))
   }, [user])
 
-  const openBook = async (book: Book) => {
-    setCurrentBook(book)
-    const chapters = await window.api.chapters.getByBook(book.id)
-    setChapters(chapters as never)
+  const openBook = (book: Book) => {
     navigate(`/book/${book.id}`)
   }
 

@@ -77,7 +77,7 @@ export default function SearchModal({ book, onClose }: SearchModalProps) {
   const handleSelect = (result: SearchResult) => {
     onClose()
     if (result.type === 'timeline') {
-      openTab(book.id, 'timeline', 'Calendar', { type: 'timeline', eventId: result.id })
+      openTab(`calendar-${book.id}`, 'timeline', 'Calendar', { type: 'timeline', eventId: result.id })
       return
     }
 

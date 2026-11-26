@@ -141,7 +141,7 @@ export default function ReferencePageEditor({ kind, entityId, onWordCountChange 
         <EditorToolbar editor={editor} saveStatus={saving.status} onSave={saving.save} showHistory={false} />
       </div>
 
-      <div className="reference-workspace min-h-0 flex-1 overflow-y-auto">
+      <div className="reference-profile min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-6xl space-y-5 p-4 md:p-7">
           <header className="reference-card flex items-center gap-3.5">
             <span className="shrink-0 rounded-lg bg-[hsl(var(--brand-green-bg))] p-2.5 text-[hsl(var(--brand-green))]">
@@ -160,25 +160,27 @@ export default function ReferencePageEditor({ kind, entityId, onWordCountChange 
             </label>
           </header>
 
-          <details open className="space-y-3">
-            <summary className="cursor-pointer rounded-md px-1 py-1 text-sm font-semibold text-surface-200">Reference cards</summary>
-            <ReferenceCards kind={kind} details={details} targets={targets}
-              onChange={update => {
-                current.current.details = update(current.current.details)
-                setDetails(current.current.details)
-                saving.stage({ ...current.current })
-              }}
-              onOpen={target => workspace.openTab(target.id, target.type, target.title)} />
-          </details>
+          <div className="profile-worksheet space-y-5">
+            <details open className="space-y-3">
+              <summary className="cursor-pointer rounded-md px-1 py-1 text-sm font-semibold">Reference cards</summary>
+              <ReferenceCards kind={kind} details={details} targets={targets}
+                onChange={update => {
+                  current.current.details = update(current.current.details)
+                  setDetails(current.current.details)
+                  saving.stage({ ...current.current })
+                }}
+                onOpen={target => workspace.openTab(target.id, target.type, target.title)} />
+            </details>
 
-          <section className="reference-card">
-            <h3 className="mb-3 border-b border-surface-800 pb-2 font-serif text-lg font-semibold">{config.body}</h3>
-            <EditorContent editor={editor} className="min-h-48 text-surface-100" style={{
-              fontFamily: settings?.editor_font || 'Georgia, serif',
-              fontSize: `${settings?.font_size || 16}px`,
-              lineHeight: settings?.line_spacing || 1.8,
-            }} />
-          </section>
+            <section className="profile-worksheet-card">
+              <h3 className="profile-worksheet-heading">{config.body}</h3>
+              <EditorContent editor={editor} className="profile-worksheet-input min-h-48" style={{
+                fontFamily: settings?.editor_font || 'Georgia, serif',
+                fontSize: `${settings?.font_size || 16}px`,
+                lineHeight: settings?.line_spacing || 1.8,
+              }} />
+            </section>
+          </div>
         </div>
       </div>
     </div>

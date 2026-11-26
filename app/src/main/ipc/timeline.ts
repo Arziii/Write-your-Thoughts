@@ -1,6 +1,11 @@
 import { IpcMain } from 'electron'
-import { dbRun, dbGet, dbAll } from '../database/init'
+import { dbRun, dbGet, dbAll, getDb, saveDb } from '../database/init'
 import { v4 as uuidv4 } from 'uuid'
+import type { AnalyzedTimelineEvent } from '../../shared/timelineAnalysis'
+
+function getBookEvents(bookId: string) {
+  return dbAll('SELECT * FROM timeline_events WHERE book_id = ? ORDER BY story_day ASC, created_at ASC, rowid ASC', [bookId])
+}
 
 export function registerTimelineHandlers(ipcMain: IpcMain): void {
   // --- Settings ---
@@ -26,7 +31,44 @@ export function registerTimelineHandlers(ipcMain: IpcMain): void {
 
   // --- Events ---
   ipcMain.handle('timeline:getByBook', async (_event, bookId: string) => {
-    return dbAll('SELECT * FROM timeline_events WHERE book_id = ? ORDER BY story_day ASC, created_at ASC', [bookId])
+    return getBookEvents(bookId)
+  })
+
+  ipcMain.handle('timeline:getAnalysis', (_event, bookId: string, inputKey: string) => {
+    const analysis = dbGet('SELECT input_key FROM timeline_analyses WHERE book_id = ?', [bookId])
+    return analysis?.input_key === inputKey ? getBookEvents(bookId) : null
+  })
+
+  ipcMain.handle('timeline:saveAnalysis', (_event, bookId: string, inputKey: string, events: AnalyzedTimelineEvent[]) => {
+    const previous = dbGet('SELECT input_key FROM timeline_analyses WHERE book_id = ?', [bookId])
+    if (previous?.input_key === inputKey) return getBookEvents(bookId)
+
+    const chapters = new Set(dbAll('SELECT id FROM chapters WHERE book_id = ?', [bookId]).map(row => row.id))
+    if (!events.length || events.some(event => !chapters.has(event.chapter_id) || !event.title.trim() ||
+      !event.description.trim() || !Number.isSafeInteger(event.story_day) || event.story_day < 1)) {
+      throw new Error('The timeline could not be matched to this book’s chapters.')
+    }
+
+    const database = getDb()
+    const now = new Date().toISOString()
+    database.run('BEGIN')
+    try {
+      database.run('DELETE FROM timeline_events WHERE book_id = ?', [bookId])
+      for (const event of events) {
+        database.run(`INSERT INTO timeline_events
+          (id, book_id, title, description, story_day, duration_days, chapter_id, characters_involved, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, 1, ?, '[]', ?, ?)`,
+        [uuidv4(), bookId, event.title, event.description, event.story_day, event.chapter_id, now, now])
+      }
+      database.run(`INSERT INTO timeline_analyses (book_id, input_key) VALUES (?, ?)
+        ON CONFLICT(book_id) DO UPDATE SET input_key = excluded.input_key`, [bookId, inputKey])
+      database.run('COMMIT')
+    } catch (error) {
+      database.run('ROLLBACK')
+      throw error
+    }
+    saveDb()
+    return getBookEvents(bookId)
   })
 
   ipcMain.handle('timeline:getById', async (_event, id: string) => {

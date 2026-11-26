@@ -10,6 +10,7 @@ interface WorkspaceStore {
   // Books
   books: Book[]
   currentBook: Book | null
+  bookTabs: Record<string, { tabs: EditorTab[]; activeTabId: string | null }>
   setBooks: (books: Book[]) => void
   setCurrentBook: (book: Book | null) => void
   addBook: (book: Book) => void
@@ -106,6 +107,8 @@ interface WorkspaceStore {
   // Focus mode
   focusMode: boolean
   setFocusMode: (mode: boolean) => void
+  mapEditorFocused: boolean
+  setMapEditorFocused: (focused: boolean) => void
 
   // AI Context Selection
   selectedText: string
@@ -134,17 +137,50 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   // Books
   books: [],
   currentBook: null,
+  bookTabs: {},
   setBooks: (books) => set({ books }),
-  setCurrentBook: (currentBook) => set({ currentBook }),
+  setCurrentBook: (currentBook) => set((state) => {
+    const previousBook = state.currentBook
+    if (previousBook?.id === currentBook?.id) return { currentBook }
+
+    return {
+      currentBook,
+      bookTabs: previousBook ? {
+        ...state.bookTabs,
+        [previousBook.id]: { tabs: state.tabs, activeTabId: state.activeTabId },
+      } : state.bookTabs,
+      tabs: [],
+      activeTabId: null,
+      activeChapter: null,
+      searchTarget: null,
+      selectedText: '',
+      focusMode: false,
+      mapEditorFocused: false,
+      chapters: [],
+      characters: [],
+      locations: [],
+      notes: [],
+      codex: [],
+      wiki: [],
+      organizations: [],
+      worldRules: [],
+      timelineEvents: [],
+      timelineSettings: null,
+    }
+  }),
   addBook: (book) => set((s) => ({ books: [book, ...s.books] })),
   updateBook: (book) => set((s) => ({
     books: s.books.map((b) => b.id === book.id ? book : b),
     currentBook: s.currentBook?.id === book.id ? book : s.currentBook,
   })),
-  removeBook: (bookId) => set((s) => ({
-    books: s.books.filter((b) => b.id !== bookId),
-    currentBook: s.currentBook?.id === bookId ? null : s.currentBook,
-  })),
+  removeBook: (bookId) => {
+    if (get().currentBook?.id === bookId) get().setCurrentBook(null)
+    set((state) => {
+      const bookTabs = { ...state.bookTabs }
+      delete bookTabs[bookId]
+      return { books: state.books.filter((book) => book.id !== bookId), bookTabs }
+    })
+  },
 
   // Chapters
   chapters: [],
@@ -374,6 +410,8 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   // Focus mode
   focusMode: false,
   setFocusMode: (focusMode) => set({ focusMode }),
+  mapEditorFocused: false,
+  setMapEditorFocused: (mapEditorFocused) => set({ mapEditorFocused }),
 
   // AI Context Selection
   selectedText: '',
@@ -425,6 +463,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
           window.api.timelineEvents?.getByBook ? window.api.timelineEvents.getByBook(bId) : Promise.resolve([]),
         ])
 
+        if (get().currentBook?.id !== bId) return
         set({
           chapters: (chapters as any[]) ?? [],
           characters: (characters as any[]) ?? [],

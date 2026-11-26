@@ -28,9 +28,15 @@ import { setupRelationshipHandlers } from './relationships'
 import { registerVerseTimelineHandlers } from './verseTimeline'
 import { registerStoryIntelligenceHandlers } from './storyIntelligence'
 import { registerDatabaseHandlers } from './database'
+import { registerLocalAIHandlers } from './localAI'
+import { registerKokoroHandlers } from './kokoro'
+import { registerStudioImageHandlers } from './studioImages'
 
 export function registerIpcHandlers(ipcMain: IpcMain): void {
   registerDatabaseHandlers(ipcMain)
+  registerLocalAIHandlers(ipcMain)
+  registerKokoroHandlers(ipcMain)
+  registerStudioImageHandlers(ipcMain)
   registerAuthHandlers(ipcMain)
   registerBookHandlers(ipcMain)
   registerChapterHandlers(ipcMain)

@@ -5,6 +5,7 @@ import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useUserStore } from '../../stores/userStore'
 import { useToastStore } from '../../stores/toastStore'
 import { aiService } from '../../services/aiService'
+import { getAIConfigurationError } from '../../services/ai/configuration'
 import { cn } from '../../utils'
 import { EditorToolPanel, PanelAnalyzeButton, PanelEmptyState, panelCard } from './EditorToolPanel'
 
@@ -59,8 +60,9 @@ export default function StyleIntelligencePanel({ chapterId, onClose }: { chapter
   const metrics = chapterMetrics[chapterId]
 
   const handleAnalyzeBaseline = async () => {
-    if (!settings?.ai_api_key) {
-      addToast('Please set your AI API Key in Settings first', 'error')
+    const configurationError = getAIConfigurationError(settings)
+    if (!settings || configurationError) {
+      addToast(configurationError ?? 'Open Settings to configure an AI provider.', 'warning')
       return
     }
     if (!currentBook?.id) {
@@ -100,8 +102,9 @@ export default function StyleIntelligencePanel({ chapterId, onClose }: { chapter
   }
 
   const handleAnalyzeChapter = async () => {
-    if (!settings?.ai_api_key) {
-      addToast('Please set your AI API Key in Settings first', 'error')
+    const configurationError = getAIConfigurationError(settings)
+    if (!settings || configurationError) {
+      addToast(configurationError ?? 'Open Settings to configure an AI provider.', 'warning')
       return
     }
     const currentChapterData = chapters.find(c => c.id === chapterId)

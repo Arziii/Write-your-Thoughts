@@ -47,7 +47,7 @@ export class OpenAIProvider extends BaseProvider {
     return availableModels.find(m => m.includes('gpt')) || defaultModel
   }
 
-  async generateText(systemPrompt: string, messages: AIBrainstormMessage[]): Promise<ProviderResponse> {
+  async generateText(systemPrompt: string, messages: AIBrainstormMessage[], signal?: AbortSignal): Promise<ProviderResponse> {
     if (!this.settings.apiKey) throw new Error('Missing API Key')
     
     let apiKey = this.settings.apiKey.trim()
@@ -67,6 +67,7 @@ export class OpenAIProvider extends BaseProvider {
     let response: Response
     try {
       response = await fetch('https://api.openai.com/v1/chat/completions', {
+        signal,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
