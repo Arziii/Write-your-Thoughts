@@ -26,7 +26,7 @@ The 2026-11-26 Vite/Electron bundle build passed. ESLint reports missing reposit
 
 ## MAP-01 Large maps and provenance
 
-Map brush geometry is localStorage JSON. Very large drawings can hit storage quota, and in-memory undo has a fixed history cap. Atlas terrain classification reads authored layers and stamps. For imported raster images, choose a manual road texture. A renderer that was open when the terrain assets were replaced can still use its previous catalog. Restart the dev app after replacing source textures and rebuild any distributed copy to include them. The CC0 notice applies to the credited stamps. Additional artwork and texture provenance needs review. See [Map editor](modules/MAP_EDITOR.md) and the [included license inventory](../assets/maps/map-assets/map-assets/LICENSES.md).
+Map brush geometry is localStorage JSON. Very large drawings can hit storage quota, and in-memory undo has a fixed history cap. Atlas terrain classification reads authored layers and stamps. For imported raster images, choose a manual road texture. A renderer that was open when the terrain assets were replaced can still use its previous catalog. Restart the dev app after replacing source textures and rebuild any distributed copy to include them. The CC0 notice applies to the credited stamps. Additional artwork and texture provenance needs review. See [Map editor](modules/MAP_EDITOR.md) and the [included license inventory](../assets/maps/LICENSES.md).
 
 ## AI-01 Provider and playback variability
 

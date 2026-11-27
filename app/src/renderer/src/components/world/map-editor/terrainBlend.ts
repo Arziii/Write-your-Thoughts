@@ -2,7 +2,7 @@ import { atlasHeight as height, atlasWidth as width, clamp, lerp, smoothStep, to
 import type { WorldPoint } from './atlasPaths'
 import type { MapPoint } from './MapCanvas'
 import type { TerrainTile } from './seamlessTerrain'
-import { terrainNoise, terrainSurfaceKey } from './terrainSurface'
+import { resolveTerrainName, terrainNoise, terrainSurfaceKey } from './terrainSurface'
 
 export type TerrainBlendSettings = {
   hardness: number
@@ -16,12 +16,31 @@ export const defaultTerrainBlend: TerrainBlendSettings = {
   hardness: 35, strength: 80, noise: 25, harmonize: true, relief: true,
 }
 
-export type TerrainShape = 'Rectangle' | 'Ellipse' | 'Diamond' | 'Fill'
+export const MAX_ROUGHNESS = 40
+
+export function coastDisplacementScale(roughness: number) {
+  return roughness > 0 ? roughness * 6 : 0
+}
+
+export function coastDisplacementReach(roughness: number) {
+  const scale = coastDisplacementScale(roughness)
+  return scale > 0 ? Math.ceil(scale * 0.6) + 12 : 0
+}
+
+export function coastTurbulenceFrequency(roughness: number) {
+  const t = clamp(roughness / MAX_ROUGHNESS)
+  return Number((0.022 - t * 0.013).toFixed(4))
+}
+
+export type TerrainShape = 'Rectangle' | 'Ellipse' | 'Diamond' | 'Fill' | 'Polygon'
 export type TerrainBrush = {
   diameter: number
   roughness: number
   smooth: boolean
   subtract: boolean
+  clipToLand?: boolean
+  water?: string
+  eraser?: boolean
   opacity?: number
   terrain?: string
   generated?: boolean
@@ -42,7 +61,7 @@ const tileSize = 80
 const columns = Math.ceil(width / tileSize)
 const rows = Math.ceil(height / tileSize)
 const halo = 1
-const cacheLimit = 160
+const cacheLimit = 240
 
 type Bounds = { left: number; top: number; right: number; bottom: number }
 type Tile = { x: number; y: number; width: number; height: number }
@@ -99,7 +118,7 @@ function tilesIn(bounds: Bounds) {
 }
 
 function strokePadding(brush?: TerrainBrush) {
-  return brush ? brush.diameter / 2 + Math.max(8, brush.roughness * 2.5 + 5) : 2
+  return brush ? (brush.shape ? 0 : brush.diameter / 2) + Math.max(8, coastDisplacementReach(brush.roughness) + 6) : 2
 }
 
 function featureBounds(feature: TerrainFeature) {
@@ -188,6 +207,7 @@ function addDistances(result: Float32Array, segments: Segment[], tile: Tile, fir
 
 function shapePath(points: WorldPoint[], shape?: TerrainShape) {
   const path = new Path2D()
+  if (points.length === 0) return path
   const { left, top, right, bottom } = boundsOf(points)
   if (shape === 'Fill') path.rect(0, 0, width, height)
   else if (shape === 'Rectangle') path.rect(left, top, right - left, bottom - top)
@@ -197,6 +217,7 @@ function shapePath(points: WorldPoint[], shape?: TerrainShape) {
       { x: (left + right) / 2, y: top }, { x: right, y: (top + bottom) / 2 },
       { x: (left + right) / 2, y: bottom }, { x: left, y: (top + bottom) / 2 },
     ] : points
+    if (vertices.length < 3) return path
     path.moveTo(vertices[0].x, vertices[0].y)
     for (const point of vertices.slice(1)) path.lineTo(point.x, point.y)
     path.closePath()
@@ -212,12 +233,13 @@ const materialHeights = new Map<string, Float32Array>()
 let groundReady = false
 
 function makeHeight(terrain: string, surface?: TerrainTile) {
+  const canonical = resolveTerrainName(terrain)
   const source = surface?.elevation
-  const cached = materialHeights.get(terrain)
+  const cached = materialHeights.get(canonical)
   if (!source && cached) return cached
   const result = new Float32Array(groundHeight.length)
-  const strength = /mountain|peaks|crag|scree/i.test(terrain) ? .85 : /rolling|hill|stone/i.test(terrain) ? .48
-    : /bog|fen|marsh|water/i.test(terrain) ? .12 : .31
+  const strength = canonical === 'Highlands' || canonical === 'Ashlands' ? .68
+    : canonical === 'Marsh' || canonical === 'Desert' || canonical === 'Snow' ? .18 : .30
   for (let y = 0; y < reliefRows; y++) for (let x = 0; x < reliefColumns; x++) {
     const i = y * reliefColumns + x
     if (!groundReady) {
@@ -234,7 +256,7 @@ function makeHeight(terrain: string, surface?: TerrainTile) {
     }
   }
   groundReady = true
-  if (!source) materialHeights.set(terrain, result)
+  if (!source) materialHeights.set(canonical, result)
   return result
 }
 
@@ -325,7 +347,8 @@ function surfaceFor(brush: TerrainBrush, surfaces?: TerrainTextures) {
 
 function textureTile(feature: TerrainFeature, textures?: TerrainTextures, surfaces?: TerrainTextures) {
   const { brush } = feature
-  return brush?.terrain ? surfaceFor(brush, surfaces) || textures?.[brush.terrain] : undefined
+  if (!brush?.terrain) return undefined
+  return surfaceFor(brush, surfaces) || textures?.[resolveTerrainName(brush.terrain)] || textures?.[brush.terrain]
 }
 
 export class TerrainCompositor {
@@ -351,15 +374,16 @@ export class TerrainCompositor {
     const { brush } = feature
     let material: Material | undefined
     if (brush?.terrain) {
-      const settings = { terrain: brush.terrain, scale: brush.textureScale ?? 100, rotation: brush.rotation ?? 0 }
+      const canonical = resolveTerrainName(brush.terrain)
+      const settings = { terrain: canonical, scale: brush.textureScale ?? 100, rotation: brush.rotation ?? 0 }
       const surface = surfaceFor(brush, this.surfaces)
-      const tile = surface || this.textures?.[brush.terrain]
+      const tile = surface || this.textures?.[canonical] || this.textures?.[brush.terrain]
       const key = JSON.stringify([settings, Boolean(surface), Boolean(brush.blend?.relief)])
       if (tile) {
         material = this.materials.get(key)
         if (!material) {
           material = { id: this.materials.size + 1, texture: textureFor(tile.pixels, brush, !!surface),
-            height: makeHeight(brush.terrain, surface) }
+            height: makeHeight(canonical, surface) }
           this.materials.set(key, material)
         }
       }
@@ -386,9 +410,10 @@ export class TerrainCompositor {
     for (let y = 0, i = 0; y < tile.height; y++) for (let x = 0; x < tile.width; x++, i++) {
       const u = tile.x + x + .5
       const v = tile.y + y + .5
-      values[i] = (terrainNoise(u / 37, v / 35) - .5) * 1.35 +
-        (terrainNoise(u / 11 + 17, v / 12 - 7) - .5) * .52 +
-        (terrainNoise(u / 4.5, v / 4.1) - .5) * .17
+      values[i] = (terrainNoise(u / 96, v / 92) - .5) * .95 +
+        (terrainNoise(u / 37 + 11, v / 35 - 5) - .5) * .65 +
+        (terrainNoise(u / 13 + 17, v / 14 - 7) - .5) * .3 +
+        (terrainNoise(u / 5.2, v / 4.8) - .5) * .14
     }
     this.noise.set(key, values)
     return values
@@ -400,8 +425,16 @@ export class TerrainCompositor {
     ctx.canvas.width = tile.width
     ctx.canvas.height = tile.height
     ctx.translate(-tile.x, -tile.y)
-    if (prepared.shape) ctx.fill(prepared.shape)
-    else ctx.fillRect(tile.x, tile.y, tile.width, tile.height)
+    if (prepared.shape) {
+      ctx.fill(prepared.shape)
+      const { brush } = prepared.feature
+      const reach = brush && !brush.subtract && brush.shape !== 'Fill' ? coastDisplacementReach(brush.roughness) : 0
+      if (reach > 0) {
+        ctx.lineWidth = reach * 2
+        ctx.lineJoin = 'round'
+        ctx.stroke(prepared.shape)
+      }
+    } else ctx.fillRect(tile.x, tile.y, tile.width, tile.height)
     if (prepared.erasures) {
       ctx.globalCompositeOperation = 'destination-out'
       ctx.lineCap = 'round'
@@ -451,6 +484,7 @@ export class TerrainCompositor {
     const pattern = distance && this.pattern(key, tile)
     const radius = (brush?.diameter ?? 0) / 2
     const blend = brush?.blend
+    const reach = coastDisplacementReach(brush?.roughness ?? 0)
     const feather = blend ? Math.max(.8, radius * (1 - blend.hardness / 100) * blend.strength / 100) : 5.5
     const noiseAmount = blend ? Math.min(feather * .78, radius * .34) * blend.noise / 100 : 10
     for (let i = 0; i < state.land.length; i++) {
@@ -458,28 +492,40 @@ export class TerrainCompositor {
       if (!coverage) continue
       const edge = distance ? radius - Math.sqrt(distance[i]) : 1
       const grain = pattern?.[i] ?? 0
-      const displaced = edge + grain * (brush?.roughness ?? 0) * 2.5
+      const displaced = edge + grain * (reach * .72)
       const hard = coverage * (distance ? smoothStep((displaced + 1) / 2) : 1)
       if (brush?.subtract) {
-        if (!hard) continue
-        const remaining = 1 - hard * opacity
-        state.land[i] *= remaining
-        state.alpha[i] *= remaining
+        if (hard > 0) state.land[i] *= 1 - hard * opacity
+        const core = distance ? coverage * smoothStep((edge - reach + 1) / 2) : (reach > 0 ? 0 : hard)
+        if (!core) continue
+        const coreRemaining = 1 - core * opacity
+        state.alpha[i] *= coreRemaining
         state.weight[i] = 0
         state.material[i] = 0
-        state.relief[i] *= remaining
+        state.relief[i] *= coreRemaining
         const x = tile.x + i % tile.width + .5
         const y = tile.y + Math.floor(i / tile.width) + .5
-        state.elevation[i] = lerp(elevationAt(groundHeight, x, y), state.elevation[i], remaining)
+        state.elevation[i] = lerp(elevationAt(groundHeight, x, y), state.elevation[i], coreRemaining)
         continue
       }
       const underlying = state.land[i]
+      if (brush?.clipToLand) {
+        const maskWeight = Math.max(underlying, state.alpha[i])
+        if (maskWeight <= .001) continue
+        const fill = distance ? (blend ? smoothStep((edge + grain * noiseAmount) / feather)
+          : smoothStep((displaced + grain * noiseAmount + feather) / (feather * 2))) * coverage : coverage
+        const weight = fill * maskWeight * opacity
+        if (material && weight > .001) {
+          blendPixel(state, i, material, tile.x + i % tile.width + .5, tile.y + Math.floor(i / tile.width) + .5, weight, blend)
+        }
+        continue
+      }
       // The very first material on new land runs up to the coast. A stroke on
       // already solid ground uses its feathered mask at the same pixel.
       const fill = distance ? (blend ? smoothStep((edge + grain * noiseAmount) / feather)
         : smoothStep((displaced + grain * noiseAmount + feather) / (feather * 2))) * coverage : coverage
-      const coastalFill = distance ? coverage * smoothStep((displaced + 13) / 10) : hard
-      const weight = lerp(coastalFill, fill, Math.max(underlying, state.alpha[i])) * opacity
+      const coastalFill = distance ? coverage * smoothStep((edge + reach + 4) / 10) : hard
+      const weight = lerp(coastalFill, fill, underlying) * opacity
       state.land[i] = underlying + hard * (1 - underlying)
       if (material && weight > .001) {
         blendPixel(state, i, material, tile.x + i % tile.width + .5, tile.y + Math.floor(i / tile.width) + .5, weight, blend)

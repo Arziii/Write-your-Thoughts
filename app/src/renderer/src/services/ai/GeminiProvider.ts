@@ -1,5 +1,5 @@
 import { AIBrainstormMessage } from '../../types'
-import { BaseProvider, ProviderResponse } from './BaseProvider'
+import { BaseProvider, parseModelJson, ProviderResponse, VisionImageInput } from './BaseProvider'
 
 export class GeminiProvider extends BaseProvider {
   async testConnection(): Promise<boolean> {
@@ -154,11 +154,69 @@ export class GeminiProvider extends BaseProvider {
     }
 
     const data = await response.json()
-    const jsonResponse = data.candidates[0].content.parts[0].text.replace(/^```json/g, '').replace(/```$/g, '').trim()
-    try {
-      return JSON.parse(jsonResponse)
-    } catch {
-      throw new Error('Failed to parse JSON from Gemini response')
+    const jsonResponse = data.candidates[0].content.parts[0].text
+    return parseModelJson(jsonResponse, 'Gemini')
+  }
+
+  async generateJSONWithImage(systemPrompt: string, prompt: string, image: VisionImageInput, signal?: AbortSignal): Promise<any> {
+    if (!this.settings.apiKey) throw new Error('Missing API Key')
+    const apiKey = this.settings.apiKey.trim()
+
+    const modelName = this.settings.model || 'gemini-2.5-flash'
+    const cleanModelName = modelName.startsWith('models/') ? modelName.replace('models/', '') : modelName
+
+    const bodyObj: any = {
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: prompt },
+            { inlineData: { mimeType: image.mimeType, data: image.base64 } },
+          ],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        temperature: this.settings.temperature ?? 0.2,
+        maxOutputTokens: Math.max(this.settings.maxTokens || 0, 8192),
+      },
     }
+
+    if (this.settings.topP !== undefined) bodyObj.generationConfig.topP = this.settings.topP
+
+    let response: Response
+    try {
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${cleanModelName}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          signal,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bodyObj),
+        }
+      )
+    } catch (err: any) {
+      if (signal?.aborted) throw err
+      throw new Error(`Network Error: ${err.message}`)
+    }
+
+    if (!response.ok) {
+      const errText = await response.text()
+      try {
+        const errJson = JSON.parse(errText)
+        const errorMsg = errJson.error?.message || `API error (${response.status})`
+        if (response.status === 400 && errorMsg.includes('API key not valid')) throw new Error(`Invalid API Key: ${errorMsg}`)
+        if (response.status === 404) throw new Error(`Model Not Found: ${errorMsg}`)
+        if (response.status === 429) throw new Error(`Quota/Rate Limit Exceeded: ${errorMsg}`)
+        throw new Error(errorMsg)
+      } catch (e: any) {
+        if (e.message.includes('Invalid API Key') || e.message.includes('Model Not Found') || e.message.includes('Quota')) throw e
+        throw new Error(`Gemini API error: ${response.status} - ${errText}`)
+      }
+    }
+
+    const data = await response.json()
+    return parseModelJson(data.candidates?.[0]?.content?.parts?.[0]?.text || '', 'Gemini')
   }
 }

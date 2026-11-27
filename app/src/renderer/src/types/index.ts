@@ -499,10 +499,15 @@ export interface AIBrainstormOptions {
 
 // ── Panel State ────────────────────────────────────────────────────
 
+export type RightInspectorTab = 'ai' | 'comments' | 'emotion' | 'continuity' | 'style' | 'worldbuilding'
+
 export interface PanelState {
   sidebarOpen: boolean
   aiPanelOpen: boolean
   lockedEntities: string[]
+  activeRightPanel?: RightInspectorTab | null
+  sidebarWidth?: number
+  inspectorWidth?: number
 }
 
 // ── Toast ──────────────────────────────────────────────────────────

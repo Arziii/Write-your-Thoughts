@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, PointerEvent, ReactNode } from 'react'
 import { LocateFixed, MapPin as PinIcon, Minus, Plus } from 'lucide-react'
-import type { MapPin } from '../../../../shared/maps'
+import type { MapPin } from '../../../../../shared/maps'
 import { atlasHeight, atlasWidth } from './atlasPaths'
 
 const blankSize = { width: atlasWidth, height: atlasHeight }
@@ -19,6 +19,7 @@ type NamedPin = MapPin & { name: string }
 interface MapCanvasProps {
   overlay?: ReactNode | ((aspectRatio: number) => ReactNode)
   placementPreview?: (point: MapPoint) => ReactNode
+  viewportOverlay?: (metrics: { width: number; height: number; zoom: number; scale: number; aspectRatio: number }) => ReactNode
   brush?: MapBrush
   imageUrl: string | null
   hideImage?: boolean
@@ -30,7 +31,20 @@ interface MapCanvasProps {
   onPlace: (point: MapPoint) => void
 }
 
-export default function MapCanvas({ overlay, placementPreview, brush, imageUrl, hideImage, fitTrigger, pins, selectedLocationId, placing, onSelectPin, onPlace }: MapCanvasProps) {
+export default function MapCanvas({
+  overlay,
+  placementPreview,
+  viewportOverlay,
+  brush,
+  imageUrl,
+  hideImage,
+  fitTrigger,
+  pins,
+  selectedLocationId,
+  placing,
+  onSelectPin,
+  onPlace,
+}: MapCanvasProps) {
   const viewport = useRef<HTMLDivElement>(null)
   const drag = useRef<{ id: number; x: number; y: number } | null>(null)
   const painting = useRef<number | null>(null)
@@ -39,6 +53,8 @@ export default function MapCanvas({ overlay, placementPreview, brush, imageUrl, 
   const [viewportSize, setViewportSize] = useState({ width: 1, height: 1 })
   const [imageSize, setImageSize] = useState(blankSize)
   const [invalidImage, setInvalidImage] = useState(false)
+  const [spacePanning, setSpacePanning] = useState(false)
+
   const fit = Math.min(
     Math.max(1, viewportSize.width - 8) / imageSize.width,
     Math.max(1, viewportSize.height - 8) / imageSize.height,
@@ -61,9 +77,32 @@ export default function MapCanvas({ overlay, placementPreview, brush, imageUrl, 
     return () => observer.disconnect()
   }, [])
 
+  // Spacebar temporary pan (Figma/Photoshop style)
+  useEffect(() => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.code !== 'Space' || event.repeat) return
+      const target = event.target
+      if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable], button')) return
+      event.preventDefault()
+      setSpacePanning(true)
+    }
+    const onKeyUp = (event: globalThis.KeyboardEvent) => {
+      if (event.code === 'Space') setSpacePanning(false)
+    }
+    const reset = () => setSpacePanning(false)
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('blur', reset)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('blur', reset)
+    }
+  }, [])
+
   function zoomAt(factor: number, x = 0, y = 0) {
     setView(previous => {
-      const zoom = Math.min(Math.max(24, 2 / fit), Math.max(0.5, previous.zoom * factor))
+      const zoom = Math.min(Math.max(48, 4 / fit), Math.max(0.5, previous.zoom * factor))
       const ratio = zoom / previous.zoom
       return { zoom, x: x + (previous.x - x) * ratio, y: y + (previous.y - y) * ratio }
     })
@@ -91,6 +130,12 @@ export default function MapCanvas({ overlay, placementPreview, brush, imageUrl, 
 
   const pointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (painting.current !== null || drag.current) return
+    // Right-click or Middle-click or Space+Left-click always pans
+    if (event.button === 2 || event.button === 1 || (spacePanning && event.button === 0)) {
+      drag.current = { id: event.pointerId, x: event.clientX, y: event.clientY }
+      event.currentTarget.setPointerCapture(event.pointerId)
+      return
+    }
     if (event.button === 0 && brush) {
       const point = mapPoint(event)
       if (point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1) return
@@ -99,8 +144,8 @@ export default function MapCanvas({ overlay, placementPreview, brush, imageUrl, 
       brush.start(point)
       return
     }
-    if (event.button !== 0 && event.button !== 1) return
-    if (placing && event.button === 0) {
+    if (event.button !== 0) return
+    if (placing) {
       const { x, y } = mapPoint(event)
       if (x >= 0 && x <= 1 && y >= 0 && y <= 1) onPlace({ x, y })
       return
@@ -110,7 +155,7 @@ export default function MapCanvas({ overlay, placementPreview, brush, imageUrl, 
   }
 
   const pointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    if (brush || placementPreview) {
+    if (!spacePanning && (brush || placementPreview)) {
       const point = mapPoint(event)
       setCursor(point.x >= 0 && point.x <= 1 && point.y >= 0 && point.y <= 1 ? point : null)
       if (brush && painting.current === event.pointerId) {
@@ -140,17 +185,23 @@ export default function MapCanvas({ overlay, placementPreview, brush, imageUrl, 
     event.preventDefault()
   }
 
+  const zoomPercent = Math.round(view.zoom * 100)
+
   return (
     <div
       ref={viewport}
       tabIndex={0}
       role="region"
-      aria-label="Map canvas. Use arrow keys to pan, plus and minus to zoom, and zero to fit."
+      aria-label="Map canvas. Use arrow keys to pan, plus and minus to zoom, zero to fit, and Space plus drag to pan while painting."
       onKeyDown={handleKey}
+      onContextMenu={event => event.preventDefault()}
       onPointerDown={pointerDown}
       onPointerMove={pointerMove}
       onPointerLeave={() => setCursor(null)}
       onPointerUp={event => {
+        if (drag.current?.id === event.pointerId) {
+          drag.current = null
+        }
         if (painting.current !== event.pointerId) return
         painting.current = null
         const point = mapPoint(event)
@@ -163,10 +214,10 @@ export default function MapCanvas({ overlay, placementPreview, brush, imageUrl, 
         painting.current = null
         brush?.cancel()
       }}
-      className={`studio-desk relative min-h-0 flex-1 touch-none select-none overflow-hidden !p-0 focus-visible:outline-accent-500 ${placing || brush ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'}`}
+      className={`studio-desk relative min-h-0 flex-1 touch-none select-none overflow-hidden !p-0 focus-visible:outline-[hsl(var(--brand-green))] ${spacePanning ? 'cursor-grab active:cursor-grabbing' : placing || brush ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'}`}
     >
       <div
-        className="pointer-events-none absolute border border-surface-700 bg-surface-950 shadow-sm"
+        className="pointer-events-none absolute border border-[hsl(var(--studio-edge))] bg-surface-950 shadow-xl ring-1 ring-black/15 dark:ring-white/10"
         style={{
           width, height, left, top,
           backgroundImage: 'linear-gradient(to right, hsl(var(--surface-800)) 1px, transparent 1px), linear-gradient(to bottom, hsl(var(--surface-800)) 1px, transparent 1px)',
@@ -184,7 +235,7 @@ export default function MapCanvas({ overlay, placementPreview, brush, imageUrl, 
           />
         )}
         {typeof overlay === 'function' ? overlay(imageSize.width / imageSize.height) : overlay}
-        {placementPreview && cursor && (
+        {!spacePanning && placementPreview && cursor && (
           <div className="pointer-events-none absolute inset-0" aria-hidden="true">
             {placementPreview(cursor)}
           </div>
@@ -200,34 +251,44 @@ export default function MapCanvas({ overlay, placementPreview, brush, imageUrl, 
           aria-label={pin.name}
           aria-pressed={selectedLocationId === pin.locationId}
           title={pin.name}
-          onPointerDown={event => { if (!placing && !brush && event.button === 0) event.stopPropagation() }}
-          onClick={() => { if (!placing && !brush) onSelectPin(pin.locationId) }}
-          className={`absolute -translate-x-1/2 -translate-y-full rounded-full border p-1.5 shadow-md ${selectedLocationId === pin.locationId
-            ? 'border-accent-500 bg-accent-500 text-white'
-            : 'border-surface-700 bg-surface-950 text-accent-600 hover:border-accent-500'}`}
+          onPointerDown={event => { if (!spacePanning && !placing && !brush && event.button === 0) event.stopPropagation() }}
+          onClick={() => { if (!spacePanning && !placing && !brush) onSelectPin(pin.locationId) }}
+          className={`absolute -translate-x-1/2 -translate-y-full rounded-full border p-1.5 shadow-md transition-transform hover:scale-110 ${selectedLocationId === pin.locationId
+            ? 'border-[hsl(var(--brand-green))] bg-[hsl(var(--brand-green))] text-white dark:text-surface-950'
+            : 'border-[hsl(var(--studio-edge))] bg-[hsl(var(--studio-paper))] text-[hsl(var(--brand-green))] hover:border-[hsl(var(--brand-green))]'}`}
           style={{ left: left + pin.x * width, top: top + pin.y * height }}
         >
           <PinIcon className="h-4 w-4" aria-hidden="true" />
         </button>
       ))}
 
-      {brush && brush.diameter > 0 && cursor && (
+      {!spacePanning && brush && brush.diameter > 0 && cursor && (
         <div aria-hidden="true" className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white shadow-[0_0_0_1px_#333]"
           style={{ left: left + cursor.x * width, top: top + cursor.y * height, width: width * brush.diameter / atlasWidth, height: height * brush.diameter / atlasHeight }} />
       )}
 
       <div
-        className="absolute bottom-4 right-4 flex cursor-default items-center rounded-lg border border-surface-700 bg-surface-950 p-1 shadow-sm"
+        className="absolute bottom-4 right-4 flex cursor-default items-center rounded-lg border border-[hsl(var(--studio-edge))] bg-[hsl(var(--studio-paper))] p-1 shadow-md"
         onPointerDown={event => event.stopPropagation()}
         onPointerMove={event => { event.stopPropagation(); setCursor(null) }}
       >
-        <button type="button" className="rounded p-2 hover:bg-surface-800" title="Zoom out" aria-label="Zoom out" onClick={() => zoomAt(0.8)}><Minus className="h-4 w-4" /></button>
-        <button type="button" className="rounded p-2 hover:bg-surface-800" title="Zoom in" aria-label="Zoom in" onClick={() => zoomAt(1.25)}><Plus className="h-4 w-4" /></button>
-        <button type="button" className="flex items-center gap-1.5 rounded p-2 text-xs hover:bg-surface-800" onClick={() => setView(homeView)}>
-          <LocateFixed className="h-4 w-4" aria-hidden="true" /> Fit map
+        <button type="button" className="rounded p-1.5 text-surface-300 hover:bg-surface-850 hover:text-surface-100" title="Zoom out (-)" aria-label="Zoom out" onClick={() => zoomAt(0.8)}><Minus className="h-3.5 w-3.5" /></button>
+        <button
+          type="button"
+          className="min-w-[3.2rem] rounded px-1.5 py-1 text-center text-xs font-medium tabular-nums text-surface-200 hover:bg-surface-850"
+          title="Fit map to screen (0)"
+          onClick={() => setView(homeView)}
+        >
+          {zoomPercent}%
+        </button>
+        <button type="button" className="rounded p-1.5 text-surface-300 hover:bg-surface-850 hover:text-surface-100" title="Zoom in (+)" aria-label="Zoom in" onClick={() => zoomAt(1.25)}><Plus className="h-3.5 w-3.5" /></button>
+        <div className="mx-0.5 h-4 w-px bg-[hsl(var(--studio-edge))]" />
+        <button type="button" className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-surface-200 hover:bg-surface-850" title="Fit map (0)" onClick={() => setView(homeView)}>
+          <LocateFixed className="h-3.5 w-3.5" aria-hidden="true" /> Fit
         </button>
       </div>
+
+      {viewportOverlay?.({ width, height, zoom: view.zoom, scale, aspectRatio: imageSize.width / imageSize.height })}
     </div>
   )
 }
-

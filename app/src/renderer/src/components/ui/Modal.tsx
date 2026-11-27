@@ -48,19 +48,19 @@ export default function Modal({ isOpen, onClose, closeDisabled = false, title, c
       {/* Modal */}
       <div
         className={cn(
-          'relative w-full rounded-xl bg-surface-850 border border-surface-700 shadow-2xl animate-slide-up',
+          'relative w-full rounded-xl bg-[hsl(var(--studio-paper))] border border-[hsl(var(--studio-edge))] shadow-2xl animate-slide-up',
           sizeClasses[size],
           className
         )}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-surface-700 shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--studio-edge))] shrink-0">
           <h2 className="text-base font-semibold text-surface-100">{title}</h2>
           <button
             aria-label="Close dialog"
             disabled={closeDisabled}
             onClick={onClose}
-            className="text-surface-500 hover:text-surface-200 transition-colors rounded-md p-1 hover:bg-surface-700 disabled:opacity-40"
+            className="text-surface-500 hover:text-surface-100 transition-colors rounded-md p-1 hover:bg-surface-850 disabled:opacity-40"
           >
             <X className="w-4 h-4" />
           </button>

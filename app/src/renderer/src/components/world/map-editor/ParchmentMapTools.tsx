@@ -1,22 +1,27 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { ComponentProps, ReactNode } from 'react'
-import { Droplets, Eraser, Hand, Mountain, Pencil, Redo2, Route, Shapes, Trash2, Trees, Type, Undo2, Waves, Warehouse } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 import MapCanvas from './MapCanvas'
 import type { MapPoint as Point } from './MapCanvas'
+import MapDraftImportModal from './MapDraftImportModal'
 import { getSeamlessTerrain } from './seamlessTerrain'
 import type { TerrainTile } from './seamlessTerrain'
-import { defaultTerrain, terrainTextures } from './terrainAssets'
-import { makeTerrainSurface, terrainSurfaceKey } from './terrainSurface'
+import { defaultTerrain, defaultWater, terrainTextures, waterTextures } from './terrainAssets'
+import { makeProceduralBiomeTile, makeTerrainSurface, resolveTerrainName, terrainSurfaceKey } from './terrainSurface'
 import TerrainBlendLayer from './TerrainBlendLayer'
-import { defaultTerrainBlend, terrainBrushPath as brushPath } from './terrainBlend'
+import { coastDisplacementReach, coastDisplacementScale, coastTurbulenceFrequency, defaultTerrainBlend, terrainBrushPath as brushPath } from './terrainBlend'
 import type { TerrainBrush as BrushStyle, TerrainShape as Shape, TerrainTextures } from './terrainBlend'
 import { MapStamp, stampWidthFraction } from './MapStamp'
-import { stampAssets, stampCategories, stampCredits, stampsById } from './mapStampAssets'
-import AtlasPathControls from './AtlasPathControls'
+import { stampAssets, stampCategories, stampsById } from './mapStampAssets'
 import AtlasPathLayer from './AtlasPathLayer'
 import { atlasHeight, atlasWidth, clamp, isAtlasPath, nearestOnPath, pathDefaults, pathSettings,
   simplifyPath, spline, terrainFromName, toMap, toWorld } from './atlasPaths'
 import type { AtlasPathSettings, AtlasPathTool, AtlasTerrain, WorldPoint } from './atlasPaths'
+import MapTopBar from './MapTopBar'
+import MapToolRail from './MapToolRail'
+import MapInspector from './MapInspector'
+import { computeScaleBar, disposeMapScale, formatDistance, loadMapScale, measurePathKm, measureSegmentKm, saveMapScale } from './mapScale'
+import type { MapScaleConfig } from './mapScale'
 
 const tools = ['Land', 'River', 'Border', 'Route', 'Mountain', 'Forest', 'Town', 'Label', 'Stamp'] as const
 type Tool = typeof tools[number]
@@ -37,6 +42,7 @@ type Feature = {
   stampOrder?: 'auto' | 'front' | 'back'
   path?: Partial<AtlasPathSettings>
 }
+export type MapFeature = Feature
 const brushTools = ['Land brush', 'Water brush', 'Edge brush', 'Shape brush', 'Eraser brush', 'Forest scatter'] as const
 type BrushTool = typeof brushTools[number]
 const isBrush = (tool: string): tool is BrushTool => brushTools.some(brush => brush === tool)
@@ -55,22 +61,6 @@ const yAt = (point: Point) => point.y * mapHeight
 const coordinatesFor = (points: Point[]) => points.map(point => `${xAt(point)},${yAt(point)}`).join(' ')
 const distance = (a: Point, b: Point) => Math.hypot(xAt(a) - xAt(b), yAt(a) - yAt(b))
 const control = 'rounded-md border border-[hsl(var(--studio-edge))] bg-surface-950 px-2.5 py-1.5 text-xs text-surface-100 hover:bg-surface-900 disabled:opacity-50'
-const toolButtons = [
-  ['', 'Pan and select pins', Hand],
-  ['Land brush', 'Land brush', Pencil],
-  ['Water brush', 'Water brush', Waves],
-  ['Eraser brush', 'Eraser brush', Eraser],
-  ['Edge brush', 'Edge brush', Pencil],
-  ['Shape brush', 'Shape brush', Shapes],
-  ['Land', 'Land polygon', Shapes],
-  ['River', 'River', Droplets],
-  ['Border', 'Border', Shapes],
-  ['Route', 'Road / route', Route],
-  ['Mountain', 'Mountain stamp', Mountain],
-  ['Forest', 'Forest stamp', Trees],
-  ['Town', 'Town stamp', Warehouse],
-  ['Label', 'Label', Type],
-] as const
 const isPath = (tool: Tool) => tools.indexOf(tool) < 4
 const ink = '#4c402d'
 
@@ -113,6 +103,7 @@ export function initializeParchmentMap(mapId: string, starter = false) {
 
 export function disposeParchmentMap(mapId: string) {
   localStorage.removeItem(storageKey(mapId))
+  disposeMapScale(mapId)
 }
 
 function Stamp({ tool }: { tool: Tool }) {
@@ -127,11 +118,15 @@ function BrushShape({ feature, color, filters, opacity = 1 }: { feature: Feature
   if (!brush) return null
 
   const filterId = `${filters}-${feature.id}`
-  const padding = brush.diameter / 2 + brush.roughness * 2.5
+  const displacement = coastDisplacementScale(brush.roughness)
+  const reach = coastDisplacementReach(brush.roughness)
+  const padding = (brush.shape ? 0 : brush.diameter / 2) + reach
   const xs = points.map(xAt)
   const ys = points.map(yAt)
-  const left = Math.min(...xs) - padding
-  const top = Math.min(...ys) - padding
+  const filterLeft = Math.max(-32, Math.min(...xs) - padding)
+  const filterTop = Math.max(-32, Math.min(...ys) - padding)
+  const filterRight = Math.min(mapWidth + 32, Math.max(...xs) + padding)
+  const filterBottom = Math.min(mapHeight + 32, Math.max(...ys) + padding)
   const width = Math.max(1, Math.max(...xs) - Math.min(...xs))
   const height = Math.max(1, Math.max(...ys) - Math.min(...ys))
   const x = Math.min(...xs)
@@ -141,6 +136,7 @@ function BrushShape({ feature, color, filters, opacity = 1 }: { feature: Feature
   else if (brush.shape === 'Rectangle') geometry = <rect x={x} y={y} width={width} height={height} fill={color} />
   else if (brush.shape === 'Ellipse') geometry = <ellipse cx={x + width / 2} cy={y + height / 2} rx={width / 2} ry={height / 2} fill={color} />
   else if (brush.shape === 'Diamond') geometry = <polygon points={`${x + width / 2},${y} ${x + width},${y + height / 2} ${x + width / 2},${y + height} ${x},${y + height / 2}`} fill={color} />
+  else if (brush.shape === 'Polygon') geometry = <polygon points={coordinatesFor(points)} fill={color} />
   else if (points.length === 1) geometry = <circle cx={xs[0]} cy={ys[0]} r={brush.diameter / 2} fill={color} />
   else geometry = <path d={brushPath(points, brush.smooth)} stroke={color} strokeWidth={brush.diameter} fill="none"
     strokeLinecap="round" strokeLinejoin={brush.smooth ? 'round' : 'bevel'} />
@@ -149,10 +145,10 @@ function BrushShape({ feature, color, filters, opacity = 1 }: { feature: Feature
   return (
     <g opacity={opacity} filter={rough ? `url(#${filterId})` : undefined}>
       {rough && <defs>
-        <filter id={filterId} filterUnits="userSpaceOnUse" x={left} y={top}
-          width={Math.max(...xs) - left + padding} height={Math.max(...ys) - top + padding}>
-          <feTurbulence baseFrequency=".042" numOctaves="2" seed="6" result="noise" />
-          <feDisplacementMap in="SourceGraphic" in2="noise" scale={brush.roughness * 2.5}
+        <filter id={filterId} filterUnits="userSpaceOnUse" x={filterLeft} y={filterTop}
+          width={Math.max(1, filterRight - filterLeft)} height={Math.max(1, filterBottom - filterTop)}>
+          <feTurbulence type="fractalNoise" baseFrequency={coastTurbulenceFrequency(brush.roughness)} numOctaves="4" seed="6" result="noise" />
+          <feDisplacementMap in="SourceGraphic" in2="noise" scale={displacement}
             xChannelSelector="R" yChannelSelector="G" />
         </filter>
       </defs>}
@@ -177,7 +173,7 @@ function touchesPoint(feature: Feature, point: Point) {
   const { points, brush } = feature
   if (feature.erasures?.some(eraser => strokeContains(eraser.points, eraser.diameter, point))) return false
   if (brush?.shape === 'Fill') return true
-  if (brush?.shape && points.length === 2) {
+  if (brush?.shape && brush.shape !== 'Polygon' && points.length === 2) {
     const [first, last] = points
     const x = Math.abs(2 * (point.x - (first.x + last.x) / 2) / (last.x - first.x))
     const y = Math.abs(2 * (point.y - (first.y + last.y) / 2) / (last.y - first.y))
@@ -185,7 +181,7 @@ function touchesPoint(feature: Feature, point: Point) {
     if (brush.shape === 'Diamond') return x + y <= 1
     return x <= 1 && y <= 1
   }
-  if (brush) return strokeContains(points, brush.diameter, point)
+  if (brush && brush.shape !== 'Polygon') return strokeContains(points, brush.diameter, point)
   return points.reduce((inside, a, index) => {
     const b = points[(index + 1) % points.length]
     const crosses = (a.y > point.y) !== (b.y > point.y) &&
@@ -206,7 +202,7 @@ function nearCoast(point: Point, diameter: number, terrain: Feature[]) {
     surfaces.some(feature => !feature || feature.brush?.subtract)
 }
 
-type CanvasOptions = Pick<ComponentProps<typeof MapCanvas>, 'overlay' | 'brush' | 'placementPreview'> & {
+type CanvasOptions = Pick<ComponentProps<typeof MapCanvas>, 'overlay' | 'brush' | 'placementPreview' | 'viewportOverlay'> & {
   onEditPoint?: (point: Point) => void
   hideImage: boolean
   hidePins: boolean
@@ -229,23 +225,27 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
       return saved ? JSON.parse(saved) : null
     } catch { return null }
   })
-  const [tool, setTool] = useState<Tool | BrushTool | ''>('')
+  const [tool, setTool] = useState<Tool | BrushTool | 'Ruler' | ''>('')
+  const [mapScale, setMapScale] = useState<MapScaleConfig>(() => loadMapScale(mapId))
+  const [measurePoints, setMeasurePoints] = useState<Point[]>([])
   const [brushSize, setBrushSize] = useState(100)
   const [forestDensity, setForestDensity] = useState(50)
   const [forestVariation, setForestVariation] = useState(40)
-  const [roughness, setRoughness] = useState(3)
+  const [roughness, setRoughness] = useState(8)
   const [smooth, setSmooth] = useState(true)
   const [opacity, setOpacity] = useState(100)
   const [terrainName, setTerrainName] = useState(defaultTerrain)
+  const [waterName, setWaterName] = useState(defaultWater)
   const [textureScale, setTextureScale] = useState(100)
   const [smartTextureScale, setSmartTextureScale] = useState(100)
   const [smartTerrain, setSmartTerrain] = useState(true)
   const [terrainBlend, setTerrainBlend] = useState(defaultTerrainBlend)
   const [rotation, setRotation] = useState(0)
   const [generateTerrain, setGenerateTerrain] = useState(true)
-  const [shape, setShape] = useState<Exclude<Shape, 'Fill'>>('Ellipse')
+  const [shape, setShape] = useState<Exclude<Shape, 'Fill' | 'Polygon'>>('Ellipse')
   const [subtract, setSubtract] = useState(false)
-  const [pickerOpen, setPickerOpen] = useState(false)
+  const [biomeLock, setBiomeLock] = useState(false)
+  const [inspectorTab, setInspectorTab] = useState<'tool' | 'layers'>('layers')
   const [brushHint, setBrushHint] = useState('')
   const [points, setPoints] = useState<Point[]>([])
   const [pathMode, setPathMode] = useState<'points' | 'freehand'>('points')
@@ -264,6 +264,7 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
   const [hideImage, setHideImage] = useState(false)
   const [hidePins, setHidePins] = useState(false)
   const [layersOpen, setLayersOpen] = useState(true)
+  const [draftImportOpen, setDraftImportOpen] = useState(false)
   const [past, setPast] = useState<Feature[][]>([])
   const [future, setFuture] = useState<Feature[][]>([])
   const [draft, setDraft] = useState<Feature | null>(null)
@@ -282,7 +283,6 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
   const filters = `${elementId}-brush`
   const feather = `${elementId}-biome-blend`
   const selected = features?.find(feature => feature.id === selectedId)
-  const selectedPath = selected && isAtlasPath(selected.tool) ? selected : undefined
   const atlasTool = isAtlasPath(tool) ? tool : null
   const atlasStyle = atlasTool ? pathStyles[atlasTool] : undefined
   const freehand = atlasTool !== null && pathMode === 'freehand'
@@ -291,13 +291,14 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
   const isPainting = isBrush(tool)
   const isScattering = tool === 'Forest scatter'
   const isErasing = tool === 'Eraser brush'
-  const isSmartBrush = tool === 'Land brush' && smartTerrain
-  const paintsWater = isErasing || tool === 'Water brush' || (tool !== 'Land brush' && subtract)
-  const terrainTexture = terrainTextures.find(texture => texture.name === terrainName)
-  const recentTextures = [...new Set((features ?? []).flatMap(feature => feature.brush?.terrain ? [feature.brush.terrain] : []).reverse())].slice(0, 5)
+  const paintsWater = isErasing || tool === 'Water brush' || (((tool === 'Land brush' && !biomeLock) || tool === 'Shape brush' || tool === 'Edge brush') && subtract)
+  const isSmartBrush = tool === 'Land brush' && !paintsWater && smartTerrain
+  const recentTextures = [...new Set((features ?? []).flatMap(feature => feature.brush?.terrain ? [resolveTerrainName(feature.brush.terrain)] : []).reverse())].slice(0, 5)
   const hasTerrain = features !== null
-  const textureKeys = JSON.stringify([...new Set([terrainName, ...(features ?? []).flatMap(feature =>
-    feature.hidden || !feature.brush?.terrain ? [] : [feature.brush.terrain])])].sort())
+  const textureKeys = JSON.stringify([...new Set([resolveTerrainName(terrainName), waterName, ...(features ?? []).flatMap(feature => [
+    ...(!feature.hidden && feature.brush?.terrain ? [resolveTerrainName(feature.brush.terrain)] : []),
+    ...(!feature.hidden && feature.brush?.water ? [feature.brush.water] : []),
+  ])])].filter(Boolean).sort())
   const surfaceKeys = JSON.stringify([...new Set((features ?? []).flatMap(feature => {
     const settings = surfaceSettings(feature.brush)
     return settings && !feature.hidden ? [terrainSurfaceKey(settings)] : []
@@ -337,11 +338,22 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
     if (!hasTerrain) return
     let active = true
     const needed = new Set<string>(JSON.parse(textureKeys))
-    for (const { name, url } of terrainTextures) {
+    const biomeUpdates: TerrainTextures = {}
+    for (const { name } of terrainTextures) {
+      if (!needed.has(name)) continue
+      biomeUpdates[name] = makeProceduralBiomeTile(name)
+    }
+    if (Object.keys(biomeUpdates).length) {
+      setSeamlessTiles(current => {
+        const changed = Object.entries(biomeUpdates).some(([name, tile]) => current[name] !== tile)
+        return changed ? { ...current, ...biomeUpdates } : current
+      })
+    }
+    for (const { name, url } of waterTextures) {
       if (!needed.has(name)) continue
       getSeamlessTerrain(url).then(tile => {
         if (active) setSeamlessTiles(current => current[name] === tile ? current : { ...current, [name]: tile })
-      }).catch(error => console.error('Could not prepare terrain texture:', name, error))
+      }).catch(error => console.error('Could not prepare water texture:', name, error))
     }
     return () => { active = false }
   }, [hasTerrain, textureKeys])
@@ -402,13 +414,43 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
     setDraft(null)
   }
 
+  function nextNumberedName(base: string) {
+    const clean = base.trim()
+    const existing = features ?? []
+    const escaped = clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const matcher = new RegExp(`^${escaped}(?: (\\d+))?$`)
+    let maxNum = 0
+    for (const item of existing) {
+      const m = item.name.match(matcher)
+      if (m) maxNum = Math.max(maxNum, m[1] ? Number(m[1]) : 1)
+    }
+    return `${clean} ${maxNum + 1}`
+  }
+
+  function updateMapScale(patch: Partial<MapScaleConfig>) {
+    setMapScale(current => {
+      const next = { ...current, ...patch }
+      saveMapScale(mapId, next)
+      return next
+    })
+  }
+
+  useEffect(() => {
+    setMapScale(loadMapScale(mapId))
+    setMeasurePoints([])
+  }, [mapId])
+
   function chooseTool(next: typeof tool) {
     beforeDrawing()
     cancelStroke()
     setTool(next)
+    if (next !== 'Ruler') setMeasurePoints([])
     setStampId('')
     setBrushHint('')
-    setPickerOpen(false)
+    if (next) {
+      setInspectorTab('tool')
+      setLayersOpen(true)
+    }
     if (next === 'Edge brush') setBrushSize(60)
     setPoints([])
     pathStroke.current = null
@@ -420,6 +462,10 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
   function selectLayer(id: string) {
     chooseTool('')
     setSelectedId(id)
+    if (id) {
+      setInspectorTab('layers')
+      setLayersOpen(true)
+    }
   }
 
   function saveStamp(assetId: string, point: Point, original?: Feature) {
@@ -479,16 +525,51 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
   useEffect(() => {
     if (!focused) return
     function handleShortcut(event: globalThis.KeyboardEvent) {
+      if (draftImportOpen) return
       const target = event.target
       if (event.defaultPrevented || (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable]'))) return
       if (event.key === 'Escape') {
-        if (tool || moving || stampId) chooseTool('')
-        else exit()
+        if (tool === 'Ruler' && measurePoints.length > 0) {
+          setMeasurePoints([])
+        } else if (tool || moving || stampId) {
+          chooseTool('')
+          setInspectorTab('layers')
+        } else exit()
+      } else if (event.key === 'Backspace' && tool === 'Ruler' && measurePoints.length > 0) {
+        event.preventDefault()
+        setMeasurePoints(current => current.slice(0, -1))
       } else if ((event.ctrlKey || event.metaKey) && !event.altKey && ['z', 'y'].includes(event.key.toLowerCase())) {
         event.preventDefault()
         if (stroke.current || pathStroke.current) return
         if (event.shiftKey || event.key.toLowerCase() === 'y') redo()
         else undo()
+      } else if (!event.ctrlKey && !event.metaKey && !event.altKey) {
+        const key = event.key.toLowerCase()
+        if (key === 'v') { chooseTool(''); setInspectorTab('layers') }
+        else if (key === 'r') chooseTool('Ruler')
+        else if (key === 'b') chooseTool('Land brush')
+        else if (key === 'w') chooseTool('Water brush')
+        else if (key === 'e') chooseTool('Eraser brush')
+        else if (key === 't') chooseTool('Label')
+        else if (key === 'x' && (tool === 'Land brush' || tool === 'Shape brush' || tool === 'Edge brush')) {
+          event.preventDefault()
+          if (tool === 'Land brush' && biomeLock) {
+            setBiomeLock(false)
+            setSubtract(true)
+          } else {
+            setSubtract(current => !current)
+          }
+        }
+        else if (key === '[' || key === ']') {
+          const delta = key === '[' ? -20 : 20
+          if (isPainting) {
+            event.preventDefault()
+            setBrushSize(size => Math.max(20, Math.min(640, size + delta)))
+          } else if (stampCategory) {
+            event.preventDefault()
+            setStampScale(scale => Number(Math.max(0.25, Math.min(4, scale + (key === '[' ? -0.15 : 0.15))).toFixed(2)))
+          }
+        }
       }
     }
     window.addEventListener('keydown', handleShortcut)
@@ -532,11 +613,15 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
       if (spline(snapped).length > 1) geometry = snapped
       else if (spline(geometry).length <= 1) return
     }
-    const name = type === 'Label' ? 'New label' : type === 'Route' ? 'Road / route' : path ? type : ''
+    const baseName = type === 'Label' ? 'New label' : type === 'Route' ? 'Road / route' : path ? type : type
+    const name = type === 'Label' ? baseName : nextNumberedName(baseName)
     if (save([...features, { id, tool: type, points: geometry, name, size: 1, angle: 0, path }])) {
       chooseTool('')
       setSelectedId(id)
-      if (path) setLayersOpen(true)
+      if (path) {
+        setInspectorTab('layers')
+        setLayersOpen(true)
+      }
     }
   }
 
@@ -559,12 +644,17 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
   }
 
   function makeStroke(point: Point, strokeShape?: Shape): Feature {
+    const isWaterBrush = tool === 'Water brush'
+    const activeWater = isWaterBrush && waterName ? waterName : undefined
+    const clipLand = tool === 'Land brush' && biomeLock && !paintsWater
+    const rawName = isErasing ? 'Background stroke' : strokeShape === 'Fill' ? 'Map fill' : tool === 'Edge brush' ? 'Coastline stroke' : activeWater ? activeWater : paintsWater ? 'Carve water' : terrainName
     return {
       id: crypto.randomUUID(), tool: 'Land', points: [point],
-      name: isErasing ? 'Background stroke' : strokeShape === 'Fill' ? 'Map fill' : tool === 'Edge brush' ? 'Coastline stroke' : paintsWater ? 'Water stroke' : terrainName,
+      name: nextNumberedName(rawName),
       size: 1, angle: 0,
       brush: { diameter: brushSize, roughness: isErasing ? 0 : roughness, smooth: isErasing || smooth,
-        subtract: paintsWater, opacity: isErasing ? 1 : (isSmartBrush ? opacity : Math.max(5, opacity)) / 100,
+        subtract: paintsWater, clipToLand: clipLand || undefined, water: activeWater, eraser: isErasing || undefined,
+        opacity: isErasing ? 1 : (isSmartBrush ? opacity : Math.max(5, opacity)) / 100,
         terrain: paintsWater ? undefined : terrainName, generated: !isSmartBrush && !paintsWater && generateTerrain,
         textureScale: isSmartBrush ? smartTextureScale : textureScale, rotation, shape: strokeShape,
         blend: isSmartBrush ? { ...terrainBlend } : undefined },
@@ -573,7 +663,7 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
 
   function startStroke(point: Point) {
     if (!features || (isSmartBrush && opacity === 0)) return
-    if (tool === 'Edge brush' && !nearCoast(point, brushSize, terrainForHitTest)) {
+    if (tool === 'Edge brush' && !nearCoast(point, brushSize, terrainMaskForHitTest)) {
       setBrushHint('Start where the brush overlaps land and water.')
       return
     }
@@ -645,7 +735,7 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
             y: (row + .2 + random(7) * .6) * spacing / mapHeight }
           if (point.x > 1 || point.y > 1 || distance(point, center) > radius) continue
           visited.add(key)
-          const land = terrainForHitTest.find(feature => touchesPoint(feature, point))
+          const land = terrainMaskForHitTest.find(feature => touchesPoint(feature, point))
           if (!land || land.brush?.subtract || rivers.some(({ samples, width }) =>
             (nearestOnPath(toWorld(point), samples)?.distance ?? Infinity) < width / 2 + 4)) continue
           const asset = forests[Math.floor(random(13) * forests.length)]
@@ -679,6 +769,8 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
   const shown = useMemo(() => features?.filter(feature => !feature.hidden) ?? [], [features])
   const committedTerrain = useMemo(() => shown.filter(feature => feature.tool === 'Land'), [shown])
   const terrainForHitTest = useMemo(() => [...committedTerrain].reverse(), [committedTerrain])
+  const committedLandMask = useMemo(() => committedTerrain.filter(feature => !feature.brush?.clipToLand), [committedTerrain])
+  const terrainMaskForHitTest = useMemo(() => [...committedLandMask].reverse(), [committedLandMask])
   const atlasPaths = useMemo(() => shown.filter(feature => isAtlasPath(feature.tool)), [shown])
   const terrainAt = useMemo(() => {
     const settlements = shown.filter(isSettlement).map(stampEntrance)
@@ -695,11 +787,13 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
       const cached = cache.get(key)
       if (cached) return cached
       const distanceFrom = ({ x, y }: WorldPoint) => Math.hypot(world.x - x, world.y - y)
-      const terrain = terrainForHitTest.find(feature => touchesPoint(feature, toMap(world)))
+      const mapPoint = toMap(world)
+      const maskLand = terrainMaskForHitTest.find(feature => touchesPoint(feature, mapPoint))
       let style: AtlasTerrain = 'dirt'
-      if (terrain?.brush?.subtract || (!terrain && (!hasImage || (focused && hideImage)))) style = 'water'
+      if (maskLand?.brush?.subtract || (!maskLand && (!hasImage || (focused && hideImage)))) style = 'water'
       else if (settlements.some(({ point, radius }) => distanceFrom(point) < Math.max(27, radius))) style = 'cobblestone'
       else {
+        const terrain = terrainForHitTest.find(feature => !feature.brush?.subtract && touchesPoint(feature, mapPoint))
         style = terrainFromName(terrain?.brush?.terrain)
         if (style === 'dirt' || style === 'gravel') {
           const nearby = surroundings.find(({ point, radius }) => distanceFrom(point) < radius)
@@ -709,15 +803,23 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
       cache.set(key, style)
       return style
     }
-  }, [shown, terrainForHitTest, hasImage, focused, hideImage])
+  }, [shown, terrainForHitTest, terrainMaskForHitTest, hasImage, focused, hideImage])
   const terrainDraft = draft && !isScattering && (!draft.brush?.shape || draft.points.length > 1) ? draft : null
   const smartCompositing = Boolean(terrainDraft?.brush?.blend) || committedTerrain.some(feature => feature.brush?.blend)
   const terrain = terrainDraft
     ? [...committedTerrain, terrainDraft]
     : committedTerrain
   const paintedTerrain = smartCompositing ? [] : terrain.flatMap(feature => {
-    const asset = terrainTextures.find(texture => texture.name === feature.brush?.terrain)
-    return asset && feature.brush ? [{ feature, asset, brush: feature.brush }] : []
+    if (!feature.brush?.terrain) return []
+    const resolved = resolveTerrainName(feature.brush.terrain)
+    const asset = terrainTextures.find(texture => texture.name === resolved)
+    return asset ? [{ feature, asset, brush: feature.brush }] : []
+  })
+  const paintedWater = terrain.flatMap((feature, index) => {
+    const asset = waterTextures.find(item => item.name === feature.brush?.water)
+    if (!asset || !feature.brush?.subtract) return []
+    const erasersAfter = terrain.slice(index + 1).filter(other => other.brush?.eraser)
+    return [{ feature, asset, brush: feature.brush, erasersAfter }]
   })
   const showWater = !hasImage || (focused && hideImage)
   const showRelief = showWater && committedTerrain.length > 0
@@ -735,7 +837,7 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
             strokeLinecap="round" strokeLinejoin="round" fill="none" />)}
     </mask>
   ) : null)
-  const terrainGeometry = (feature: Feature, filterPrefix: string) => (
+  const terrainGeometry = (feature: Feature, filterPrefix: string) => feature.brush?.clipToLand ? null : (
     <g key={feature.id} mask={eraseMask(feature, filterPrefix)}>
       {feature.brush
         ? <BrushShape feature={feature} filters={filterPrefix}
@@ -756,8 +858,9 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
           <stop offset="1" stopColor="#c2ab74" />
         </radialGradient>
         <radialGradient id={`${elementId}-water`}>
-          <stop stopColor="#9db6aa" />
-          <stop offset="1" stopColor="#638983" />
+          <stop offset="0%" stopColor="#357b9e" />
+          <stop offset="55%" stopColor="#225b80" />
+          <stop offset="100%" stopColor="#163f5e" />
         </radialGradient>
         <filter id={texture} x="0" y="0" width="100%" height="100%">
           <feTurbulence baseFrequency=".024" numOctaves="3" seed="8" stitchTiles="stitch" />
@@ -789,7 +892,7 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
             <feMorphology in="SourceAlpha" operator="dilate" radius="8" result="shelf" />
             <feGaussianBlur in="shelf" stdDeviation="4.5" result="softShelf" />
             <feComposite in="softShelf" in2="SourceAlpha" operator="out" result="coastalWater" />
-            <feFlood floodColor="#a7cfbe" floodOpacity=".56" result="waterColor" />
+            <feFlood floodColor="#7ad1df" floodOpacity=".58" result="waterColor" />
             <feComposite in="waterColor" in2="coastalWater" operator="in" result="shallows" />
 
             {/* Two opposing inset edges give the land a consistent upper-left light source. */}
@@ -837,11 +940,51 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
             </mask>
           </g>
         })}
+        {paintedWater.map(({ feature, asset, brush, erasersAfter }) => {
+          const tile = seamlessTiles[asset.name]
+          const width = 360 * (brush.textureScale ?? 100) / 100
+          const height = width * (tile ? tile.pixels.height / tile.pixels.width : 1)
+          return <g key={`water-def-${feature.id}`}>
+            <pattern id={`${elementId}-water-tex-${feature.id}`} width={width} height={height}
+              patternUnits="userSpaceOnUse" patternContentUnits="userSpaceOnUse"
+              patternTransform={`rotate(${brush.rotation ?? 0})`}>
+              <image href={tile?.url ?? asset.url} width={width} height={height} preserveAspectRatio="none" />
+            </pattern>
+            <mask id={`${elementId}-water-mask-${feature.id}`} maskUnits="userSpaceOnUse" x="0" y="0"
+              width={mapWidth} height={mapHeight} style={{ maskType: 'alpha' }}>
+              <g mask={eraseMask(feature, filters)}>
+                <g filter={`url(#${feather})`}>
+                  <BrushShape feature={feature} filters={`${filters}-water`} color="white" />
+                </g>
+              </g>
+            </mask>
+            {erasersAfter.length > 0 && (
+              <mask id={`${elementId}-water-erase-${feature.id}`} maskUnits="userSpaceOnUse" x="0" y="0"
+                width={mapWidth} height={mapHeight} style={{ maskType: 'luminance' }}>
+                <rect width={mapWidth} height={mapHeight} fill="white" />
+                {erasersAfter.map(eraser => (
+                  <BrushShape key={eraser.id} feature={eraser} filters={`${filters}-water-erase`} color="black" />
+                ))}
+              </mask>
+            )}
+          </g>
+        })}
       </defs>
       {showWater && <>
         <rect width={mapWidth} height={mapHeight} fill={`url(#${elementId}-water)`} />
-        <rect width={mapWidth} height={mapHeight} filter={`url(#${texture})`} opacity=".22" style={{ mixBlendMode: 'multiply' }} />
+        <rect width={mapWidth} height={mapHeight} filter={`url(#${texture})`} opacity=".18" style={{ mixBlendMode: 'multiply' }} />
       </>}
+      {paintedWater.map(({ feature, brush, erasersAfter }) => (
+        <g key={`water-${feature.id}`} mask={erasersAfter.length ? `url(#${elementId}-water-erase-${feature.id})` : undefined}>
+          <rect
+            width={mapWidth}
+            height={mapHeight}
+            fill={`url(#${elementId}-water-tex-${feature.id})`}
+            mask={`url(#${elementId}-water-mask-${feature.id})`}
+            opacity={(brush.opacity ?? 1) * (showWater ? 1 : 0.72)}
+          />
+        </g>
+      ))}
       <g mask={`url(#${mask})`} opacity={showWater ? 1 : .38}>
         <rect width={mapWidth} height={mapHeight} fill={`url(#${elementId}-land)`} />
         <rect width={mapWidth} height={mapHeight} filter={`url(#${texture})`} opacity=".27" style={{ mixBlendMode: 'multiply' }} />
@@ -901,7 +1044,8 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
     setMoving(false)
     setInsertingPoint(false)
     setVertex(null)
-  } : stampId ? (point: Point) => saveStamp(stampId, point)
+  } : tool === 'Ruler' ? (point: Point) => setMeasurePoints(current => [...current, point])
+    : stampId ? (point: Point) => saveStamp(stampId, point)
     : tool && !stampCategory && !isBrush(tool) && !freehand ? (point: Point) => {
     if (pathTool) setPoints(current => [...current, point])
     else addFeature(tool, [point])
@@ -919,8 +1063,8 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
       )}
     </svg>
   )
-  const selectedSettings = selectedPath && pathSettings(selectedPath, features?.indexOf(selectedPath))
   const previewAsset = focused && stampId ? stampsById.get(stampId) : undefined
+  const measured = useMemo(() => measurePathKm(measurePoints, mapScale.widthKm, mapWidth / mapHeight), [measurePoints, mapScale.widthKm])
   const canvas = children({
     overlay: aspectRatio => <>
       {overlay}
@@ -966,9 +1110,39 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
         {focused && pathTool === 'Land' && points.length > 0 &&
           <polyline points={coordinatesFor(points)} fill="none" stroke={ink} strokeWidth="4" strokeDasharray="7 5" />}
         {focused && !freehand && points.map((point, index) => <circle key={index} cx={xAt(point)} cy={yAt(point)} r="4" fill={ink} />)}
-        {focused && !tool && selectedPath?.points.map((point, index) => <circle key={index} cx={xAt(point)} cy={yAt(point)}
+        {focused && !tool && selected && isAtlasPath(selected.tool) && selected.points.map((point, index) => <circle key={index} cx={xAt(point)} cy={yAt(point)}
           r="3.5" fill="#f9eed7" stroke={ink} strokeWidth="1.25" />)}
         {focused && activeVertex && <circle cx={xAt(activeVertex)} cy={yAt(activeVertex)} r="8" fill="white" stroke={ink} strokeWidth="3" />}
+        {focused && tool === 'Ruler' && measurePoints.length > 0 && (
+          <g>
+            {measurePoints.length > 1 && (
+              <>
+                <polyline points={coordinatesFor(measurePoints)} fill="none" stroke="#1f1b16" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" opacity=".75" />
+                <polyline points={coordinatesFor(measurePoints)} fill="none" stroke="#f6d365" strokeWidth="4" strokeDasharray="18 10" strokeLinecap="round" strokeLinejoin="round" />
+              </>
+            )}
+            {measured.segmentsKm.map((segKm, index) => {
+              const a = measurePoints[index]
+              const b = measurePoints[index + 1]
+              const mx = (xAt(a) + xAt(b)) / 2
+              const my = (yAt(a) + yAt(b)) / 2
+              const text = formatDistance(segKm, mapScale.unit)
+              const pillW = Math.max(96, text.length * 14 + 28)
+              return (
+                <g key={`seg-${index}`} transform={`translate(${mx},${my})`}>
+                  <rect x={-pillW / 2} y="-17" width={pillW} height="34" rx="17" fill="#1f1b16" fillOpacity=".86" stroke="#f6d365" strokeWidth="2" />
+                  <text y="6" textAnchor="middle" fontFamily="DM Sans, sans-serif" fontSize="20" fontWeight="600" fill="#fef3c7">{text}</text>
+                </g>
+              )
+            })}
+            {measurePoints.map((point, index) => (
+              <g key={`pt-${index}`} transform={`translate(${xAt(point)},${yAt(point)})`}>
+                <circle r="13" fill="#1f1b16" stroke="#f6d365" strokeWidth="3.5" />
+                <text y="5" textAnchor="middle" fontFamily="DM Sans, sans-serif" fontSize="16" fontWeight="700" fill="#fef3c7">{index + 1}</text>
+              </g>
+            ))}
+          </g>
+        )}
       </svg>
     </>,
     placementPreview: previewAsset ? point => (
@@ -980,7 +1154,52 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
           width: `${stampWidthFraction(previewAsset, stampScale) * 100}%`,
           opacity: Math.max(.25, stampOpacity / 100 * .65),
         }} />
-    ) : undefined,
+    ) : focused && tool === 'Ruler' ? point => {
+      const lastPoint = measurePoints[measurePoints.length - 1]
+      const liveSegKm = lastPoint ? measureSegmentKm(lastPoint, point, mapScale.widthKm, mapWidth / mapHeight) : 0
+      const runningKm = measured.totalKm + liveSegKm
+      return (
+        <>
+          {lastPoint && (
+            <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${mapWidth} ${mapHeight}`} preserveAspectRatio="none">
+              <line
+                x1={xAt(lastPoint)} y1={yAt(lastPoint)}
+                x2={xAt(point)} y2={yAt(point)}
+                stroke="#f6d365" strokeWidth="3.5" strokeDasharray="12 10" strokeLinecap="round" opacity=".9"
+              />
+            </svg>
+          )}
+          {lastPoint && (
+            <div
+              className="pointer-events-none absolute z-30 -translate-x-1/2 translate-y-3 whitespace-nowrap rounded-full border border-[#f6d365]/60 bg-[#1f1b16]/90 px-2.5 py-1 text-[11px] font-medium tabular-nums text-[#fef3c7] shadow-lg"
+              style={{ left: `${point.x * 100}%`, top: `${point.y * 100}%` }}
+            >
+              +{formatDistance(liveSegKm, mapScale.unit)}
+              {measurePoints.length > 1 ? ` · Total ${formatDistance(runningKm, mapScale.unit)}` : ''}
+            </div>
+          )}
+        </>
+      )
+    } : undefined,
+    viewportOverlay: mapScale.showScaleBar ? metrics => {
+      const bar = computeScaleBar(metrics.width, mapScale.widthKm, mapScale.unit)
+      return (
+        <div
+          className="pointer-events-none absolute bottom-4 left-4 flex flex-col gap-1 rounded-lg border border-[hsl(var(--studio-edge))] bg-[hsl(var(--studio-paper)/0.92)] px-2.5 py-1.5 shadow-md backdrop-blur-sm"
+          aria-label={`Map scale bar: ${bar.label}`}
+        >
+          <div className="flex items-center justify-between text-[10px] font-medium tabular-nums text-surface-300" style={{ width: bar.pixelWidth }}>
+            <span>0</span>
+            <span>{bar.halfLabel}</span>
+            <span>{bar.label}</span>
+          </div>
+          <div className="flex h-1.5 overflow-hidden rounded-sm border border-[hsl(var(--studio-edge))]" style={{ width: bar.pixelWidth }}>
+            <span className="h-full flex-1 bg-surface-200" />
+            <span className="h-full flex-1 bg-surface-950" />
+          </div>
+        </div>
+      )
+    } : undefined,
     onEditPoint: focused ? onEditPoint : undefined,
     brush: focused && isPainting
       ? { diameter: tool === 'Shape brush' ? 0 : brushSize, start: startStroke, move: extendStroke, finish: finishStroke, cancel: cancelStroke }
@@ -993,327 +1212,244 @@ export default function ParchmentMapTools({ mapId, hasImage, focused, mapName, o
   })
 
   return <>
-    <div className="studio-chapter-toolbar flex shrink-0 flex-wrap items-center gap-2 px-3 py-1.5">
-      {focused ? <>
-        <button ref={exitButton} type="button" className={control} onClick={exit}>Back to Maps</button>
-        <h2 className="mr-auto truncate font-serif text-sm font-semibold">{mapName}</h2>
-        <button type="button" className={control} disabled={!past.length || !!draft || !!pathStroke.current} onClick={undo}><Undo2 className="mr-1 inline h-3.5 w-3.5" />Undo</button>
-        <button type="button" className={control} disabled={!future.length || !!draft || !!pathStroke.current} onClick={redo}><Redo2 className="mr-1 inline h-3.5 w-3.5" />Redo</button>
-        <button type="button" className={control} aria-pressed={layersOpen && !stampCategory} onClick={() => {
-          if (stampCategory) {
-            chooseTool('')
-            setLayersOpen(true)
-          } else setLayersOpen(current => !current)
-        }}>Layers</button>
-        <span role="status" className="text-xs text-surface-400">{error ? 'Changes could not save' : 'Saved on this device'}</span>
-      </> : (
-        <>
-          {viewerControls}
-          <button ref={enterButton} type="button" className={`${control} !bg-[hsl(var(--brand-green-bg))] !text-[hsl(var(--brand-green))]`}
-            onClick={() => { if (features || persist([])) { chooseTool(''); onEdit() } }}>Edit map</button>
-        </>
-      )}
-      {error && <span role="alert" className="text-xs text-danger-500">{error}</span>}
-    </div>
+    {focused ? (
+      <MapTopBar
+        exitButtonRef={exitButton}
+        mapName={mapName}
+        canUndo={Boolean(past.length && !draft && !pathStroke.current)}
+        canRedo={Boolean(future.length && !draft && !pathStroke.current)}
+        inspectorOpen={layersOpen}
+        error={error}
+        onExit={exit}
+        onUndo={undo}
+        onRedo={redo}
+        onToggleInspector={() => setLayersOpen(current => !current)}
+        onOpenDraftImport={() => setDraftImportOpen(true)}
+      />
+    ) : (
+      <div className="studio-chapter-toolbar flex h-10 shrink-0 flex-wrap items-center gap-2 px-3">
+        {viewerControls}
+        <button type="button" className={`${control} inline-flex items-center gap-1.5`}
+          onClick={() => { if (features || persist([])) setDraftImportOpen(true) }}>
+          <Sparkles className="h-3.5 w-3.5 text-[hsl(var(--brand-green))]" aria-hidden="true" />
+          Draft to Map
+        </button>
+        <button ref={enterButton} type="button" className={`${control} !bg-[hsl(var(--brand-green-bg))] !text-[hsl(var(--brand-green))]`}
+          onClick={() => { if (features || persist([])) { chooseTool(''); onEdit() } }}>Edit map</button>
+        {error && <span role="alert" className="text-xs text-danger-500">{error}</span>}
+      </div>
+    )}
 
     <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
       {focused && (
-        <nav aria-label="Map tools" className="studio-chapter-toolbar flex w-36 shrink-0 flex-col gap-1 overflow-y-auto border-r border-[hsl(var(--studio-edge))] p-2">
-          {toolButtons.map(([value, label, Icon]) => (
-            <button key={label} type="button" onClick={() => chooseTool(value)} aria-pressed={(tool === value || (value === 'Forest' && isScattering)) && !moving}
-              className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-surface-850 ${(tool === value || (value === 'Forest' && isScattering)) && !moving ? 'bg-[hsl(var(--brand-green-bg))] text-[hsl(var(--brand-green))]' : ''}`}>
-              <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />{label}
-            </button>
-          ))}
-        </nav>
+        <MapToolRail
+          activeTool={tool}
+          isScattering={isScattering}
+          moving={moving}
+          onSelectTool={value => {
+            chooseTool(value)
+            if (value) {
+              setLayersOpen(true)
+              setInspectorTab('tool')
+            }
+          }}
+        />
       )}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {focused && (pathTool || (tool && !stampCategory) || moving) && (
-          <div className="studio-chapter-toolbar flex shrink-0 flex-wrap items-center gap-3 px-3 py-2 text-xs">
-            {isPainting && !isScattering && <>
-              {(tool === 'Shape brush' || tool === 'Edge brush') && (
-                <select aria-label="Brush action" className={control} value={subtract ? 'subtract' : 'add'}
-                  onChange={event => setSubtract(event.target.value === 'subtract')}>
-                  <option value="add">Add land</option>
-                  <option value="subtract">Carve water</option>
-                </select>
-              )}
-              {tool === 'Shape brush' ? (
-                <select aria-label="Brush shape" className={control} value={shape}
-                  onChange={event => setShape(event.target.value as Exclude<Shape, 'Fill'>)}>
-                  <option>Ellipse</option><option>Rectangle</option><option>Diamond</option>
-                </select>
-              ) : (
-                <label className="flex items-center gap-2">Brush size
-                  <input type="range" min="20" max="480" value={brushSize} onChange={event => setBrushSize(Number(event.target.value))} />
-                  <output>{brushSize}</output>
-                </label>
-              )}
-              {!isErasing && <>
-                <label className="flex items-center gap-2">Opacity
-                  <input type="range" min={isSmartBrush ? 0 : 5} max="100" value={isSmartBrush ? opacity : Math.max(5, opacity)}
-                    onChange={event => setOpacity(event.target.valueAsNumber)} />
-                  <output>{isSmartBrush ? opacity : Math.max(5, opacity)}%</output>
-                </label>
-                {!isSmartBrush && <label className="flex items-center gap-2">Roughness
-                  <input type="range" min="0" max="8" value={roughness} onChange={event => setRoughness(Number(event.target.value))} />
-                  <output>{roughness}</output>
-                </label>}
-                {tool !== 'Shape brush' && <label className="flex items-center gap-1"><input type="checkbox" checked={smooth} onChange={event => setSmooth(event.target.checked)} /> Smooth stroke</label>}
-              </>}
-              {tool === 'Shape brush' && <button type="button" className={control} onClick={fillMap}>Fill map</button>}
-              {!isErasing && !paintsWater && terrainTexture && <>
-                <button type="button" className={`${control} flex items-center gap-2`} aria-expanded={pickerOpen} onClick={() => setPickerOpen(open => !open)}>
-                  <img src={terrainTexture.url} alt="" className="h-5 w-7 rounded object-cover" />
-                  {terrainTexture.name}
+
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        {focused && (pathTool || moving || tool) && (
+          <div className="pointer-events-none absolute left-1/2 top-3 z-20 flex max-w-[90%] -translate-x-1/2 items-center gap-2 rounded-full border border-[hsl(var(--studio-edge))] bg-[hsl(var(--studio-paper)/0.95)] px-3 py-1.5 text-xs shadow-lg backdrop-blur-md">
+            <span role="status" className="pointer-events-auto truncate text-surface-300">
+              {moving
+                ? insertingPoint
+                  ? 'Click segment to insert point'
+                  : 'Click new position'
+                : isErasing
+                  ? 'Drag to paint background over terrain'
+                  : isScattering
+                    ? brushHint || 'Drag over land to scatter trees'
+                    : isPainting
+                      ? brushHint || (tool === 'Edge brush' ? 'Drag from shoreline to refine edge' : tool === 'Shape brush' ? 'Drag to size shape' : paintsWater ? 'Drag to paint water or carve coastline' : biomeLock ? 'Drag over land to paint biome' : 'Drag to paint land')
+                      : tool === 'Ruler'
+                        ? measurePoints.length > 1
+                          ? `Measured: ${formatDistance(measured.totalKm, mapScale.unit)}`
+                          : measurePoints.length === 1
+                            ? 'Click next point on map'
+                            : 'Click point A on map to measure'
+                        : pathTool
+                          ? freehand
+                            ? 'Drag to draw path'
+                            : 'Click map to place path points'
+                          : stampCategory
+                            ? stampId ? 'Click map to place stamp' : 'Select a stamp on the right'
+                            : 'Click map to place'}
+            </span>
+            {tool === 'Ruler' && measurePoints.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setMeasurePoints(current => current.slice(0, -1))}
+                  className="pointer-events-auto shrink-0 rounded-full border border-[hsl(var(--studio-edge))] px-2 py-0.5 text-[11px] text-surface-300 hover:bg-surface-850 hover:text-surface-100"
+                >
+                  Undo point
                 </button>
-                {tool === 'Land brush' && <label className="flex items-center gap-1">
-                  <input type="checkbox" checked={smartTerrain} onChange={event => setSmartTerrain(event.target.checked)} /> Smart Terrain Blending
-                </label>}
-                {!isSmartBrush && <label className="flex items-center gap-1"><input type="checkbox" checked={generateTerrain}
-                  onChange={event => setGenerateTerrain(event.target.checked)} /> Generate relief</label>}
-                <label className="flex items-center gap-2">{!isSmartBrush && generateTerrain ? 'Terrain scale' : 'Texture scale'}
-                  <input type="range" min="25" max={isSmartBrush ? 400 : 250} value={isSmartBrush ? smartTextureScale : textureScale}
-                    onChange={event => (isSmartBrush ? setSmartTextureScale : setTextureScale)(event.target.valueAsNumber)} />
-                  <output>{isSmartBrush ? `${(smartTextureScale / 100).toFixed(2)}×` : `${textureScale}%`}</output>
-                </label>
-                {isSmartBrush && <>
-                  {([['Hardness', 'hardness'], ['Blend Strength', 'strength'], ['Edge Noise', 'noise']] as const).map(([label, key]) => (
-                    <label key={key} className="flex items-center gap-2">{label}
-                      <input type="range" min="0" max="100" value={terrainBlend[key]}
-                        onChange={event => setTerrainBlend({ ...terrainBlend, [key]: event.target.valueAsNumber })} />
-                      <output>{terrainBlend[key]}%</output>
-                    </label>
-                  ))}
-                  {([['Color Harmonization', 'harmonize'], ['Blend Relief', 'relief']] as const).map(([label, key]) => (
-                    <label key={key} className="flex items-center gap-1">
-                      <input type="checkbox" checked={terrainBlend[key]}
-                        onChange={event => setTerrainBlend({ ...terrainBlend, [key]: event.target.checked })} /> {label}
-                    </label>
-                  ))}
-                </>}
-                <label className="flex items-center gap-2">Rotation
-                  <input type="range" min="0" max="359" value={rotation} onChange={event => setRotation(Number(event.target.value))} />
-                  <output>{rotation}°</output>
-                </label>
-              </>}
-            </>}
-            {atlasTool && atlasStyle && <>
-              <label className="flex items-center gap-1">Draw
-                <select className={control} value={pathMode} onChange={event => {
-                  cancelPathStroke()
-                  setPathMode(event.target.value === 'freehand' ? 'freehand' : 'points')
-                }}>
-                  <option value="points">Point to point</option>
-                  <option value="freehand">Freehand</option>
-                </select>
-              </label>
-              <AtlasPathControls key={atlasTool} id={atlasTool} control={control} tool={atlasTool} settings={atlasStyle}
-                update={patch => setPathStyles(current => ({ ...current, [atlasTool]: { ...current[atlasTool], ...patch } }))} />
-            </>}
-            {pathTool && !freehand && <button type="button" className={control}
-              disabled={points.length < (pathTool === 'Land' || (pathTool === 'Border' && (atlasStyle?.closed || atlasStyle?.fill)) ? 3 : 2)}
-              onClick={() => addFeature(pathTool, points)}>Finish {pathTool.toLowerCase()}</button>}
-            <span role="status" className="text-surface-400">{moving ? insertingPoint ? 'Click to insert a point in the closest segment.' : 'Click a new position.' : isErasing
-              ? 'Drag to paint the map background over terrain.'
-              : isPainting ? brushHint || (tool === 'Edge brush' ? 'Start at the shoreline and drag to refine it.' : tool === 'Shape brush' ? 'Drag to size your shape.' : paintsWater ? 'Drag over land to carve water.' : 'Drag to paint land.')
-                : pathTool ? freehand ? 'Drag to draw the path.' : 'Click to place points.' : 'Click to place.'}</span>
-            <button type="button" className={control} onClick={() => chooseTool('')}>Cancel</button>
+                <button
+                  type="button"
+                  onClick={() => setMeasurePoints([])}
+                  className="pointer-events-auto shrink-0 rounded-full border border-[hsl(var(--studio-edge))] px-2 py-0.5 text-[11px] text-surface-300 hover:bg-surface-850 hover:text-surface-100"
+                >
+                  Clear
+                </button>
+              </>
+            )}
+            {(tool === 'Land brush' || tool === 'Shape brush' || tool === 'Edge brush') && !(tool === 'Land brush' && biomeLock) && (
+              <button
+                type="button"
+                onClick={() => setSubtract(current => !current)}
+                title="Toggle Add / Carve (X)"
+                className="pointer-events-auto shrink-0 rounded-full border border-[hsl(var(--studio-edge))] bg-[hsl(var(--studio-paper))] px-2.5 py-0.5 text-[11px] font-medium text-surface-200 hover:bg-surface-850"
+              >
+                {subtract ? 'Carving water (X)' : 'Adding land (X)'}
+              </button>
+            )}
+            {pathTool && !freehand && (
+              <button
+                type="button"
+                className="pointer-events-auto shrink-0 rounded-full bg-[hsl(var(--brand-green))] px-2.5 py-0.5 text-[11px] font-medium text-white dark:text-surface-950 disabled:opacity-45"
+                disabled={points.length < (pathTool === 'Land' || (pathTool === 'Border' && (atlasStyle?.closed || atlasStyle?.fill)) ? 3 : 2)}
+                onClick={() => addFeature(pathTool, points)}
+              >
+                Finish {pathTool.toLowerCase()}
+              </button>
+            )}
+            <button
+              type="button"
+              className="pointer-events-auto shrink-0 rounded-full border border-[hsl(var(--studio-edge))] px-2 py-0.5 text-[11px] text-surface-300 hover:bg-surface-850 hover:text-surface-100"
+              onClick={() => chooseTool('')}
+            >
+              Done
+            </button>
           </div>
-        )}
-        {focused && isPainting && !paintsWater && pickerOpen && (
-          <section aria-label="Terrain textures" className="studio-chapter-toolbar max-h-56 shrink-0 overflow-y-auto px-3 py-2">
-            {recentTextures.length > 0 && <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-              <span className="font-semibold">Recent terrain</span>
-              {recentTextures.map(name => <button key={name} type="button" className={control} onClick={() => { setTerrainName(name); setPickerOpen(false) }}>{name}</button>)}
-            </div>}
-            <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(8rem,1fr))]">
-              {terrainTextures.map(({ name, url }) => (
-                <button key={name} type="button" aria-pressed={terrainName === name}
-                  onClick={() => { setTerrainName(name); setPickerOpen(false) }}
-                  className={`${control} space-y-1 text-left ${terrainName === name ? '!border-current !text-[hsl(var(--brand-green))]' : ''}`}>
-                  <img src={url} alt="" className="h-10 w-full rounded object-cover" />
-                  <span className="block">{name}</span>
-                </button>
-              ))}
-            </div>
-          </section>
         )}
         {canvas}
       </div>
-      {focused && activeStampCategory && (
-        <aside aria-label="Stamp assets" className="studio-chapter-toolbar flex w-52 shrink-0 flex-col gap-3 overflow-y-auto border-l border-[hsl(var(--studio-edge))] p-3">
-          <h3 className="font-serif text-sm font-semibold">{activeStampCategory.label}</h3>
-          {stampCategory === 'forests' && (
-            <label className="grid gap-1 text-xs">Placement mode
-              <select className={control} value={isScattering ? 'scatter' : 'single'}
-                onChange={event => chooseTool(event.target.value === 'scatter' ? 'Forest scatter' : 'Forest')}>
-                <option value="single">Single stamp</option>
-                <option value="scatter">Forest scatter</option>
-              </select>
-            </label>
-          )}
-          {isScattering ? (
-            <>
-              <label className="flex items-center gap-2">Brush size
-                <input type="range" min="20" max="480" value={brushSize} onChange={event => setBrushSize(event.target.valueAsNumber)} />
-                <output>{brushSize}</output>
-              </label>
-              <label className="flex items-center gap-2">Density
-                <input type="range" min="0" max="100" value={forestDensity} onChange={event => setForestDensity(event.target.valueAsNumber)} />
-                <output>{forestDensity}%</output>
-              </label>
-              <label className="flex items-center gap-2">Size variation
-                <input type="range" min="0" max="60" value={forestVariation} onChange={event => setForestVariation(event.target.valueAsNumber)} />
-                <output>{forestVariation}%</output>
-              </label>
-              <p role="status" className="text-xs text-surface-400">{brushHint || 'Drag over land to scatter tree clusters.'}</p>
-            </>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 gap-1.5">
-                {stampAssets.filter(asset => asset.category === stampCategory).map(asset => (
-                  <button key={asset.id} type="button" aria-pressed={stampId === asset.id}
-                    className={`${control} min-w-0 !bg-[#efe3c8] !text-[#392e1d] ${stampId === asset.id ? '!border-accent-600 ring-1 ring-accent-600' : ''}`}
-                    onClick={() => setStampId(asset.id)}>
-                    <img src={asset.url} alt="" className="mb-1 h-12 w-full object-contain" />
-                    <span className="block text-left">{asset.label}</span>
-                  </button>
-                ))}
-              </div>
-              <label className="grid gap-1 text-xs">Stamp scale · {Math.round(stampScale * 100)}%
-                <input type="range" min=".25" max="4" step=".05" value={stampScale} onChange={event => setStampScale(event.target.valueAsNumber)} />
-              </label>
-              <label className="grid gap-1 text-xs">Stamp opacity · {stampOpacity}%
-                <input type="range" min="0" max="100" value={stampOpacity} onChange={event => setStampOpacity(event.target.valueAsNumber)} />
-              </label>
-              <label className="grid gap-1 text-xs">Place new stamps
-                <select className={control} value={stampOrder}
-                  onChange={event => setStampOrder(event.target.value as typeof stampOrder)}>
-                  <option value="auto">Automatic by frame bottom</option>
-                  <option value="front">In front of stamps</option>
-                  <option value="back">Behind stamps</option>
-                </select>
-              </label>
-              <p className="text-xs text-surface-400">{stampId ? 'Click the map to place copies. Press Esc to stop.' : 'Choose a stamp to place on the map.'}</p>
-            </>
-          )}
-          <div className="flex flex-wrap gap-x-2 gap-y-1 border-t border-[hsl(var(--studio-edge))] pt-2 text-xs text-surface-400">
-            <a className="underline" href={stampCredits.licenses} download="LICENSES.md">CC0 credits</a>
-            <a className="underline" href={stampCredits.originalReadme} download="ORIGINAL_README.txt">Original README</a>
-          </div>
-        </aside>
-      )}
-      {focused && layersOpen && !stampCategory && (
-        <aside className="studio-chapter-toolbar flex w-52 shrink-0 flex-col overflow-y-auto border-l border-[hsl(var(--studio-edge))] p-3" aria-label="Map layers">
-          <h3 className="mb-3 font-serif text-sm font-semibold">Layers</h3>
-          <div className="mb-3 grid gap-2 border-b border-[hsl(var(--studio-edge))] pb-3 text-xs">
-            {hasImage && <label className="flex items-center gap-2"><input type="checkbox" checked={!hideImage} onChange={event => setHideImage(!event.target.checked)} /> Reference artwork</label>}
-            <label className="flex items-center gap-2"><input type="checkbox" checked={!hidePins} onChange={event => setHidePins(!event.target.checked)} /> Location pins</label>
-          </div>
-          {selected && features && !atlasTool && (
-            <div className="mb-3 grid gap-2 border-b border-[hsl(var(--studio-edge))] pb-3">
-              <input key={`${selected.id}:${selected.name}`} aria-label="Layer item name" placeholder="Name" className={control} defaultValue={selected.name}
-                onBlur={event => { if (event.target.value !== selected.name) update({ name: event.target.value }) }} maxLength={80}
-                onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} />
-              <button type="button" className={`${control} justify-self-start`} onClick={() => { chooseTool(''); setMoving(true) }}>Move</button>
-              {selected.brush?.terrain && !selected.brush.subtract && !selected.brush.blend && (
-                <label className="flex items-center gap-2 text-xs">
-                  <input type="checkbox" checked={Boolean(selected.brush.generated)} onChange={event => {
-                    if (selected.brush) update({ brush: { ...selected.brush, generated: event.target.checked } })
-                  }} />
-                  Generate relief for layer
-                </label>
-              )}
-              {isPath(selected.tool) && !selected.brush && (
-                <select aria-label="Reshape point" className={control} value={vertex ?? ''} onChange={event => {
-                  const value = event.target.value
-                  chooseTool('')
-                  setVertex(value === '' ? null : Number(value))
-                  setMoving(value !== '')
-                }}>
-                  <option value="">Reshape point</option>
-                  {selected.points.map((_, index) => <option key={index} value={index}>Point {index + 1}</option>)}
-                </select>
-              )}
-              {selectedPath && selectedSettings && isAtlasPath(selectedPath.tool) && <>
-                <div className="flex flex-wrap gap-1">
-                  <button type="button" className={control} onClick={() => {
-                    chooseTool('')
-                    setInsertingPoint(true)
-                    setMoving(true)
-                  }}>Insert point</button>
-                  {vertex !== null && <button type="button" className={control}
-                    disabled={selectedPath.points.length <= (selectedPath.tool === 'Border' && (selectedSettings.closed || selectedSettings.fill) ? 3 : 2)}
-                    onClick={() => {
-                      update({ points: selectedPath.points.filter((_, index) => index !== vertex) })
-                      setVertex(null)
-                      setMoving(false)
-                    }}>Delete point</button>}
-                </div>
-                <AtlasPathControls id={selectedPath.id} tool={selectedPath.tool} settings={selectedSettings}
-                  canClose={selectedPath.points.length >= 3} control={control}
-                  update={patch => update({ path: { ...selectedSettings, ...patch } })} />
-              </>}
-              {selected.tool === 'Stamp' && <>
-                <div className="flex flex-wrap gap-1">
-                  <button type="button" className={control} onClick={() => reorderStamp('front')}>Bring to front</button>
-                  <button type="button" className={control} onClick={() => reorderStamp('back')}>Send to back</button>
-                  <button type="button" className={control} onClick={() => reorderStamp('auto')}>Automatic depth</button>
-                </div>
-                {([
-                  ['Scale (%)', selected.size * 100, 25, 400, (value: number) => ({ size: value / 100 })],
-                  ['Rotation (°)', selected.angle, -360, 360, (value: number) => ({ angle: value })],
-                  ['Opacity (%)', (selected.opacity ?? 1) * 100, 0, 100, (value: number) => ({ opacity: value / 100 })],
-                ] as const).map(([label, value, min, max, patch]) => (
-                  <label key={label} className="flex items-center justify-between gap-2 text-xs">{label}
-                    <input key={`${selected.id}:${value}`} className={`${control} w-20`} type="number" min={min} max={max}
-                      defaultValue={Math.round(value)}
-                      onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }}
-                      onBlur={event => {
-                        const input = event.currentTarget
-                        const next = Number.isFinite(input.valueAsNumber) ? Math.max(min, Math.min(max, input.valueAsNumber)) : value
-                        input.value = String(next)
-                        if (next !== value) update(patch(next))
-                      }} />
-                  </label>
-                ))}
-                <button type="button" className={`${control} justify-self-start`} onClick={() => {
-                  const { x, y } = selected.points[0]
-                  if (selected.stampId) saveStamp(selected.stampId, { x: x > .95 ? x - .025 : x + .025, y: y > .95 ? y - .025 : y + .025 }, selected)
-                }}>Duplicate stamp</button>
-              </>}
-              {selected.tool !== 'Stamp' && !isPath(selected.tool) && <>
-                <label className="text-xs">Size <input className={`${control} w-20`} type="number" min=".5" max="4" step=".25" value={selected.size}
-                  onChange={event => {
-                    if (Number.isFinite(event.target.valueAsNumber)) update({ size: Math.min(4, Math.max(.5, event.target.valueAsNumber)) })
-                  }} /></label>
-                <button type="button" className={control} onClick={() => update({ angle: (selected.angle + 15) % 360 })}>Rotate</button>
-              </>}
-            </div>
-          )}
-          {features?.length ? (
-            <ul className="space-y-1">
-              {features.map((feature, index) => ({ feature, index }))
-                .sort((a, b) => (b.feature.addedOrder ?? b.index) - (a.feature.addedOrder ?? a.index))
-                .map(({ feature, index }) => {
-                const label = feature.name || `${feature.tool} ${index + 1}`
-                return <li key={feature.id} className={`flex items-center gap-1 rounded-md px-1 ${selectedId === feature.id ? 'bg-[hsl(var(--brand-green-bg))] text-[hsl(var(--brand-green))]' : ''}`}>
-                  <input type="checkbox" aria-label={`Show ${label}`} checked={!feature.hidden}
-                    onChange={event => save(features.map(item => item.id === feature.id ? { ...item, hidden: !event.target.checked } : item))} />
-                  <button type="button" title={label} aria-pressed={selectedId === feature.id} className="min-w-0 flex-1 truncate rounded px-1 py-1.5 text-left text-xs"
-                    onClick={() => selectLayer(feature.id)}>{label}</button>
-                  <button type="button" title={`Delete ${label}`} aria-label={`Delete layer ${index + 1}: ${label}`}
-                    className="shrink-0 rounded p-1.5 text-surface-500 hover:bg-danger-500/10 hover:text-danger-500 focus-visible:text-danger-500 disabled:opacity-50"
-                    disabled={Boolean(draft)} onClick={() => deleteLayer(feature.id)}>
-                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                  </button>
-                </li>
-              })}
-            </ul>
-          ) : <p className="text-xs text-surface-400">Draw or place an item to add a layer.</p>}
-        </aside>
+
+      {focused && layersOpen && (
+        <MapInspector
+          inspectorTab={inspectorTab}
+          onTabChange={setInspectorTab}
+          tool={tool}
+          chooseTool={chooseTool}
+          isPainting={isPainting}
+          isScattering={isScattering}
+          isErasing={isErasing}
+          isSmartBrush={isSmartBrush}
+          paintsWater={paintsWater}
+          moving={moving}
+          setMoving={setMoving}
+          insertingPoint={insertingPoint}
+          setInsertingPoint={setInsertingPoint}
+          vertex={vertex}
+          setVertex={setVertex}
+          subtract={subtract}
+          setSubtract={setSubtract}
+          biomeLock={biomeLock}
+          setBiomeLock={setBiomeLock}
+          shape={shape}
+          setShape={setShape}
+          brushSize={brushSize}
+          setBrushSize={setBrushSize}
+          opacity={opacity}
+          setOpacity={setOpacity}
+          roughness={roughness}
+          setRoughness={setRoughness}
+          smooth={smooth}
+          setSmooth={setSmooth}
+          smartTerrain={smartTerrain}
+          setSmartTerrain={setSmartTerrain}
+          generateTerrain={generateTerrain}
+          setGenerateTerrain={setGenerateTerrain}
+          smartTextureScale={smartTextureScale}
+          setSmartTextureScale={setSmartTextureScale}
+          textureScale={textureScale}
+          setTextureScale={setTextureScale}
+          terrainBlend={terrainBlend}
+          setTerrainBlend={setTerrainBlend}
+          rotation={rotation}
+          setRotation={setRotation}
+          terrainName={terrainName}
+          setTerrainName={setTerrainName}
+          waterName={waterName}
+          setWaterName={setWaterName}
+          recentTextures={recentTextures}
+          fillMap={fillMap}
+          forestDensity={forestDensity}
+          setForestDensity={setForestDensity}
+          forestVariation={forestVariation}
+          setForestVariation={setForestVariation}
+          brushHint={brushHint}
+          stampCategory={stampCategory}
+          activeStampCategory={activeStampCategory}
+          stampId={stampId}
+          setStampId={setStampId}
+          stampScale={stampScale}
+          setStampScale={setStampScale}
+          stampOpacity={stampOpacity}
+          setStampOpacity={setStampOpacity}
+          stampOrder={stampOrder}
+          setStampOrder={setStampOrder}
+          atlasTool={atlasTool}
+          atlasStyle={atlasStyle}
+          pathMode={pathMode}
+          setPathMode={setPathMode}
+          cancelPathStroke={cancelPathStroke}
+          updatePathStyle={(targetTool, patch) => setPathStyles(current => ({ ...current, [targetTool]: { ...current[targetTool], ...patch } }))}
+          hasImage={hasImage}
+          hideImage={hideImage}
+          setHideImage={setHideImage}
+          hidePins={hidePins}
+          setHidePins={setHidePins}
+          features={features}
+          selected={selected}
+          selectedId={selectedId}
+          selectLayer={selectLayer}
+          toggleLayerVisibility={(id, visible) => {
+            if (features) save(features.map(item => item.id === id ? { ...item, hidden: !visible } : item))
+          }}
+          deleteLayer={deleteLayer}
+          updateFeature={update}
+          reorderStamp={reorderStamp}
+          duplicateSelectedStamp={() => {
+            if (!selected || !selected.stampId) return
+            const { x, y } = selected.points[0]
+            saveStamp(selected.stampId, { x: x > .95 ? x - .025 : x + .025, y: y > .95 ? y - .025 : y + .025 }, selected)
+          }}
+          draftActive={Boolean(draft)}
+          mapScale={mapScale}
+          updateMapScale={updateMapScale}
+          measurePoints={measurePoints}
+          onUndoMeasurePoint={() => setMeasurePoints(current => current.slice(0, -1))}
+          onClearMeasure={() => setMeasurePoints([])}
+        />
       )}
     </div>
+
+    <MapDraftImportModal
+      isOpen={draftImportOpen}
+      hasExistingLayers={Boolean(features?.length)}
+      onClose={() => setDraftImportOpen(false)}
+      onApply={(generated, mode, suggestedWidthKm) => {
+        const baseFeatures = features ?? []
+        const nextFeatures = mode === 'replace' ? generated : [...baseFeatures, ...generated]
+        if (save(nextFeatures)) {
+          if (suggestedWidthKm) updateMapScale({ widthKm: suggestedWidthKm })
+          chooseTool('')
+          setInspectorTab('layers')
+          setLayersOpen(true)
+          setDraftImportOpen(false)
+          if (!focused) onEdit()
+        }
+      }}
+    />
   </>
 }

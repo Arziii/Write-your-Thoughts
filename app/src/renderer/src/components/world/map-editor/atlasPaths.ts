@@ -1,7 +1,7 @@
 import type { MapPoint } from './MapCanvas'
 
-export const atlasWidth = 2560
-export const atlasHeight = 1600
+export const atlasWidth = 3840
+export const atlasHeight = 1920
 export type AtlasPathTool = 'Route' | 'River' | 'Border'
 export const isAtlasPath = (tool: string): tool is AtlasPathTool =>
   tool === 'Route' || tool === 'River' || tool === 'Border'
@@ -66,12 +66,13 @@ export function pathSettings(feature: AtlasPathFeature, index = 0): AtlasPathSet
 }
 
 export function terrainFromName(name = ''): AtlasTerrain {
-  if (/snow|tundra|ice|glacial/.test(name.toLowerCase())) return 'snow'
-  if (/forest|canopy/i.test(name)) return 'forest_trail'
-  if (/bog|fen|swamp|mud|stagnant/i.test(name)) return 'mud'
-  if (/desert|dune|sand|dryland/i.test(name)) return 'sand'
-  if (/peak|crag|mountain|scree/i.test(name)) return 'stone'
-  if (/rolling|hill|scattered.*stone|gravel/i.test(name)) return 'gravel'
+  const normalized = name.toLowerCase()
+  if (/snow|tundra|ice|glacial/.test(normalized)) return 'snow'
+  if (/woodland|forest|canopy/.test(normalized)) return 'forest_trail'
+  if (/marsh|bog|fen|swamp|mud|stagnant/.test(normalized)) return 'mud'
+  if (/desert|dune|sand|dryland/.test(normalized)) return 'sand'
+  if (/highland|ashland|peak|crag|mountain|scree/.test(normalized)) return 'stone'
+  if (/plain|rolling|hill|scattered.*stone|gravel/.test(normalized)) return 'gravel'
   return 'dirt'
 }
 

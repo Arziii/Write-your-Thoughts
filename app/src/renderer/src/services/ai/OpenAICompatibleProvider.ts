@@ -1,5 +1,5 @@
 import type { AIProvider, AIBrainstormMessage, ProviderSettings } from '../../types'
-import { BaseProvider, type ProviderResponse } from './BaseProvider'
+import { BaseProvider, parseModelJson, type ProviderResponse, type VisionImageInput } from './BaseProvider'
 import { isLocalAIProvider, isOllamaCloudModel } from './configuration'
 
 export class OpenAICompatibleProvider extends BaseProvider {
@@ -156,9 +156,57 @@ export class OpenAICompatibleProvider extends BaseProvider {
     const prompt = systemPrompt + '\n\nIMPORTANT: Return ONLY valid JSON, starting with { and ending with }.'
     const result = await this.complete(prompt, [{ role: 'user', content: this.local ? content : content.slice(0, 30_000) }], true)
     try {
-      return JSON.parse(result.trim().replace(/^\x60{3}(?:json)?\s*/i, '').replace(/\x60{3}$/, '').trim())
+      return parseModelJson(result, this.provider)
     } catch {
       throw new Error('The AI returned invalid JSON. Try again or choose a model that follows structured instructions reliably.')
+    }
+  }
+
+  async generateJSONWithImage(systemPrompt: string, prompt: string, image: VisionImageInput, signal?: AbortSignal): Promise<any> {
+    if (this.local && systemPrompt.length + prompt.length > 10_000) {
+      throw new Error('This request is too large for the local AI limit.')
+    }
+    const model = this.settings.model?.trim() || (this.local
+      ? this.getRecommendedModel(await this.getAvailableModels(signal))
+      : 'default')
+    if (!model) throw new Error('No local model found. Download a model and select it in AI Settings.')
+    if (this.provider === 'ollama' && isOllamaCloudModel(model)) {
+      throw new Error('This Ollama model requires internet access. Select a model downloaded to this device.')
+    }
+
+    const systemWithJson = systemPrompt + '\n\nIMPORTANT: Return ONLY valid JSON, starting with { and ending with }.'
+    const body = JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemWithJson },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: image.dataUrl } },
+          ],
+        },
+      ],
+      temperature: this.settings.temperature ?? 0.2,
+      max_tokens: this.settings.maxTokens || (this.local ? 3200 : 4096),
+      top_p: this.settings.topP,
+      response_format: this.provider === 'ollama' ? { type: 'json_object' } : undefined,
+    })
+
+    const response = await this.request(body, signal)
+    if (response.status === 404 && this.local) {
+      throw new Error('Local model "' + model + '" is unavailable. Check that it is installed and selected in AI Settings.')
+    }
+    const choice = this.parseResponse(response.status, response.body).choices?.[0]
+    const content = choice?.message?.content
+    if (this.local && choice?.finish_reason === 'length') {
+      throw new Error('The AI response reached its length limit. Try increasing Max Tokens.')
+    }
+    if (typeof content !== 'string' || !content.trim()) throw new Error('The AI returned an empty response.')
+    try {
+      return parseModelJson(content, this.provider)
+    } catch {
+      throw new Error('The AI returned invalid JSON. Try again or choose a vision model that supports structured JSON.')
     }
   }
 }

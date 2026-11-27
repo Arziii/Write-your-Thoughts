@@ -57,12 +57,13 @@ export default function TitleBar({ onSearch }: { onSearch?: () => void }) {
           <button
             type="button"
             onClick={onSearch}
-            className="titlebar-no-drag flex h-7 items-center gap-2 rounded-md px-3 text-xs text-surface-400 hover:bg-surface-800 hover:text-surface-100"
-            title="Search manuscript (Ctrl+K)"
+            className="titlebar-no-drag flex h-7 items-center gap-2 rounded-md border border-[hsl(var(--studio-edge))] bg-[hsl(var(--studio-paper)/0.6)] px-3 text-xs text-surface-400 transition-colors hover:bg-surface-850 hover:text-surface-100"
+            title="Search manuscript & commands (Ctrl+K)"
             aria-keyshortcuts="Control+K Meta+K"
           >
             <Search className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Search manuscript</span>
+            <span>Search or jump…</span>
+            <kbd className="hidden sm:inline rounded border border-[hsl(var(--studio-edge))] px-1 py-0.5 text-[10px] text-surface-400">Ctrl+K</kbd>
           </button>
         )}
       </div>

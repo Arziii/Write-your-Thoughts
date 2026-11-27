@@ -23,8 +23,8 @@ export function EditorToolPanel({ id, title, icon: Icon, onClose, action, footer
 
   return (
     <aside id={id} aria-label={title}
-      className="flex h-full min-h-0 w-[min(22.5rem,62%)] min-w-0 shrink-0 flex-col border-l border-surface-800 bg-[hsl(var(--studio-desk))] text-surface-100">
-      <header className="shrink-0 border-b border-surface-800 bg-[hsl(var(--studio-header))] px-3 py-3.5 sm:px-4">
+      className="flex h-full min-h-0 w-full min-w-0 shrink-0 flex-col bg-[hsl(var(--studio-desk))] text-surface-100">
+      <header className="shrink-0 border-b border-[hsl(var(--studio-edge))] bg-[hsl(var(--studio-header))] px-3 py-3.5 sm:px-4">
         <div className="flex items-start gap-2.5">
           <div className="shrink-0 rounded-lg bg-[hsl(var(--brand-green-bg))] p-2 text-[hsl(var(--brand-green))]">
             <Icon className="h-4 w-4" aria-hidden="true" />
@@ -39,8 +39,8 @@ export function EditorToolPanel({ id, title, icon: Icon, onClose, action, footer
         </div>
         {action && <div className="mt-3">{action}</div>}
       </header>
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-4 sm:px-4">{children}</div>
-      {footer && <div className="shrink-0 border-t border-surface-800 bg-[hsl(var(--studio-header))] px-3 py-3 sm:px-4">{footer}</div>}
+      <div className="selectable min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-4 sm:px-4">{children}</div>
+      {footer && <div className="shrink-0 border-t border-[hsl(var(--studio-edge))] bg-[hsl(var(--studio-header))] px-3 py-3 sm:px-4">{footer}</div>}
     </aside>
   )
 }

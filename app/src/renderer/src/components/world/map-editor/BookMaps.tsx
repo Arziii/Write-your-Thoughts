@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { ImagePlus, Map as MapIcon, MapPin as PinIcon, Pencil, Plus, Trash2 } from 'lucide-react'
-import { MAP_IMAGE_LIMIT } from '../../../../shared/maps'
-import type { BookMap, MapImage, MapPin } from '../../../../shared/maps'
-import { useWorkspaceStore } from '../../stores/workspaceStore'
-import Modal from '../ui/Modal'
+import { MAP_IMAGE_LIMIT } from '../../../../../shared/maps'
+import type { BookMap, MapImage, MapPin } from '../../../../../shared/maps'
+import { useWorkspaceStore } from '../../../stores/workspaceStore'
+import Modal from '../../ui/Modal'
 import MapCanvas from './MapCanvas'
 import ParchmentMapTools, { disposeParchmentMap, initializeParchmentMap } from './ParchmentMapTools'
-import LocationSummaryPanel from './LocationSummaryPanel'
+import LocationSummaryPanel from '../LocationSummaryPanel'
 
 const buttonStyle = 'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-surface-700 px-2.5 py-1.5 text-xs font-medium hover:bg-surface-800 disabled:opacity-50'
 const fieldStyle = 'min-w-0 rounded-md border border-surface-700 bg-surface-950 px-2.5 py-1.5 text-sm text-surface-100'
@@ -288,9 +288,9 @@ function MapWorkspace({ map, bookId, focused, onFocusChange }: {
           onEdit={() => { setSummaryLocationId(''); onFocusChange(true) }}
           onExit={() => onFocusChange(false)}
           beforeDrawing={() => { setPlacing(false); setSummaryLocationId('') }}>
-          {({ overlay, placementPreview, brush, onEditPoint, hideImage, hidePins }) => (
+          {({ overlay, placementPreview, viewportOverlay, brush, onEditPoint, hideImage, hidePins }) => (
             <div className="flex min-h-0 min-w-0 flex-1">
-              <MapCanvas overlay={overlay} placementPreview={placementPreview} brush={brush} key={imageUrl ?? 'blank'} imageUrl={imageUrl} hideImage={focused && hideImage}
+              <MapCanvas overlay={overlay} placementPreview={placementPreview} viewportOverlay={viewportOverlay} brush={brush} key={imageUrl ?? 'blank'} imageUrl={imageUrl} hideImage={focused && hideImage}
                 fitTrigger={focused}
                 pins={focused && hidePins ? [] : namedPins} placing={Boolean(onEditPoint) || placing}
                 selectedLocationId={locationId} onSelectPin={id => {

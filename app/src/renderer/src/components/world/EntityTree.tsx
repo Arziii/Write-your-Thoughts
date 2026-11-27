@@ -3,21 +3,9 @@ import { useOpenBookTab } from '../../hooks/useOpenBookTab'
 import { Plus, MoreHorizontal, Pencil, Trash2, ChevronDown, GripVertical } from 'lucide-react'
 import { Droppable, Draggable } from '@hello-pangea/dnd'
 import Modal from '../ui/Modal'
+import { Button, Input } from '../ui/primitives'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
-
-// ── Forest Literary Palette ──────────────────────────────────────────
-const F = {
-  bg: 'hsl(var(--surface-900))',
-  bgHover: 'hsl(var(--surface-850))',
-  active: 'hsl(var(--surface-800))',
-  border: 'hsl(var(--surface-800))',
-  green: 'hsl(var(--brand-green))',
-  greenLight: 'hsl(var(--brand-green-bg))',
-  text: 'hsl(var(--surface-50))',
-  textMid: 'hsl(var(--surface-300))',
-  textSoft: 'hsl(var(--surface-500))',
-  textFaint: 'hsl(var(--surface-600))',
-}
+import { cn } from '../../utils'
 
 interface EntityTreeProps {
   title: string
@@ -30,12 +18,25 @@ interface EntityTreeProps {
   emptyMessage: string
   singularTitle?: string
   staticItems?: Array<{ id: string; title: string; icon?: React.ReactNode }>
+  filterQuery?: string
 }
 
-export default function EntityTree({ title, items, staticItems, icon, type, onCreate, onRename, onDelete, emptyMessage, singularTitle }: EntityTreeProps) {
+export default function EntityTree({
+  title,
+  items,
+  staticItems,
+  icon,
+  type,
+  onCreate,
+  onRename,
+  onDelete,
+  emptyMessage,
+  singularTitle,
+  filterQuery = '',
+}: EntityTreeProps) {
   const { activeTabId } = useWorkspaceStore()
   const openBookTab = useOpenBookTab()
-  
+
   const [isExpanded, setIsExpanded] = useState(false)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [newTitle, setNewTitle] = useState('')
@@ -43,6 +44,21 @@ export default function EntityTree({ title, items, staticItems, icon, type, onCr
   const [deleteItem, setDeleteItem] = useState<{ id: string; title: string } | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null)
+
+  const query = filterQuery.trim().toLowerCase()
+  const visibleItems = query
+    ? items.filter(item => item.title.toLowerCase().includes(query))
+    : items
+  const visibleStatic = query
+    ? (staticItems ?? []).filter(item => item.title.toLowerCase().includes(query))
+    : (staticItems ?? [])
+
+  if (query && visibleItems.length === 0 && visibleStatic.length === 0) {
+    return null
+  }
+
+  const expanded = query ? true : isExpanded
+  const totalCount = visibleItems.length + visibleStatic.length
 
   const handleCreate = async () => {
     if (!newTitle.trim()) return
@@ -52,7 +68,7 @@ export default function EntityTree({ title, items, staticItems, icon, type, onCr
       setNewTitle('')
     } catch (err) {
       console.error('Failed to create entity:', err)
-      setIsCreateOpen(false) 
+      setIsCreateOpen(false)
     }
   }
 
@@ -73,140 +89,128 @@ export default function EntityTree({ title, items, staticItems, icon, type, onCr
   }
 
   return (
-    <div style={{ padding: '0 10px', marginTop: 12 }}>
+    <div className="mt-3 px-2.5">
       {/* Header */}
       <button
+        type="button"
         onClick={() => setIsExpanded(!isExpanded)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 8px',
-          color: F.green, background: 'none', border: 'none', borderRadius: 8,
-          fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em',
-          cursor: 'pointer', transition: 'all 0.15s', textAlign: 'left',
-        }}
-        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = F.greenLight; (e.currentTarget as HTMLElement).style.background = F.bgHover }}
-        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = F.green; (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+        className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold uppercase tracking-[0.08em] text-[hsl(var(--brand-green))] transition-colors hover:bg-surface-850 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[hsl(var(--brand-green))]"
       >
-        <ChevronDown style={{ width: 12, height: 12, transition: 'transform 0.15s', transform: isExpanded ? 'rotate(0)' : 'rotate(-90deg)' }} />
-        {title}
+        <ChevronDown
+          className={cn('h-3 w-3 shrink-0 transition-transform', !expanded && '-rotate-90')}
+        />
+        <span className="flex-1 truncate">{title}</span>
+        <span className="rounded-full bg-surface-850 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-surface-400">
+          {totalCount}
+        </span>
       </button>
 
-      {isExpanded && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
-          {staticItems?.map(item => (
-            <div key={item.id} className="group relative">
-              <button
-                onClick={() => openBookTab(item.id, type, item.title)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6, width: '100%',
-                  padding: '6px 6px', borderRadius: 6, fontSize: 13, fontWeight: activeTabId === item.id ? 600 : 500,
-                  background: activeTabId === item.id ? F.greenLight : 'transparent',
-                  color: activeTabId === item.id ? F.green : F.textSoft,
-                  border: 'none', borderLeft: activeTabId === item.id ? `2px solid ${F.green}` : '2px solid transparent',
-                  cursor: 'pointer', transition: 'all 0.1s', textAlign: 'left',
-                }}
-                onMouseEnter={e => { if (activeTabId !== item.id) { (e.currentTarget as HTMLElement).style.background = F.bgHover; (e.currentTarget as HTMLElement).style.color = F.textMid } }}
-                onMouseLeave={e => { if (activeTabId !== item.id) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = F.textSoft } }}
-              >
-                <div style={{ paddingLeft: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: activeTabId === item.id ? 1 : 0.7 }}>
-                  {item.icon || icon}
-                </div>
-                <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</span>
-              </button>
-            </div>
-          ))}
+      {expanded && (
+        <div className="mt-1 flex flex-col gap-0.5">
+          {visibleStatic.map(item => {
+            const isActive = activeTabId === item.id
+            return (
+              <div key={item.id} className="group relative">
+                <button
+                  type="button"
+                  onClick={() => openBookTab(item.id, type, item.title)}
+                  className={cn(
+                    'flex w-full items-center gap-1.5 rounded-md border-l-2 px-1.5 py-1.5 text-left text-[13px] transition-colors',
+                    isActive
+                      ? 'border-[hsl(var(--brand-green))] bg-[hsl(var(--brand-green-bg))] font-semibold text-[hsl(var(--brand-green))]'
+                      : 'border-transparent font-medium text-surface-400 hover:bg-surface-850 hover:text-surface-200'
+                  )}
+                >
+                  <div className={cn('flex items-center justify-center pl-3', isActive ? 'opacity-100' : 'opacity-70')}>
+                    {item.icon || icon}
+                  </div>
+                  <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                </button>
+              </div>
+            )
+          })}
 
-          <Droppable droppableId={type} isDropDisabled={items.length === 0}>
+          <Droppable droppableId={type} isDropDisabled={visibleItems.length === 0 || Boolean(query)}>
             {(provided) => (
-              <div 
-                style={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+              <div
+                className="flex flex-col gap-0.5"
                 {...provided.droppableProps}
                 ref={provided.innerRef}
               >
-                {items.map((item, idx) => (
-                  <Draggable key={item.id} draggableId={item.id} index={idx}>
-                    {(provided, snapshot) => (
-                      <div
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        className="group relative"
-                        style={{
-                          ...provided.draggableProps.style,
-                          zIndex: snapshot.isDragging ? 50 : 'auto',
-                          opacity: snapshot.isDragging ? 0.9 : 1,
-                        }}
-                      >
+                {visibleItems.map((item, idx) => {
+                  const isActive = activeTabId === item.id
+                  return (
+                    <Draggable key={item.id} draggableId={item.id} index={idx} isDragDisabled={Boolean(query)}>
+                      {(provided, snapshot) => (
                         <div
-                          onClick={() => openItem(item)}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openItem(item); } }}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 6, width: '100%',
-                            padding: '6px 6px', borderRadius: 6, fontSize: 13, fontWeight: activeTabId === item.id ? 600 : 500,
-                            background: activeTabId === item.id ? F.greenLight : 'transparent',
-                            color: activeTabId === item.id ? F.green : F.textSoft,
-                            border: 'none', borderLeft: activeTabId === item.id ? `2px solid ${F.green}` : '2px solid transparent',
-                            cursor: 'pointer', transition: 'all 0.1s', textAlign: 'left',
-                            boxShadow: snapshot.isDragging ? `0 4px 12px rgba(45,90,39,0.15)` : 'none'
-                          }}
-                          onMouseEnter={e => { if (activeTabId !== item.id) { (e.currentTarget as HTMLElement).style.background = F.bgHover; (e.currentTarget as HTMLElement).style.color = F.textMid } }}
-                          onMouseLeave={e => { if (activeTabId !== item.id) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = F.textSoft } }}
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          className={cn('group relative', snapshot.isDragging && 'z-50 opacity-90')}
+                          style={provided.draggableProps.style}
                         >
                           <div
-                            {...provided.dragHandleProps}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity"
-                            style={{ color: F.textFaint, padding: 2, marginLeft: -4, cursor: 'grab' }}
-                            onClick={(e) => e.stopPropagation()}
-                            onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = F.textMid}
-                            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = F.textFaint}
+                            onClick={() => openItem(item)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openItem(item) } }}
+                            className={cn(
+                              'flex w-full cursor-pointer items-center gap-1.5 rounded-md border-l-2 px-1.5 py-1.5 text-left text-[13px] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[hsl(var(--brand-green))]',
+                              isActive
+                                ? 'border-[hsl(var(--brand-green))] bg-[hsl(var(--brand-green-bg))] font-semibold text-[hsl(var(--brand-green))]'
+                                : 'border-transparent font-medium text-surface-400 hover:bg-surface-850 hover:text-surface-200',
+                              snapshot.isDragging && 'shadow-md'
+                            )}
                           >
-                            <GripVertical style={{ width: 14, height: 14 }} />
-                          </div>
-                          
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: activeTabId === item.id ? 1 : 0.7 }}>
-                            {icon}
-                          </div>
-                          <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</span>
-                          
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, paddingRight: 4 }}>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setContextMenu({ id: item.id, x: e.clientX, y: e.clientY }) }}
-                              className="opacity-0 group-hover:opacity-100 transition-all"
-                              style={{ color: F.textFaint, background: 'none', border: 'none', cursor: 'pointer' }}
-                              onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = F.textMid}
-                              onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = F.textFaint}
-                            >
-                              <MoreHorizontal style={{ width: 14, height: 14 }} />
-                            </button>
+                            {!query && (
+                              <div
+                                {...provided.dragHandleProps}
+                                className="-ml-1 cursor-grab p-0.5 text-surface-500 opacity-0 transition-opacity hover:text-surface-200 group-hover:opacity-100"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <GripVertical className="h-3.5 w-3.5" />
+                              </div>
+                            )}
+
+                            <div className={cn('flex items-center justify-center shrink-0', isActive ? 'opacity-100' : 'opacity-70')}>
+                              {icon}
+                            </div>
+                            <span className="min-w-0 flex-1 truncate">{item.title}</span>
+
+                            <div className="flex shrink-0 items-center gap-1 pr-1">
+                              <button
+                                type="button"
+                                aria-label={`Options for ${item.title}`}
+                                onClick={(e) => { e.stopPropagation(); setContextMenu({ id: item.id, x: e.clientX, y: e.clientY }) }}
+                                className="rounded p-0.5 text-surface-500 opacity-0 transition-all hover:text-surface-200 focus-visible:opacity-100 group-hover:opacity-100"
+                              >
+                                <MoreHorizontal className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
-                  </Draggable>
-                ))}
+                      )}
+                    </Draggable>
+                  )
+                })}
                 {provided.placeholder}
               </div>
             )}
           </Droppable>
 
-          {items.length === 0 && (
-            <p style={{ fontSize: 12, color: F.textFaint, padding: '4px 8px' }}>{emptyMessage}</p>
+          {visibleItems.length === 0 && visibleStatic.length === 0 && (
+            <p className="px-2 py-1 text-xs text-surface-500">{emptyMessage}</p>
           )}
 
-          {/* Add entity */}
-          <button
-            onClick={() => { setNewTitle(''); setIsCreateOpen(true) }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 8px',
-              color: F.textSoft, background: 'none', border: 'none', borderRadius: 6,
-              fontSize: 12, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s',
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = F.bgHover; (e.currentTarget as HTMLElement).style.color = F.green }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'none'; (e.currentTarget as HTMLElement).style.color = F.textSoft }}
-          >
-            <Plus style={{ width: 14, height: 14 }} />
-            New {singularTitle || title.slice(0, -1)}
-          </button>
+          {!query && (
+            <button
+              type="button"
+              onClick={() => { setNewTitle(''); setIsCreateOpen(true) }}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium text-surface-400 transition-colors hover:bg-surface-850 hover:text-[hsl(var(--brand-green))]"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              New {singularTitle || title.slice(0, -1)}
+            </button>
+          )}
         </div>
       )}
 
@@ -215,28 +219,27 @@ export default function EntityTree({ title, items, staticItems, icon, type, onCr
         <>
           <div className="fixed inset-0 z-40" onClick={() => setContextMenu(null)} />
           <div
-            className="fixed z-50 animate-fade-in"
-            style={{ left: contextMenu.x, top: contextMenu.y, background: '#fffefb', border: `1px solid ${F.border}`, borderRadius: 12, boxShadow: '0 4px 18px rgba(45,90,39,0.13)', padding: '4px 0', minWidth: 150 }}
+            className="fixed z-50 min-w-[150px] animate-fade-in rounded-xl border border-[hsl(var(--studio-edge))] bg-[hsl(var(--studio-paper))] py-1 shadow-lg"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
           >
             {(() => {
-              const it = items.find((c) => c.id === contextMenu.id)!
+              const it = items.find((c) => c.id === contextMenu.id)
+              if (!it) return null
               return (
                 <>
                   <button
+                    type="button"
                     onClick={() => { setEditItem(it); setEditTitle(it.title); setContextMenu(null) }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 16px', fontSize: 13, fontWeight: 500, color: F.textMid, background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
-                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = F.greenLight}
-                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-[13px] font-medium text-surface-200 transition-colors hover:bg-[hsl(var(--brand-green-bg))] hover:text-[hsl(var(--brand-green))]"
                   >
-                    <Pencil style={{ width: 14, height: 14 }} /> Rename
+                    <Pencil className="h-3.5 w-3.5" /> Rename
                   </button>
                   <button
+                    type="button"
                     onClick={() => { setDeleteItem(it); setContextMenu(null) }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 16px', fontSize: 13, fontWeight: 500, color: '#ef4444', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
-                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#fff0f0'}
-                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-[13px] font-medium text-danger-500 transition-colors hover:bg-danger-500/10"
                   >
-                    <Trash2 style={{ width: 14, height: 14 }} /> Delete
+                    <Trash2 className="h-3.5 w-3.5" /> Delete
                   </button>
                 </>
               )
@@ -246,45 +249,48 @@ export default function EntityTree({ title, items, staticItems, icon, type, onCr
       )}
 
       {/* Create Modal */}
-      <Modal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} title={`New ${title.slice(0, -1)}`} size="sm">
-        <div className="space-y-4" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-          <input
-            type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Name..." autoFocus
+      <Modal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} title={`New ${singularTitle || title.slice(0, -1)}`} size="sm">
+        <div className="space-y-4">
+          <Input
+            type="text"
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            placeholder="Name..."
+            autoFocus
             onKeyDown={(e) => e.key === 'Enter' && newTitle.trim() && handleCreate()}
-            className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent-500 transition-all"
-            style={{ background: '#fffefb', borderColor: F.border, color: F.text }}
           />
           <div className="flex gap-3">
-            <button onClick={() => setIsCreateOpen(false)} className="flex-1 py-2 rounded-lg text-sm font-medium transition-colors" style={{ background: F.bgHover, color: F.textMid }}>Cancel</button>
-            <button onClick={handleCreate} disabled={!newTitle.trim()} className="flex-1 py-2 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors" style={{ background: F.green }}>Create</button>
+            <Button variant="secondary" size="md" className="flex-1" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
+            <Button variant="primary" size="md" className="flex-1" onClick={handleCreate} disabled={!newTitle.trim()}>Create</Button>
           </div>
         </div>
       </Modal>
 
       {/* Rename Modal */}
       <Modal isOpen={!!editItem} onClose={() => setEditItem(null)} title="Rename" size="sm">
-        <div className="space-y-4" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-          <input
-            type="text" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} autoFocus
+        <div className="space-y-4">
+          <Input
+            type="text"
+            value={editTitle}
+            onChange={(e) => setEditTitle(e.target.value)}
+            autoFocus
             onKeyDown={(e) => e.key === 'Enter' && editTitle.trim() && handleRename()}
-            className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent-500 transition-all"
-            style={{ background: '#fffefb', borderColor: F.border, color: F.text }}
           />
           <div className="flex gap-3">
-            <button onClick={() => setEditItem(null)} className="flex-1 py-2 rounded-lg text-sm font-medium transition-colors" style={{ background: F.bgHover, color: F.textMid }}>Cancel</button>
-            <button onClick={handleRename} disabled={!editTitle.trim()} className="flex-1 py-2 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors" style={{ background: F.green }}>Rename</button>
+            <Button variant="secondary" size="md" className="flex-1" onClick={() => setEditItem(null)}>Cancel</Button>
+            <Button variant="primary" size="md" className="flex-1" onClick={handleRename} disabled={!editTitle.trim()}>Rename</Button>
           </div>
         </div>
       </Modal>
 
       {/* Delete Confirm */}
       <Modal isOpen={!!deleteItem} onClose={() => setDeleteItem(null)} title="Delete" size="sm">
-        <p style={{ fontSize: 14, color: F.textSoft, marginBottom: 20 }}>
-          Delete <strong style={{ color: F.text }}>"{deleteItem?.title}"</strong>?
+        <p className="mb-5 text-sm text-surface-400">
+          Delete <strong className="text-surface-100">"{deleteItem?.title}"</strong>?
         </p>
         <div className="flex gap-3">
-          <button onClick={() => setDeleteItem(null)} className="flex-1 py-2 rounded-lg text-sm font-medium transition-colors" style={{ background: F.bgHover, color: F.textMid }}>Cancel</button>
-          <button onClick={handleDelete} className="flex-1 py-2 text-white rounded-lg text-sm font-medium transition-colors" style={{ background: '#ef4444' }}>Delete</button>
+          <Button variant="secondary" size="md" className="flex-1" onClick={() => setDeleteItem(null)}>Cancel</Button>
+          <Button variant="danger" size="md" className="flex-1" onClick={handleDelete}>Delete</Button>
         </div>
       </Modal>
     </div>

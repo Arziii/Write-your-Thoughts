@@ -7,7 +7,7 @@ Write Your Thoughts is a desktop workspace for novelists and worldbuilders. Draf
 - Use the rich-text chapter editor, manuscript search, comments, and version history.
 - Develop characters, locations, organizations, world rules, codex entries, wiki pages, notes, timelines, and relationships.
 - Paint a fantasy atlas, add stamps, draw routes and rivers, and link pins to locations.
-- Use AI if configured, listen with system voices or Kokoro, and export to Markdown, DOCX, EPUB, PDF, or chapter WAV files.
+- Use AI if configured, listen with system voices or Kokoro, import manuscripts and worldbuilding exports from Campfire Writing or documents (`.html`, `.docx`, `.rtf`, `.pdf`, `.zip`, `.md`, `.txt`), and export to Markdown, DOCX, EPUB, PDF, or chapter WAV files.
 
 ## Run locally
 
@@ -34,6 +34,8 @@ Electron stores manuscripts and worldbuilding records in an on-device SQLite dat
 | [Testing](docs/TESTING.md) and [Decisions](docs/DECISIONS.md) | Verification and technical reasoning |
 | [AGENTS.md](AGENTS.md) | Instructions shared by Codex and Google Antigravity |
 
-**Latest repository update, 2026-11-26.** Enlarged the fantasy atlas world canvas to 2560 × 1600 and improved map viewport fitting in focus mode. See [MAP-001](docs/HANDOFF.md#map-001-larger-fantasy-map-canvas-and-viewport-fit).
+**Latest repository update, 2026-11-27.** Removed Trust Level and Affection inputs from the graph relationship dialog. Existing scores are retained on edit. [GRAPH-002](docs/HANDOFF.md#graph-002-simplify-relationship-dialog).
 
-The application uses the [MIT license](LICENSE). Models and artwork may carry separate terms. See the [map asset credits](assets/maps/map-assets/map-assets/LICENSES.md).
+**Earlier updates, 2026-11-27.** Upgraded the Relationships view into an interactive **Obsidian-style force-directed Story & Relationship Graph** (`GRAPH-001`) with live spring physics, degree-scaled circular nodes, neighborhood spotlighting, auto-detected story mentions, ReferencePage link graphing, cursor-anchored zoom/pan, and a floating Display & Forces panel (`IMP-001`–`IMP-004` added Campfire & multi-format `.pdf`/`.html`/`.docx`/`.rtf`/`.zip` project import + double-confirmed Clear Story Content; `MAP-010` refined Fantasy Map Studio's **Plains** biome). See [GRAPH-001](docs/HANDOFF.md#graph-001-interactive-obsidian-style-force-directed-story-and-relationship-graph).
+
+The application uses the [MIT license](LICENSE). Models and artwork may carry separate terms. See the [map asset credits](assets/maps/LICENSES.md).

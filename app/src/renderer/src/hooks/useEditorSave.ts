@@ -54,6 +54,20 @@ export async function flushEditorSaves(): Promise<boolean> {
   return results.every(Boolean)
 }
 
+export function discardEditorSaves(ids: Iterable<string>): void {
+  const store = useWorkspaceStore.getState()
+  for (const id of ids) {
+    const job = jobs.get(id)
+    if (job) {
+      clearTimeout(job.idle)
+      clearTimeout(job.deadline)
+      job.pending = undefined
+      jobs.delete(id)
+    }
+    store.clearDraft(id)
+  }
+}
+
 export function useEditorSave<T extends Record<string, unknown>>(
   id: string,
   persist: (draft: T) => Promise<void>,

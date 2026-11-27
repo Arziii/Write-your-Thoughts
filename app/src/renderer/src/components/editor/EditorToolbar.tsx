@@ -1,11 +1,12 @@
 import type { Editor } from '@tiptap/react'
 import type React from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Bold, Italic, Underline, Strikethrough,
   Heading1, Heading2, Heading3,
   List, ListOrdered, AlignLeft, AlignCenter, AlignRight,
   Highlighter, Undo, Redo, Minus, Focus, MessageSquare,
-  History, Save
+  History, Save, Type
 } from 'lucide-react'
 import { cn } from '../../utils'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
@@ -18,6 +19,7 @@ interface EditorToolbarProps {
   onSave: () => void
   showHistory?: boolean
   showReadAloud?: boolean
+  hideStatus?: boolean
 }
 
 interface ToolbarButtonProps {
@@ -33,14 +35,16 @@ function ToolbarButton({ onClick, isActive, disabled, title, children, id }: Too
   return (
     <button
       id={id}
+      type="button"
       onClick={onClick}
       disabled={disabled}
       title={title}
+      aria-label={title}
       className={cn(
-        'flex items-center justify-center w-7 h-7 rounded text-sm transition-all',
+        'flex items-center justify-center w-7 h-7 rounded text-sm transition-colors',
         isActive
-          ? 'bg-accent-600/30 text-accent-400'
-          : 'text-surface-400 hover:text-surface-200 hover:bg-surface-700',
+          ? 'bg-[hsl(var(--brand-green-bg))] text-[hsl(var(--brand-green))]'
+          : 'text-surface-400 hover:text-surface-100 hover:bg-surface-850',
         disabled && 'opacity-30 cursor-not-allowed'
       )}
     >
@@ -50,32 +54,67 @@ function ToolbarButton({ onClick, isActive, disabled, title, children, id }: Too
 }
 
 function Divider() {
-  return <div className="w-px h-5 bg-surface-700 mx-0.5" />
+  return <div className="w-px h-5 bg-[hsl(var(--studio-edge))] mx-0.5" />
 }
 
-export default function EditorToolbar({ editor, saveStatus, onSave, showHistory = true, showReadAloud = false }: EditorToolbarProps) {
+export default function EditorToolbar({
+  editor,
+  saveStatus,
+  onSave,
+  showHistory = true,
+  showReadAloud = false,
+  hideStatus = false,
+}: EditorToolbarProps) {
   const { focusMode, setFocusMode } = useWorkspaceStore()
   const { user, settings, setSettings } = useUserStore()
+  const [typographyOpen, setTypographyOpen] = useState(false)
+  const popoverRef = useRef<HTMLDivElement>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const updateSetting = async (key: string, value: string | number) => {
+  useEffect(() => {
+    if (!typographyOpen) return
+    const handleOutside = (event: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
+        setTypographyOpen(false)
+      }
+    }
+    const handleEsc = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setTypographyOpen(false)
+    }
+    document.addEventListener('mousedown', handleOutside)
+    window.addEventListener('keydown', handleEsc)
+    return () => {
+      document.removeEventListener('mousedown', handleOutside)
+      window.removeEventListener('keydown', handleEsc)
+    }
+  }, [typographyOpen])
+
+  useEffect(() => () => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+  }, [])
+
+  const updateSetting = (key: string, value: string | number) => {
     if (!user || !settings) return
     const newSettings = { ...settings, [key]: value }
-    // Optimistic update
     setSettings(newSettings as never)
-    try {
-      await window.api.settings.update({
-        userId: user.id,
-        aiProvider: settings.ai_provider,
-        aiApiKey: settings.ai_api_key,
-        aiStylePrompt: settings.ai_style_prompt,
-        preserveFormatting: settings.preserve_formatting ?? true,
-        editorFont: key === 'editor_font' ? (value as string) : settings.editor_font,
-        fontSize: key === 'font_size' ? (value as number) : settings.font_size,
-        lineSpacing: key === 'line_spacing' ? (value as number) : settings.line_spacing,
-      })
-    } catch (e) {
-      console.error('Failed to update setting', e)
-    }
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(async () => {
+      try {
+        await window.api.settings.update({
+          userId: user.id,
+          aiProvider: newSettings.ai_provider,
+          aiApiKey: newSettings.ai_api_key,
+          aiStylePrompt: newSettings.ai_style_prompt,
+          preserveFormatting: newSettings.preserve_formatting ?? true,
+          editorFont: newSettings.editor_font,
+          fontSize: newSettings.font_size,
+          lineSpacing: newSettings.line_spacing,
+        })
+      } catch (e) {
+        console.error('Failed to update setting', e)
+      }
+    }, 350)
   }
 
   if (!editor) return null
@@ -102,40 +141,78 @@ export default function EditorToolbar({ editor, saveStatus, onSave, showHistory 
 
       <Divider />
 
-      {/* Editor Settings (Font, Size, Spacing) */}
-      <select
-        value={settings?.editor_font || 'Georgia'}
-        onChange={(e) => updateSetting('editor_font', e.target.value)}
-        className="w-32 px-2 h-7 bg-transparent hover:bg-surface-800 border border-transparent hover:border-surface-700 rounded text-surface-200 text-xs focus:outline-none transition-colors"
-        title="Font Family"
-      >
-        <option value="Georgia">Georgia</option>
-        <option value="'Times New Roman', serif">Times New Roman</option>
-        <option value="'Crimson Text', Georgia, serif">Crimson Text</option>
-        <option value="Inter, sans-serif">Inter</option>
-        <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
-      </select>
-      
-      <div className="flex items-center gap-1 mx-1" title="Font Size">
-        <span className="text-[10px] text-surface-400">Size</span>
-        <input
-          type="number"
-          min={12} max={24}
-          value={settings?.font_size || 16}
-          onChange={(e) => updateSetting('font_size', Number(e.target.value))}
-          className="w-12 h-7 px-1.5 bg-transparent hover:bg-surface-800 border border-transparent hover:border-surface-700 rounded text-surface-200 text-xs focus:outline-none text-center transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-        />
-      </div>
+      {/* Typography Popover */}
+      <div className="relative" ref={popoverRef}>
+        <button
+          id="toolbar-typography"
+          type="button"
+          onClick={() => setTypographyOpen(open => !open)}
+          aria-expanded={typographyOpen}
+          title="Typography (Font, Size, Spacing)"
+          className={cn(
+            'flex h-7 items-center gap-1 rounded px-2 text-xs font-medium transition-colors',
+            typographyOpen
+              ? 'bg-[hsl(var(--brand-green-bg))] text-[hsl(var(--brand-green))]'
+              : 'text-surface-300 hover:bg-surface-850 hover:text-surface-100'
+          )}
+        >
+          <Type className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Aa</span>
+        </button>
 
-      <div className="flex items-center gap-1 mx-1" title="Line Spacing">
-        <span className="text-[10px] text-surface-400">Line</span>
-        <input
-          type="number"
-          min={1.2} max={3.0} step={0.1}
-          value={settings?.line_spacing || 1.8}
-          onChange={(e) => updateSetting('line_spacing', Number(e.target.value))}
-          className="w-12 h-7 px-1.5 bg-transparent hover:bg-surface-800 border border-transparent hover:border-surface-700 rounded text-surface-200 text-xs focus:outline-none text-center transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-        />
+        {typographyOpen && (
+          <div className="absolute left-0 top-full z-40 mt-1.5 w-60 rounded-xl border border-[hsl(var(--studio-edge))] bg-[hsl(var(--studio-paper))] p-3.5 shadow-xl animate-fade-in">
+            <p className="mb-2.5 text-[11px] font-bold uppercase tracking-wider text-surface-400">Typography</p>
+            <div className="space-y-3">
+              <label className="block text-xs">
+                <span className="mb-1 block font-medium text-surface-300">Font Family</span>
+                <select
+                  value={settings?.editor_font || 'Georgia'}
+                  onChange={(e) => updateSetting('editor_font', e.target.value)}
+                  className="w-full rounded-md border border-[hsl(var(--studio-edge))] bg-surface-950 px-2.5 py-1.5 text-xs text-surface-100 focus:border-[hsl(var(--brand-green))] focus:outline-none"
+                >
+                  <option value="Georgia">Georgia</option>
+                  <option value="'Times New Roman', serif">Times New Roman</option>
+                  <option value="'Crimson Text', Georgia, serif">Crimson Text</option>
+                  <option value="Inter, sans-serif">Inter</option>
+                  <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+                </select>
+              </label>
+
+              <label className="block text-xs">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="font-medium text-surface-300">Font Size</span>
+                  <span className="tabular-nums text-surface-400">{settings?.font_size || 16}px</span>
+                </div>
+                <input
+                  type="range"
+                  min={12}
+                  max={24}
+                  step={1}
+                  value={settings?.font_size || 16}
+                  onChange={(e) => updateSetting('font_size', Number(e.target.value))}
+                  className="w-full accent-[hsl(var(--brand-green))]"
+                />
+              </label>
+
+              <label className="block text-xs">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="font-medium text-surface-300">Line Spacing</span>
+                  <span className="tabular-nums text-surface-400">{(settings?.line_spacing || 1.8).toFixed(1)}</span>
+                </div>
+                <input
+                  type="range"
+                  min={1.2}
+                  max={3.0}
+                  step={0.1}
+                  value={settings?.line_spacing || 1.8}
+                  onChange={(e) => updateSetting('line_spacing', Number(e.target.value))}
+                  className="w-full accent-[hsl(var(--brand-green))]"
+                />
+              </label>
+            </div>
+          </div>
+        )}
       </div>
 
       <Divider />
@@ -284,14 +361,16 @@ export default function EditorToolbar({ editor, saveStatus, onSave, showHistory 
 
       {showReadAloud && <ReadAloudControls editor={editor} />}
 
-      {/* Version History & Milestones */}
-      {showHistory && <ToolbarButton
-        id="toolbar-history"
-        onClick={() => window.dispatchEvent(new CustomEvent('open-version-history'))}
-        title="Version History"
-      >
-        <History className="w-3.5 h-3.5" />
-      </ToolbarButton>}
+      {/* Version History & Save */}
+      {showHistory && (
+        <ToolbarButton
+          id="toolbar-history"
+          onClick={() => window.dispatchEvent(new CustomEvent('open-version-history'))}
+          title="Version History"
+        >
+          <History className="w-3.5 h-3.5" />
+        </ToolbarButton>
+      )}
       <ToolbarButton
         id="toolbar-save"
         onClick={onSave}
@@ -300,22 +379,22 @@ export default function EditorToolbar({ editor, saveStatus, onSave, showHistory 
         <Save className="w-3.5 h-3.5" />
       </ToolbarButton>
 
-      <Divider />
-
-      {/* Save status */}
-      <span role="status" className={cn('text-xs mr-2', saveStatus === 'saved' ? 'text-success-400' : 'text-warning-400')}>
-        {saveStatus === 'saved' ? 'Saved locally' : saveStatus === 'saving' ? 'Saving…' : 'Unsaved'}
-      </span>
-
-      {/* Focus mode */}
-      <ToolbarButton
-        id="toolbar-focus-mode"
-        onClick={() => setFocusMode(!focusMode)}
-        isActive={focusMode}
-        title="Focus mode"
-      >
-        <Focus className="w-3.5 h-3.5" />
-      </ToolbarButton>
+      {!hideStatus && (
+        <>
+          <Divider />
+          <span role="status" className={cn('text-xs mr-2', saveStatus === 'saved' ? 'text-success-400' : 'text-warning-400')}>
+            {saveStatus === 'saved' ? 'Saved locally' : saveStatus === 'saving' ? 'Saving…' : 'Unsaved'}
+          </span>
+          <ToolbarButton
+            id="toolbar-focus-mode"
+            onClick={() => setFocusMode(!focusMode)}
+            isActive={focusMode}
+            title="Focus mode"
+          >
+            <Focus className="w-3.5 h-3.5" />
+          </ToolbarButton>
+        </>
+      )}
     </div>
   )
 }

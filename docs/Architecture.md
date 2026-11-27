@@ -8,7 +8,7 @@
 
 ## Renderer and state
 
-[Renderer main](../app/src/renderer/src/main.tsx) installs the browser mock if needed and mounts hash routing. [App](../app/src/renderer/src/App.tsx) bootstraps account and local workspace, starts cloud scheduling, and reconciles settings. [AppLayout](../app/src/renderer/src/layouts/AppLayout.tsx) hosts navigation and window chrome. [WorkspacePage](../app/src/renderer/src/pages/workspace/WorkspacePage.tsx) loads book records and [EditorView](../app/src/renderer/src/pages/workspace/EditorView.tsx) dispatches the active tool or document.
+[Renderer main](../app/src/renderer/src/main.tsx) installs the browser mock if needed and mounts hash routing. [App](../app/src/renderer/src/App.tsx) bootstraps account and local workspace, starts cloud scheduling, and reconciles settings. [AppLayout](../app/src/renderer/src/layouts/AppLayout.tsx) hosts global `Ctrl+K` Command Palette triggers, resizable sidebar layout, and window chrome. [WorkspacePage](../app/src/renderer/src/pages/workspace/WorkspacePage.tsx) loads book records and [EditorView](../app/src/renderer/src/pages/workspace/EditorView.tsx) dispatches the active tool or document and manages the unified resizable Right Inspector. Shared controls live in [primitives](../app/src/renderer/src/components/ui/primitives.tsx) and [ResizeHandle](../app/src/renderer/src/components/ui/ResizeHandle.tsx).
 
 | Store | Responsibility |
 | --- | --- |

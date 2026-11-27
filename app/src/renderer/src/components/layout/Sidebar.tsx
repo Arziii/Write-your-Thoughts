@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { useOpenBookTab } from '../../hooks/useOpenBookTab'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import {
-  BookOpen, Home, MessageSquare, Settings, LogOut, ChevronLeft, PanelLeft
+  Home, MessageSquare, Settings, LogOut, ChevronLeft, PanelLeft,
+  Users, Map as MapIcon, MapPin, StickyNote, Clock, BookMarked,
+  Globe, Building2, Gavel, Brain, Network, Search, X, Download, Upload, Trash2
 } from 'lucide-react'
 import { useUserStore } from '../../stores/userStore'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
@@ -12,27 +14,16 @@ import { flushEditorSaves } from '../../hooks/useEditorSave'
 import { useToastStore } from '../../stores/toastStore'
 import { cn } from '../../utils'
 import Modal from '../ui/Modal'
+import { Button } from '../ui/primitives'
+import ExportModal from '../export/ExportModal'
+import ImportModal from '../import/ImportModal'
+import ClearStoryContentModal from '../import/ClearStoryContentModal'
 import BookList from '../books/BookList'
 import SharedBookList from '../books/SharedBookList'
 import ChapterTree from '../chapters/ChapterTree'
 import EntityTree from '../world/EntityTree'
 import SidebarTimeline from '../world/SidebarTimeline'
-import { Users, Map as MapIcon, MapPin, StickyNote, Clock, BookMarked, Globe, Building2, Gavel, Brain, Network } from 'lucide-react'
 import { DragDropContext, DropResult } from '@hello-pangea/dnd'
-
-// ── Forest Literary Palette ──────────────────────────────────────────
-const F = {
-  bg: 'hsl(var(--surface-900))',
-  bgHover: 'hsl(var(--surface-850))',
-  active: 'hsl(var(--surface-800))',
-  border: 'hsl(var(--surface-800))',
-  green: 'hsl(var(--brand-green))',
-  greenLight: 'hsl(var(--brand-green-bg))',
-  text: 'hsl(var(--surface-50))',
-  textMid: 'hsl(var(--surface-300))',
-  textSoft: 'hsl(var(--surface-500))',
-  textFaint: 'hsl(var(--surface-600))',
-}
 
 export default function Sidebar() {
   const { user, localUser } = useUserStore()
@@ -41,7 +32,6 @@ export default function Sidebar() {
     characters, addCharacter, updateCharacter, removeCharacter,
     locations, addLocation, updateLocation, removeLocation,
     notes, addNote, updateNote, removeNote,
-    timelineEvents, setTimelineEvents, addTimelineEvent, updateTimelineEvent, removeTimelineEvent,
     codex, addCodex, updateCodex, removeCodex,
     wiki, addWiki, updateWiki, removeWiki,
     organizations, addOrganization, updateOrganization, removeOrganization,
@@ -55,12 +45,12 @@ export default function Sidebar() {
   const { bookId } = useParams()
 
   const [sidebarTab, setSidebarTab] = useState<'explorer' | 'timeline'>('explorer')
+  const [filterQuery, setFilterQuery] = useState('')
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
-
-  const handleSignOutClick = () => {
-    setShowLogoutConfirm(true)
-  }
+  const [isExportOpen, setIsExportOpen] = useState(false)
+  const [isImportOpen, setIsImportOpen] = useState(false)
+  const [isClearContentOpen, setIsClearContentOpen] = useState(false)
 
   const confirmSignOut = async () => {
     setIsLoggingOut(true)
@@ -71,7 +61,6 @@ export default function Sidebar() {
       }
       await syncNow()
       await authService.signOut()
-      // Hard reload to completely wipe memory and prevent state leakage
       window.location.reload()
     } catch {
       addToast('Failed to sign out', 'error')
@@ -79,9 +68,6 @@ export default function Sidebar() {
       setShowLogoutConfirm(false)
     }
   }
-
-  const handleGoHome = () => navigate('/')
-  const handleBackToBooks = () => navigate('/')
 
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return
@@ -92,7 +78,7 @@ export default function Sidebar() {
     if (type === 'chapters') {
       reorderChapters(source.index, destination.index)
     } else {
-      const typeMap: Record<string, { stateKey: any, table: string }> = {
+      const typeMap: Record<string, { stateKey: any; table: string }> = {
         character: { stateKey: 'characters', table: 'characters' },
         location: { stateKey: 'locations', table: 'locations' },
         organization: { stateKey: 'organizations', table: 'organizations' },
@@ -106,114 +92,154 @@ export default function Sidebar() {
     }
   }
 
+  const trimmedFilter = filterQuery.trim().toLowerCase()
+
   return (
     <div
-      className="flex flex-col h-full w-60"
-      style={{
-        background: F.bg,
-        borderRight: `1px solid ${F.border}`,
-        fontFamily: "'DM Sans', sans-serif",
-      }}
+      className="flex h-full w-full flex-col border-r border-[hsl(var(--studio-edge))] bg-surface-900"
+      style={{ fontFamily: "'DM Sans', sans-serif" }}
     >
-      {/* ── Header ───────────────────────────────────────────── */}
-      <div
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '8px 10px', borderBottom: `1px solid ${F.border}`,
-          height: 38, background: F.bg,
-        }}
-      >
+      {/* Header */}
+      <div className="flex h-10 shrink-0 items-center justify-between border-b border-[hsl(var(--studio-edge))] bg-surface-900 px-2.5">
         {currentBook ? (
           <button
-            onClick={handleBackToBooks}
-            style={{ display: 'flex', alignItems: 'center', gap: 5, color: F.textSoft, fontSize: 12, fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', transition: 'color 0.15s' }}
-            onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = F.green}
-            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = F.textSoft}
+            type="button"
+            onClick={() => navigate('/')}
+            className="flex items-center gap-1 text-xs font-semibold text-surface-400 transition-colors hover:text-[hsl(var(--brand-green))]"
           >
-            <ChevronLeft style={{ width: 14, height: 14 }} />
+            <ChevronLeft className="h-3.5 w-3.5" />
             All Books
           </button>
         ) : (
-          <span style={{ fontSize: 10, fontWeight: 700, color: F.textFaint, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+          <span className="px-1 text-[10px] font-bold uppercase tracking-[0.1em] text-surface-500">
             Workspace
           </span>
         )}
-        <button
-          id="sidebar-toggle"
-          onClick={toggleSidebar}
-          style={{ color: F.textFaint, background: 'none', border: 'none', cursor: 'pointer', transition: 'color 0.15s', padding: 2 }}
-          onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = F.textMid}
-          onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = F.textFaint}
-          title="Collapse sidebar"
-        >
-          <PanelLeft style={{ width: 16, height: 16 }} />
-        </button>
+        <div className="flex items-center gap-1">
+          {currentBook && (
+            <>
+              <button
+                type="button"
+                onClick={() => setIsImportOpen(true)}
+                title="Import from Campfire / Files"
+                aria-label="Import from Campfire / Files"
+                className="rounded p-1 text-surface-500 transition-colors hover:bg-surface-850 hover:text-surface-200"
+              >
+                <Upload className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsExportOpen(true)}
+                title="Export Book"
+                aria-label="Export Book"
+                className="rounded p-1 text-surface-500 transition-colors hover:bg-surface-850 hover:text-surface-200"
+              >
+                <Download className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsClearContentOpen(true)}
+                title="Clear Story Content (keeps Maps)"
+                aria-label="Clear Story Content"
+                className="rounded p-1 text-surface-500 transition-colors hover:bg-danger-500/10 hover:text-danger-400"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
+          <button
+            id="sidebar-toggle"
+            type="button"
+            onClick={toggleSidebar}
+            title="Collapse sidebar"
+            aria-label="Collapse sidebar"
+            className="rounded p-1 text-surface-500 transition-colors hover:bg-surface-850 hover:text-surface-200"
+          >
+            <PanelLeft className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
-      {/* ── Main content ──────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col">
+      {/* Main content */}
+      <div className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
         {currentBook ? (
           <>
-            {/* Explorer / Timeline tabs */}
-            <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${F.border}`, flexShrink: 0 }}>
+            {/* Explorer / Book Chronology tabs */}
+            <div className="flex shrink-0 items-center border-b border-[hsl(var(--studio-edge))]">
               <button
+                type="button"
                 onClick={() => setSidebarTab('explorer')}
-                style={{
-                  flex: 1, padding: '9px 0', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.09em',
-                  background: sidebarTab === 'explorer' ? F.greenLight : 'transparent',
-                  color: sidebarTab === 'explorer' ? F.green : F.textSoft,
-                  borderTop: 'none', borderRight: 'none', borderLeft: 'none', borderBottom: sidebarTab === 'explorer' ? `2px solid ${F.green}` : '2px solid transparent',
-                  cursor: 'pointer', transition: 'all 0.15s',
-                }}
+                className={cn(
+                  'flex-1 border-b-2 py-2 text-[10px] font-bold uppercase tracking-[0.09em] transition-colors',
+                  sidebarTab === 'explorer'
+                    ? 'border-[hsl(var(--brand-green))] bg-[hsl(var(--brand-green-bg))] text-[hsl(var(--brand-green))]'
+                    : 'border-transparent text-surface-400 hover:text-surface-200'
+                )}
               >
                 Explorer
               </button>
               <button
+                type="button"
                 onClick={() => setSidebarTab('timeline')}
-                style={{
-                  flex: 1, padding: '9px 0', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.09em',
-                  background: sidebarTab === 'timeline' ? F.greenLight : 'transparent',
-                  color: sidebarTab === 'timeline' ? F.green : F.textSoft,
-                  borderTop: 'none', borderRight: 'none', borderLeft: 'none', borderBottom: sidebarTab === 'timeline' ? `2px solid ${F.green}` : '2px solid transparent',
-                  cursor: 'pointer', transition: 'all 0.15s',
-                }}
+                title="Book Chronology — story days & chapter dates"
+                className={cn(
+                  'flex-1 border-b-2 py-2 text-[10px] font-bold uppercase tracking-[0.09em] transition-colors',
+                  sidebarTab === 'timeline'
+                    ? 'border-[hsl(var(--brand-green))] bg-[hsl(var(--brand-green-bg))] text-[hsl(var(--brand-green))]'
+                    : 'border-transparent text-surface-400 hover:text-surface-200'
+                )}
               >
-                Timeline
+                Chronology
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto relative">
+            <div className="relative flex-1 overflow-y-auto">
               {sidebarTab === 'explorer' ? (
                 <DragDropContext onDragEnd={handleDragEnd}>
-                  <div style={{ paddingBottom: 16 }}>
-
-                    {/* Story Intelligence */}
-                    <div style={{ padding: '10px 10px 8px' }}>
-                      <button
-                        onClick={() => openBookTab(currentBook.id, 'story_intelligence', 'Story Intelligence')}
-                        style={{
-                          width: '100%', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8,
-                          justifyContent: 'center', borderRadius: 10, fontSize: 11, fontWeight: 700,
-                          textTransform: 'uppercase', letterSpacing: '0.07em', cursor: 'pointer',
-                          background: F.greenLight, color: F.green, border: `1px solid ${F.border}`,
-                          transition: 'background 0.15s',
-                        }}
-                        onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#d4e9d0'}
-                        onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = F.greenLight}
-                      >
-                        <Brain style={{ width: 14, height: 14 }} />
-                        Story Intelligence
-                      </button>
+                  <div className="pb-4">
+                    {/* Quick filter */}
+                    <div className="px-2.5 pt-2.5">
+                      <div className="flex items-center gap-1.5 rounded-lg border border-[hsl(var(--studio-edge))] bg-[hsl(var(--studio-paper))] px-2 py-1 focus-within:border-[hsl(var(--brand-green))]">
+                        <Search className="h-3 w-3 shrink-0 text-surface-500" aria-hidden="true" />
+                        <input
+                          type="text"
+                          value={filterQuery}
+                          onChange={e => setFilterQuery(e.target.value)}
+                          placeholder="Filter chapters & lore…"
+                          aria-label="Filter chapters and worldbuilding"
+                          className="min-w-0 flex-1 bg-transparent text-xs text-surface-100 placeholder:text-surface-500 focus:outline-none"
+                        />
+                        {filterQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setFilterQuery('')}
+                            aria-label="Clear filter"
+                            className="rounded p-0.5 text-surface-500 hover:text-surface-100"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Chapter Tree inherits its own styles */}
-                    <ChapterTree book={currentBook} />
+                    {/* Story Intelligence */}
+                    {(!trimmedFilter || 'story intelligence'.includes(trimmedFilter)) && (
+                      <div className="px-2.5 pt-2.5 pb-1">
+                        <button
+                          type="button"
+                          onClick={() => openBookTab(currentBook.id, 'story_intelligence', 'Story Intelligence')}
+                          className="flex w-full items-center justify-center gap-2 rounded-lg border border-[hsl(var(--studio-edge))] bg-[hsl(var(--brand-green-bg))] px-3 py-2 text-[11px] font-bold uppercase tracking-[0.07em] text-[hsl(var(--brand-green))] transition-opacity hover:opacity-90"
+                        >
+                          <Brain className="h-3.5 w-3.5" />
+                          Story Intelligence
+                        </button>
+                      </div>
+                    )}
 
+                    <ChapterTree book={currentBook} filterQuery={filterQuery} />
 
-
-                    {/* Entity sections */}
                     <EntityTree
-                      title="Characters" type="character"
+                      title="Characters" type="character" filterQuery={filterQuery}
                       icon={<Users className="w-3.5 h-3.5 text-blue-400" />}
                       items={characters.map(c => ({ id: c.id, title: c.name }))}
                       emptyMessage="No characters yet."
@@ -223,7 +249,7 @@ export default function Sidebar() {
                     />
 
                     <EntityTree
-                      title="Locations" type="location"
+                      title="Locations" type="location" filterQuery={filterQuery}
                       icon={<MapPin className="w-3.5 h-3.5 text-emerald-400" />}
                       items={locations.map(l => ({ id: l.id, title: l.name }))}
                       emptyMessage="No locations yet."
@@ -232,55 +258,48 @@ export default function Sidebar() {
                       onDelete={async (id) => { await window.api.locations.delete(id); removeLocation(id); addToast('Location deleted', 'info') }}
                     />
 
-                    <div className="px-2.5 pt-2">
-                      <button
-                        type="button"
-                        onClick={() => openBookTab(`maps-${currentBook.id}`, 'maps', 'Maps')}
-                        className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold uppercase tracking-wider text-[hsl(var(--brand-green))] hover:bg-surface-850"
-                      >
-                        <MapIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                        Maps
-                      </button>
-                    </div>
+                    {(!trimmedFilter || 'maps'.includes(trimmedFilter) || 'atlas'.includes(trimmedFilter)) && (
+                      <div className="px-2.5 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => openBookTab(`maps-${currentBook.id}`, 'maps', 'Maps')}
+                          className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold uppercase tracking-[0.08em] text-[hsl(var(--brand-green))] transition-colors hover:bg-surface-850"
+                        >
+                          <MapIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                          Maps
+                        </button>
+                      </div>
+                    )}
 
-                    {/* Relationships */}
-                    <div style={{ padding: '0 10px', marginTop: 12 }}>
-                      <button
-                        onClick={() => openBookTab('relationships', 'relationship_manager', 'Relationships')}
-                        style={{
-                          width: '100%', padding: '6px 8px', display: 'flex', alignItems: 'center', gap: 8,
-                          color: F.green, background: 'none', border: 'none', borderRadius: 8,
-                          fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em',
-                          cursor: 'pointer', transition: 'all 0.15s', textAlign: 'left',
-                        }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = F.greenLight; (e.currentTarget as HTMLElement).style.background = F.bgHover }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = F.green; (e.currentTarget as HTMLElement).style.background = 'none' }}
-                      >
-                        <Network style={{ width: 14, height: 14 }} />
-                        Relationships
-                      </button>
-                    </div>
+                    {(!trimmedFilter || 'relationships'.includes(trimmedFilter)) && (
+                      <div className="mt-2 px-2.5">
+                        <button
+                          type="button"
+                          onClick={() => openBookTab('relationships', 'relationship_manager', 'Relationships')}
+                          className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold uppercase tracking-[0.08em] text-[hsl(var(--brand-green))] transition-colors hover:bg-surface-850"
+                        >
+                          <Network className="h-3.5 w-3.5" />
+                          Relationships
+                        </button>
+                      </div>
+                    )}
 
-                    {/* Timeline Record */}
-                    <div style={{ padding: '0 10px', marginTop: 12 }}>
-                      <button
-                        onClick={() => openBookTab('verse_timeline', 'verse_timeline', 'Timeline Record')}
-                        style={{
-                          width: '100%', padding: '6px 8px', display: 'flex', alignItems: 'center', gap: 8,
-                          color: F.green, background: 'none', border: 'none', borderRadius: 8,
-                          fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em',
-                          cursor: 'pointer', transition: 'all 0.15s', textAlign: 'left',
-                        }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = F.greenLight; (e.currentTarget as HTMLElement).style.background = F.bgHover }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = F.green; (e.currentTarget as HTMLElement).style.background = 'none' }}
-                      >
-                        <Clock style={{ width: 14, height: 14 }} />
-                        Timeline Record
-                      </button>
-                    </div>
+                    {(!trimmedFilter || 'world history'.includes(trimmedFilter) || 'timeline record'.includes(trimmedFilter)) && (
+                      <div className="mt-2 px-2.5">
+                        <button
+                          type="button"
+                          title="World History — verse timeline record"
+                          onClick={() => openBookTab('verse_timeline', 'verse_timeline', 'World History')}
+                          className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold uppercase tracking-[0.08em] text-[hsl(var(--brand-green))] transition-colors hover:bg-surface-850"
+                        >
+                          <Clock className="h-3.5 w-3.5" />
+                          World History
+                        </button>
+                      </div>
+                    )}
 
                     <EntityTree
-                      title="Organizations" type="organization"
+                      title="Organizations" type="organization" filterQuery={filterQuery}
                       icon={<Building2 className="w-3.5 h-3.5 text-amber-400" />}
                       items={organizations.map(o => ({ id: o.id, title: o.title }))}
                       emptyMessage="No organizations yet." singularTitle="Organization"
@@ -290,7 +309,7 @@ export default function Sidebar() {
                     />
 
                     <EntityTree
-                      title="World Rules" type="world_rule"
+                      title="World Rules" type="world_rule" filterQuery={filterQuery}
                       icon={<Gavel className="w-3.5 h-3.5 text-rose-400" />}
                       items={worldRules.map(w => ({ id: w.id, title: w.title }))}
                       emptyMessage="No rules yet." singularTitle="World Rule"
@@ -300,7 +319,7 @@ export default function Sidebar() {
                     />
 
                     <EntityTree
-                      title="Codex" type="codex"
+                      title="Codex" type="codex" filterQuery={filterQuery}
                       icon={<BookMarked className="w-3.5 h-3.5 text-purple-400" />}
                       items={codex.map(c => ({ id: c.id, title: c.title }))}
                       emptyMessage="No codex entries yet." singularTitle="Codex Entry"
@@ -310,7 +329,7 @@ export default function Sidebar() {
                     />
 
                     <EntityTree
-                      title="Wiki" type="wiki"
+                      title="Wiki" type="wiki" filterQuery={filterQuery}
                       icon={<Globe className="w-3.5 h-3.5 text-cyan-400" />}
                       items={wiki.map(w => ({ id: w.id, title: w.title }))}
                       emptyMessage="No wiki articles yet." singularTitle="Wiki Article"
@@ -320,7 +339,7 @@ export default function Sidebar() {
                     />
 
                     <EntityTree
-                      title="Notes" type="note"
+                      title="Notes" type="note" filterQuery={filterQuery}
                       icon={<StickyNote className="w-3.5 h-3.5 text-yellow-400" />}
                       items={notes.map(n => ({ id: n.id, title: n.title }))}
                       emptyMessage="No notes yet."
@@ -337,26 +356,24 @@ export default function Sidebar() {
           </>
         ) : (
           /* Global view */
-          <div style={{ paddingTop: 4 }}>
+          <div className="pt-1">
             <button
               id="nav-dashboard"
-              onClick={handleGoHome}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10, width: 'calc(100% - 16px)',
-                margin: '2px 8px', padding: '8px 10px', borderRadius: 10, fontSize: 13, fontWeight: 600,
-                background: !bookId ? F.greenLight : 'transparent',
-                color: !bookId ? F.green : F.textSoft,
-                border: 'none', cursor: 'pointer', transition: 'all 0.15s',
-              }}
-              onMouseEnter={e => { if (bookId) { (e.currentTarget as HTMLElement).style.background = F.bgHover; (e.currentTarget as HTMLElement).style.color = F.textMid } }}
-              onMouseLeave={e => { if (bookId) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = F.textSoft } }}
+              type="button"
+              onClick={() => navigate('/')}
+              className={cn(
+                'mx-2 my-0.5 flex w-[calc(100%-1rem)] items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13px] font-semibold transition-colors',
+                !bookId && location.pathname === '/'
+                  ? 'bg-[hsl(var(--brand-green-bg))] text-[hsl(var(--brand-green))]'
+                  : 'text-surface-400 hover:bg-surface-850 hover:text-surface-200'
+              )}
             >
-              <Home style={{ width: 16, height: 16, flexShrink: 0 }} />
+              <Home className="h-4 w-4 shrink-0" />
               Dashboard
             </button>
 
-            <div style={{ padding: '14px 12px 4px' }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: F.textFaint, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+            <div className="px-3 pt-3.5 pb-1">
+              <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-surface-500">
                 Books
               </span>
             </div>
@@ -367,57 +384,62 @@ export default function Sidebar() {
         )}
       </div>
 
-      {/* ── Bottom nav ───────────────────────────────────────── */}
-      <div style={{ borderTop: `1px solid ${F.border}`, paddingTop: 6, paddingBottom: 6 }}>
+      {/* Bottom nav */}
+      <div className="border-t border-[hsl(var(--studio-edge))] py-1.5">
         <button
           id="nav-ai-chat"
           type="button"
           aria-current={location.pathname === '/ai-chat' ? 'page' : undefined}
           onClick={() => navigate('/ai-chat')}
-          className={cn('mx-2 my-0.5 flex w-[calc(100%-1rem)] items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13px] font-medium',
-            location.pathname === '/ai-chat' ? 'bg-surface-800 text-surface-100' : 'text-surface-400 hover:bg-surface-800 hover:text-surface-200')}
+          className={cn(
+            'mx-2 my-0.5 flex w-[calc(100%-1rem)] items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13px] font-medium transition-colors',
+            location.pathname === '/ai-chat'
+              ? 'bg-[hsl(var(--brand-green-bg))] text-[hsl(var(--brand-green))] font-semibold'
+              : 'text-surface-400 hover:bg-surface-850 hover:text-surface-200'
+          )}
         >
           <MessageSquare className="h-4 w-4 shrink-0" />
           AI Chat
         </button>
         <button
           id="nav-settings"
+          type="button"
+          aria-current={location.pathname === '/settings' ? 'page' : undefined}
           onClick={() => navigate('/settings')}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 10, width: 'calc(100% - 16px)',
-            margin: '2px 8px', padding: '8px 10px', borderRadius: 10, fontSize: 13, fontWeight: 500,
-            color: F.textSoft, background: 'none', border: 'none', cursor: 'pointer', transition: 'all 0.15s',
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = F.bgHover; (e.currentTarget as HTMLElement).style.color = F.textMid }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'none'; (e.currentTarget as HTMLElement).style.color = F.textSoft }}
+          className={cn(
+            'mx-2 my-0.5 flex w-[calc(100%-1rem)] items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13px] font-medium transition-colors',
+            location.pathname === '/settings'
+              ? 'bg-[hsl(var(--brand-green-bg))] text-[hsl(var(--brand-green))] font-semibold'
+              : 'text-surface-400 hover:bg-surface-850 hover:text-surface-200'
+          )}
         >
-          <Settings style={{ width: 16, height: 16, flexShrink: 0 }} />
+          <Settings className="h-4 w-4 shrink-0" />
           Settings
         </button>
 
         {/* User row */}
-        <div style={{ padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 26, height: 26, borderRadius: '50%', background: F.green, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', border: `2px solid ${F.border}` }}>
+        <div className="flex items-center gap-2 px-3 py-1.5">
+          <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[hsl(var(--studio-edge))] bg-[hsl(var(--brand-green))]">
             {localUser?.avatar_url ? (
-              <img src={localUser.avatar_url} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img src={localUser.avatar_url} alt="Profile" className="h-full w-full object-cover" />
             ) : (
-              <span style={{ color: 'white', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>
+              <span className="text-[10px] font-bold uppercase text-white dark:text-surface-950">
                 {user?.email?.[0] ?? 'U'}
               </span>
             )}
           </div>
-          <span style={{ fontSize: 12, color: F.textSoft, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span className="min-w-0 flex-1 truncate text-xs text-surface-400">
             {user?.user_metadata?.display_name || user?.email}
           </span>
           <button
             id="nav-signout"
-            onClick={handleSignOutClick}
-            style={{ color: F.textFaint, background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, transition: 'color 0.15s', padding: 2 }}
-            onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = '#ef4444'}
-            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = F.textFaint}
+            type="button"
+            onClick={() => setShowLogoutConfirm(true)}
             title="Sign out"
+            aria-label="Sign out"
+            className="shrink-0 rounded p-1 text-surface-500 transition-colors hover:text-danger-500"
           >
-            <LogOut style={{ width: 14, height: 14 }} />
+            <LogOut className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
@@ -430,34 +452,44 @@ export default function Sidebar() {
         size="sm"
       >
         <div className="flex flex-col gap-4">
-          <p className="text-sm text-surface-200">
+          <p className="text-sm text-surface-300">
             Are you sure you want to log out? We'll make sure all your recent changes are safely synced to the cloud first.
           </p>
-          <div className="flex justify-end gap-3 mt-2">
-            <button
-              onClick={() => setShowLogoutConfirm(false)}
-              disabled={isLoggingOut}
-              className="px-4 py-2 text-sm font-medium text-surface-200 hover:text-white transition-colors disabled:opacity-50"
-            >
+          <div className="mt-2 flex justify-end gap-3">
+            <Button variant="secondary" size="md" onClick={() => setShowLogoutConfirm(false)} disabled={isLoggingOut}>
               Cancel
-            </button>
-            <button
-              onClick={confirmSignOut}
-              disabled={isLoggingOut}
-              className="px-4 py-2 text-sm font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
-            >
-              {isLoggingOut ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
-                  Syncing...
-                </>
-              ) : (
-                'Log Out'
-              )}
-            </button>
+            </Button>
+            <Button variant="danger" size="md" onClick={confirmSignOut} disabled={isLoggingOut}>
+              {isLoggingOut ? 'Syncing…' : 'Log Out'}
+            </Button>
           </div>
         </div>
       </Modal>
+
+      {currentBook && (
+        <ExportModal
+          isOpen={isExportOpen}
+          onClose={() => setIsExportOpen(false)}
+          book={currentBook}
+        />
+      )}
+
+      <ImportModal
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        currentBook={currentBook}
+        onImportComplete={(res) => {
+          if (res.createdBook) {
+            navigate(`/book/${res.createdBook.id}`)
+          }
+        }}
+      />
+
+      <ClearStoryContentModal
+        isOpen={isClearContentOpen}
+        onClose={() => setIsClearContentOpen(false)}
+        book={currentBook}
+      />
     </div>
   )
 }

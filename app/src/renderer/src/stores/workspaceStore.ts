@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { SearchTarget } from '../../../shared/manuscriptSearch'
 import type { 
-  Book, Chapter, EditorTab, PanelState, TabType,
+  Book, Chapter, EditorTab, PanelState, RightInspectorTab, TabType,
   Character, Location, Note, TimelineEvent, TimelineSettings, Codex, Wiki,
   Organization, WorldRule
 } from '../types'
@@ -102,6 +102,9 @@ interface WorkspaceStore {
   setPanelState: (state: PanelState) => void
   toggleSidebar: () => void
   toggleAIPanel: () => void
+  setActiveRightPanel: (panel: RightInspectorTab | null) => void
+  toggleRightPanel: (panel: RightInspectorTab) => void
+  setPanelWidths: (widths: { sidebarWidth?: number; inspectorWidth?: number }) => void
   toggleEntityLock: (entityId: string) => void
 
   // Focus mode
@@ -386,13 +389,53 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   })),
 
   // Panels
-  panelState: { sidebarOpen: true, aiPanelOpen: true, lockedEntities: [] },
-  setPanelState: (panelState) => set({ panelState }),
+  panelState: { sidebarOpen: true, aiPanelOpen: true, lockedEntities: [], activeRightPanel: 'ai' },
+  setPanelState: (panelState) => set({
+    panelState: {
+      ...panelState,
+      activeRightPanel: panelState.activeRightPanel !== undefined
+        ? panelState.activeRightPanel
+        : (panelState.aiPanelOpen ? 'ai' : null),
+    },
+  }),
   toggleSidebar: () => set((s) => ({
     panelState: { ...s.panelState, sidebarOpen: !s.panelState.sidebarOpen }
   })),
-  toggleAIPanel: () => set((s) => ({
-    panelState: { ...s.panelState, aiPanelOpen: !s.panelState.aiPanelOpen }
+  toggleAIPanel: () => set((s) => {
+    const currentlyAi = s.panelState.activeRightPanel !== undefined
+      ? s.panelState.activeRightPanel === 'ai'
+      : s.panelState.aiPanelOpen
+    const nextPanel: RightInspectorTab | null = currentlyAi ? null : 'ai'
+    return {
+      panelState: { ...s.panelState, aiPanelOpen: !currentlyAi, activeRightPanel: nextPanel }
+    }
+  }),
+  setActiveRightPanel: (panel) => set((s) => ({
+    panelState: {
+      ...s.panelState,
+      activeRightPanel: panel,
+      aiPanelOpen: panel === 'ai',
+    }
+  })),
+  toggleRightPanel: (panel) => set((s) => {
+    const current = s.panelState.activeRightPanel !== undefined
+      ? s.panelState.activeRightPanel
+      : (s.panelState.aiPanelOpen ? 'ai' : null)
+    const next = current === panel ? null : panel
+    return {
+      panelState: {
+        ...s.panelState,
+        activeRightPanel: next,
+        aiPanelOpen: next === 'ai',
+      }
+    }
+  }),
+  setPanelWidths: (widths) => set((s) => ({
+    panelState: {
+      ...s.panelState,
+      ...(widths.sidebarWidth !== undefined ? { sidebarWidth: widths.sidebarWidth } : {}),
+      ...(widths.inspectorWidth !== undefined ? { inspectorWidth: widths.inspectorWidth } : {}),
+    }
   })),
   toggleEntityLock: (entityId) => set((s) => {
     const locked = s.panelState.lockedEntities || []

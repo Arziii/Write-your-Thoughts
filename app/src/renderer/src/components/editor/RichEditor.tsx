@@ -6,17 +6,51 @@ import Highlight from '@tiptap/extension-highlight'
 import Placeholder from '@tiptap/extension-placeholder'
 import CharacterCount from '@tiptap/extension-character-count'
 import { useEffect, useRef, useState } from 'react'
+import { Focus } from 'lucide-react'
 import { useWorkspaceStore } from '../../stores/workspaceStore'
 import { useToastStore } from '../../stores/toastStore'
 import { useUserStore } from '../../stores/userStore'
-import { countWords } from '../../utils'
+import { cn, countWords } from '../../utils'
 import { scheduleCloudSync, syncNow } from '../../services/syncService'
 import { useEditorSave } from '../../hooks/useEditorSave'
 import EditorToolbar from './EditorToolbar'
+import EditorSelectionBubble from './EditorSelectionBubble'
 import { CommentMark } from './extensions/CommentMark'
 import SearchAndReplace from '@sereneinserenade/tiptap-search-and-replace'
 import EditorFindToolbar from './EditorFindToolbar'
 import VersionHistoryModal from './VersionHistoryModal'
+
+function todayKey() {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function recordDailyWords(delta: number) {
+  if (delta <= 0) return
+  const today = todayKey()
+  const lastDate = localStorage.getItem('wyt-daily-date')
+  let progress = parseInt(localStorage.getItem('dailyProgress') || '0', 10) || 0
+  let streak = parseInt(localStorage.getItem('streak') || '0', 10) || 0
+
+  if (lastDate !== today) {
+    if (lastDate) {
+      const prev = new Date(lastDate + 'T00:00:00')
+      const curr = new Date(today + 'T00:00:00')
+      const diffDays = Math.round((curr.getTime() - prev.getTime()) / 86_400_000)
+      streak = diffDays === 1 ? streak + 1 : 1
+    } else {
+      streak = Math.max(1, streak)
+    }
+    progress = 0
+    localStorage.setItem('wyt-daily-date', today)
+    localStorage.setItem('streak', String(streak))
+  }
+
+  localStorage.setItem('dailyProgress', String(progress + delta))
+}
 
 interface RichEditorProps {
   chapterId: string
@@ -25,12 +59,14 @@ interface RichEditorProps {
 }
 
 export default function RichEditor({ chapterId, initialContent, onContentChange }: RichEditorProps) {
-  const { setSelectedText } = useWorkspaceStore()
+  const { setSelectedText, focusMode, setFocusMode } = useWorkspaceStore()
   const { settings, user } = useUserStore()
   const { addToast } = useToastStore()
   const lastSnapshotTimeRef = useRef<number>(Date.now())
   const prevWcRef = useRef<number>(countWords(initialContent || ''))
-  
+  const [liveWordCount, setLiveWordCount] = useState<number>(() => countWords(initialContent || ''))
+  const editorContainerRef = useRef<HTMLDivElement>(null)
+
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false)
 
   const draftContent = useWorkspaceStore(state => state.drafts[chapterId]?.content as string | undefined)
@@ -59,7 +95,7 @@ export default function RichEditor({ chapterId, initialContent, onContentChange 
         class: 'editor-content outline-none',
         spellcheck: 'true',
       },
-      handleClick: (view, pos, event) => {
+      handleClick: (_view, _pos, event) => {
         const target = event.target as HTMLElement
         if (target && target.hasAttribute('data-comment-id')) {
           const commentId = target.getAttribute('data-comment-id')
@@ -72,15 +108,13 @@ export default function RichEditor({ chapterId, initialContent, onContentChange 
     onUpdate: ({ editor }) => {
       const html = editor.getHTML()
       const wc = countWords(html)
+      setLiveWordCount(wc)
       onContentChange?.(html, wc)
       saving.stage({ content: html, wordCount: wc })
 
-      // Update Daily Progress in localStorage
+      // Update Daily Progress with calendar rollover
       const diff = wc - prevWcRef.current
-      if (diff > 0) {
-        const currentProgress = parseInt(localStorage.getItem('dailyProgress') || '0')
-        localStorage.setItem('dailyProgress', (currentProgress + diff).toString())
-      }
+      if (diff > 0) recordDailyWords(diff)
       prevWcRef.current = wc
 
       // 15-minute background snapshots (Phase 5)
@@ -113,10 +147,11 @@ export default function RichEditor({ chapterId, initialContent, onContentChange 
   useEffect(() => {
     if (editor && draftContent === undefined && initialContent !== editor.getHTML()) {
       editor.commands.setContent(initialContent || '', false)
-      prevWcRef.current = countWords(initialContent || '')
+      const wc = countWords(initialContent || '')
+      prevWcRef.current = wc
+      setLiveWordCount(wc)
     }
   }, [chapterId, initialContent])
-
 
   // Handle comment created/removed and toolbar events
   useEffect(() => {
@@ -143,13 +178,17 @@ export default function RichEditor({ chapterId, initialContent, onContentChange 
     }
   }, [editor, chapterId, user])
 
+  const readMinutes = Math.max(1, Math.ceil(liveWordCount / 225))
+
   return (
-    <div className="flex flex-col h-full bg-surface-950 relative">
+    <div ref={editorContainerRef} className="flex flex-col h-full bg-surface-950 relative">
       <EditorFindToolbar editor={editor} chapterId={chapterId} />
       {/* Toolbar */}
       <div className="studio-chapter-toolbar shrink-0">
-        <EditorToolbar editor={editor} saveStatus={saving.status} onSave={saving.save} showReadAloud />
+        <EditorToolbar editor={editor} saveStatus={saving.status} onSave={saving.save} showReadAloud hideStatus />
       </div>
+
+      <EditorSelectionBubble editor={editor} containerRef={editorContainerRef} />
 
       {/* Editor canvas */}
       <div className="studio-desk min-h-0 flex-1 overflow-y-auto">
@@ -165,7 +204,40 @@ export default function RichEditor({ chapterId, initialContent, onContentChange 
         </div>
       </div>
 
-      <VersionHistoryModal 
+      {/* Quiet bottom status bar */}
+      <footer className="flex h-7 shrink-0 items-center justify-between border-t border-[hsl(var(--studio-edge))] bg-[hsl(var(--studio-header))] px-4 text-[11px] text-surface-400">
+        <div className="flex items-center gap-3 tabular-nums">
+          <span>{liveWordCount.toLocaleString()} {liveWordCount === 1 ? 'word' : 'words'}</span>
+          <span aria-hidden="true" className="text-surface-600">·</span>
+          <span>~{readMinutes} min read</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span role="status" className="inline-flex items-center gap-1.5">
+            <span className={cn('h-1.5 w-1.5 rounded-full', saving.status === 'saved' ? 'bg-success-400' : 'bg-warning-400')} aria-hidden="true" />
+            <span className={saving.status === 'saved' ? 'text-surface-400' : 'text-warning-400'}>
+              {saving.status === 'saved' ? 'Saved locally' : saving.status === 'saving' ? 'Saving…' : 'Unsaved'}
+            </span>
+          </span>
+          <button
+            id="toolbar-focus-mode"
+            type="button"
+            onClick={() => setFocusMode(!focusMode)}
+            aria-pressed={focusMode}
+            title="Toggle focus mode"
+            className={cn(
+              'inline-flex items-center gap-1 rounded px-1.5 py-0.5 transition-colors',
+              focusMode
+                ? 'bg-[hsl(var(--brand-green-bg))] font-medium text-[hsl(var(--brand-green))]'
+                : 'hover:bg-surface-850 hover:text-surface-100'
+            )}
+          >
+            <Focus className="h-3 w-3" aria-hidden="true" />
+            <span>{focusMode ? 'Exit focus' : 'Focus'}</span>
+          </button>
+        </div>
+      </footer>
+
+      <VersionHistoryModal
         chapterId={chapterId}
         isOpen={isHistoryModalOpen}
         onClose={() => setIsHistoryModalOpen(false)}
@@ -188,6 +260,7 @@ export default function RichEditor({ chapterId, initialContent, onContentChange 
             const chapter = store.chapters.find(item => item.id === chapterId)
             if (chapter) store.updateChapter({ ...chapter, content: html, word_count: wc })
             prevWcRef.current = wc
+            setLiveWordCount(wc)
             onContentChange?.(html, wc)
             scheduleCloudSync()
           }

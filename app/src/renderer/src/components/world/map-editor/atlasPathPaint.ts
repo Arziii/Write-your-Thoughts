@@ -1,7 +1,7 @@
 import { atlasHeight, atlasWidth, clamp, isAtlasPath, lerp, pathSettings, smoothStep, spline } from './atlasPaths'
 import type { AtlasPathFeature, AtlasPathSettings, AtlasPathTool, AtlasTerrain, PathSample, WorldPoint } from './atlasPaths'
 
-const urls = import.meta.glob('../../../../../../assets/maps/map-assets/map-assets/{roads,rivers}/*.png', {
+const urls = import.meta.glob('../../../../../../../assets/maps/paths/{roads,rivers}/*.png', {
   eager: true, import: 'default', query: '?url',
 }) as Record<string, string>
 type Texture = ImageData

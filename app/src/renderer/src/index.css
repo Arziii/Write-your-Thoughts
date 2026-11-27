@@ -20,18 +20,18 @@
 
 /* ── Base ──────────────────────────────────────────────────────────── */
 :root {
-  --surface-50: 226 24% 7%;
-  --surface-100: 224 20% 10%;
-  --surface-200: 222 16% 14%;
-  --surface-300: 220 14% 18%;
-  --surface-400: 220 12% 26%;
-  --surface-500: 220 10% 36%;
-  --surface-600: 220 8% 48%;
-  --surface-700: 220 8% 65%;
-  --surface-800: 220 10% 82%;
-  --surface-850: 220 12% 90%;
-  --surface-900: 220 15% 95%;
-  --surface-950: 220 20% 98%;
+  --surface-50: 38 22% 8%;
+  --surface-100: 38 20% 12%;
+  --surface-200: 38 18% 16%;
+  --surface-300: 38 16% 22%;
+  --surface-400: 38 14% 30%;
+  --surface-500: 38 12% 40%;
+  --surface-600: 38 11% 52%;
+  --surface-700: 40 14% 68%;
+  --surface-800: 42 16% 80%;
+  --surface-850: 42 20% 89%;
+  --surface-900: 43 26% 94%;
+  --surface-950: 44 36% 97%;
 
   /* Brand Green (Forest) */
   --brand-green: 113 39% 25%; /* #2d5a27 */
@@ -39,18 +39,18 @@
 }
 
 :root.dark {
-  --surface-950: 220 10% 15%;
-  --surface-900: 220 10% 18%;
-  --surface-850: 220 9% 22%;
-  --surface-800: 220 8% 26%;
-  --surface-700: 220 8% 33%;
-  --surface-600: 220 7% 45%;
-  --surface-500: 220 8% 60%;
-  --surface-400: 220 8% 70%;
-  --surface-300: 220 9% 79%;
-  --surface-200: 220 10% 85%;
-  --surface-100: 220 12% 89%;
-  --surface-50: 220 14% 93%;
+  --surface-950: 42 8% 13%;
+  --surface-900: 42 8% 16%;
+  --surface-850: 42 7% 20%;
+  --surface-800: 42 7% 25%;
+  --surface-700: 42 7% 32%;
+  --surface-600: 42 7% 45%;
+  --surface-500: 42 8% 58%;
+  --surface-400: 42 10% 70%;
+  --surface-300: 42 12% 79%;
+  --surface-200: 42 14% 86%;
+  --surface-100: 42 16% 91%;
+  --surface-50: 42 18% 95%;
 
   --brand-green: 106 23% 69%;
   --brand-green-bg: 105 13% 26%;
@@ -86,8 +86,9 @@ body {
   user-select: none; /* Prevent accidental selection outside editor */
 }
 
-/* Allow text selection inside editor */
-.editor-content, .editor-content * {
+/* Allow text selection inside editor and readable panels */
+.editor-content, .editor-content *,
+.selectable, .selectable * {
   user-select: text;
 }
 
@@ -442,9 +443,9 @@ body {
 
 /* ── Solid card (replaces glass morphism) ─────────────────────────── */
 .glass-card {
-  background: hsl(var(--surface-900));
-  border: 1px solid hsl(var(--surface-800));
-  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  background: hsl(var(--studio-paper));
+  border: 1px solid hsl(var(--studio-edge));
+  box-shadow: 0 2px 8px hsl(var(--studio-shadow) / 0.07);
 }
 
 /* ── Diff highlight ───────────────────────────────────────────────── */

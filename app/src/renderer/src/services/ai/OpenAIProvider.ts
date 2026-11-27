@@ -1,5 +1,5 @@
 import { AIBrainstormMessage } from '../../types'
-import { BaseProvider, ProviderResponse } from './BaseProvider'
+import { BaseProvider, parseModelJson, ProviderResponse, VisionImageInput } from './BaseProvider'
 
 export class OpenAIProvider extends BaseProvider {
   async testConnection(): Promise<boolean> {
@@ -148,10 +148,64 @@ export class OpenAIProvider extends BaseProvider {
 
     const data = await response.json()
     const jsonResponse = data.choices[0].message.content
-    try {
-      return JSON.parse(jsonResponse)
-    } catch {
-      throw new Error('Failed to parse JSON from OpenAI response')
+    return parseModelJson(jsonResponse, 'OpenAI')
+  }
+
+  async generateJSONWithImage(systemPrompt: string, prompt: string, image: VisionImageInput, signal?: AbortSignal): Promise<any> {
+    if (!this.settings.apiKey) throw new Error('Missing API Key')
+    const apiKey = this.settings.apiKey.trim()
+
+    const bodyObj: any = {
+      model: this.settings.model || 'gpt-4o-mini',
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: systemPrompt },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: image.dataUrl, detail: 'high' } },
+          ],
+        },
+      ],
+      temperature: this.settings.temperature ?? 0.2,
+      max_tokens: Math.max(this.settings.maxTokens || 0, 4096),
     }
+
+    if (this.settings.topP !== undefined) bodyObj.top_p = this.settings.topP
+
+    let response: Response
+    try {
+      response = await fetch('https://api.openai.com/v1/chat/completions', {
+        signal,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(bodyObj),
+      })
+    } catch (err: any) {
+      if (signal?.aborted) throw err
+      throw new Error(`Network Error: ${err.message}`)
+    }
+
+    if (!response.ok) {
+      const errText = await response.text()
+      try {
+        const errJson = JSON.parse(errText)
+        const errorMsg = errJson.error?.message || `API error (${response.status})`
+        if (response.status === 401) throw new Error(`Invalid API Key: ${errorMsg}`)
+        if (response.status === 404) throw new Error(`Model Not Found: ${errorMsg}`)
+        if (response.status === 429) throw new Error(`Quota/Rate Limit Exceeded: ${errorMsg}`)
+        throw new Error(errorMsg)
+      } catch (e: any) {
+        if (e.message.includes('Invalid API Key') || e.message.includes('Model Not Found') || e.message.includes('Quota')) throw e
+        throw new Error(`OpenAI API error: ${response.status} - ${errText}`)
+      }
+    }
+
+    const data = await response.json()
+    return parseModelJson(data.choices?.[0]?.message?.content || '', 'OpenAI')
   }
 }

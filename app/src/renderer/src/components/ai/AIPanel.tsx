@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Sparkles, CheckCheck, X, Loader2, History, ChevronDown,
   RotateCcw, Zap, AlignLeft, Maximize2, PanelRight, Copy, Trash2
@@ -52,6 +52,12 @@ export default function AIPanel() {
   const [edit, setEdit] = useState<{ id: string; text: string } | null>(null)
   const [isBrainstorming, setIsBrainstorming] = useState(false)
   const [showClearConfirm, setShowClearConfirm] = useState(false)
+
+  useEffect(() => {
+    const onOpenPolish = () => setActiveTabPanel('polish')
+    window.addEventListener('open-ai-polish', onOpenPolish)
+    return () => window.removeEventListener('open-ai-polish', onOpenPolish)
+  }, [])
 
   const activeTab = tabs.find(t => t.id === activeTabId)
   const chapter = activeTab?.type === 'chapter' && activeChapter?.id === activeTab.entityId ? activeChapter : null
@@ -302,24 +308,25 @@ export default function AIPanel() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-surface-900 w-80" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+    <div id="ai-panel" className="flex flex-col h-full w-full bg-[hsl(var(--studio-desk))]" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       {/* Panel header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-surface-800 h-9">
-        <div className="flex items-center gap-1">
-          <Sparkles className="w-3.5 h-3.5 text-accent-400" />
-          <span className="text-xs font-semibold text-surface-300">AI Assistant</span>
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[hsl(var(--studio-edge))] bg-[hsl(var(--studio-header))] h-10 shrink-0">
+        <div className="flex items-center gap-1.5">
+          <Sparkles className="w-3.5 h-3.5 text-[hsl(var(--brand-green))]" />
+          <span className="text-xs font-semibold text-surface-100">AI Assistant</span>
         </div>
         <button
           onClick={toggleAIPanel}
-          className="text-surface-600 hover:text-surface-300 transition-colors"
-          title="Collapse AI Panel"
+          className="rounded-md p-1 text-surface-400 hover:bg-surface-850 hover:text-surface-100 transition-colors"
+          title="Collapse AI Assistant"
+          aria-label="Collapse AI Assistant"
         >
           <PanelRight className="w-4 h-4" />
         </button>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-surface-800">
+      <div className="flex border-b border-[hsl(var(--studio-edge))] bg-[hsl(var(--studio-header))] shrink-0">
         {[
           { id: 'polish', label: 'Polish', icon: Zap },
           { id: 'brainstorm', label: 'Brainstorm', icon: Sparkles },
@@ -432,7 +439,7 @@ export default function AIPanel() {
 
             {/* AI Result */}
             {polishResult && (
-              <div className="space-y-3 animate-fade-in">
+              <div className="selectable space-y-3 animate-fade-in">
                 <div className="border border-surface-700 rounded-lg overflow-hidden">
                   {/* Explanation */}
                   <div className="px-3 py-2.5 bg-surface-800/60 border-b border-surface-700">
@@ -530,7 +537,7 @@ export default function AIPanel() {
               ) : (
                 brainstormMessages.map(msg => (
                   <article key={msg.id} aria-label={msg.role === 'user' ? 'Your message' : 'AI reply'}
-                    className={cn('min-w-0 text-sm', msg.role === 'user' ? 'ml-4' : 'mr-4')}>
+                    className={cn('selectable min-w-0 text-sm', msg.role === 'user' ? 'ml-4' : 'mr-4')}>
                     <div className={cn('rounded-lg p-2.5', msg.role === 'user' ? 'bg-accent-900/30 text-surface-200' : 'bg-surface-800 text-surface-300')}>
                       {msg.role === 'assistant' && chatMode === 'ideas' && <p className="mb-1 text-xs font-medium text-surface-400">Brainstorm suggestion</p>}
                       {edit?.id === msg.id ? (
@@ -633,7 +640,7 @@ export default function AIPanel() {
               setEdit(null)
               setShowClearConfirm(false)
             }}
-            className="px-4 py-2 text-sm font-medium bg-error-600 hover:bg-error-500 text-white rounded-md transition-colors"
+            className="px-4 py-2 text-sm font-medium bg-danger-500 hover:bg-danger-400 text-white rounded-md transition-colors"
           >
             Clear Session
           </button>
